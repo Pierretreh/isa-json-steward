@@ -1,0 +1,14 @@
+{
+  "channel_markers": {
+    "FITC": {"dye": "Calcein-AM", "role": "live", "target": "cytoplasm"},
+    "DAPI": {"dye": "DAPI", "role": "nucleus", "target": "nucleus"},
+    "PI": {"dye": "Propidium Iodide", "role": "dead", "target": "nucleus"}
+  },
+  "known_operators": [],
+  "instrument_aliases": {
+    "lsrfortessa": "LSRFortessa",
+    "fortessa": "LSRFortessa",
+    "facscanto": "FACSCanto",
+    "canto": "FACSCanto"
+  }
+}

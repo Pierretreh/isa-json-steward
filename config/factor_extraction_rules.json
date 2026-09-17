@@ -1,0 +1,12 @@
+{
+  "description": "Rules for extracting experimental factors from folder/file names. Customize for your project.",
+  "rules": [
+    {
+      "pattern": "E(?P<experiment_number>\\d+)",
+      "description": "Extract experiment number from folder name",
+      "extract": {
+        "experiment_number": "int"
+      }
+    }
+  ]
+}

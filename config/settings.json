@@ -1,0 +1,54 @@
+{
+  "application": {
+    "name": "ISA-JSON Data Steward",
+    "version": "2.0.0"
+  },
+  "directories": {
+    "base_path": ".",
+    "investigations_root": "investigations",
+    "templates_root": "templates",
+    "ontologies_root": "ontologies",
+    "exports_root": "exports",
+    "archive_root": "archive",
+    "config_root": "config",
+    "docs_root": "docs"
+  },
+  "urls": {
+    "base_url": "https://example.org/investigations",
+    "investigation_url_template": "{base_url}/{investigation_id}",
+    "study_url_template": "{base_url}/{investigation_id}/studies/{study_id}",
+    "material_url_template": "{base_url}/{investigation_id}/studies/{study_id}#{material_type}_{material_name}",
+    "process_url_template": "{base_url}/{investigation_id}/studies/{study_id}#process_{process_id}"
+  },
+  "gui": {
+    "auto_save_interval": 300,
+    "backup_count": 5,
+    "backup_on_save": true,
+    "window_width": 1200,
+    "window_height": 800,
+    "min_window_width": 800,
+    "min_window_height": 600
+  },
+  "validation": {
+    "validate_on_save": true,
+    "validate_required_fields": true,
+    "validate_ontology_terms": true,
+    "validate_units": true,
+    "validate_date_formats": true,
+    "warn_on_missing_metadata": true
+  },
+  "export": {
+    "default_format": "JSON",
+    "include_raw_data": false,
+    "include_processed_data": true,
+    "include_assay_data": true,
+    "include_protocols": true
+  },
+  "version_control": {
+    "enabled": true,
+    "auto_version_on_save": true,
+    "version_prefix": "v",
+    "max_versions": 10,
+    "compress_old_versions": false
+  }
+}

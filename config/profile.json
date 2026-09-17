@@ -1,0 +1,16 @@
+{
+  "name": "default",
+  "version": "1.0.0",
+  "description": "ISA-JSON Data Steward — Default Profile",
+  "project": "ISA-JSON Data Steward",
+  "institution": "Research Institute",
+  "namespace": "https://example.org/onto#",
+  "namespace_prefix": "onto",
+  "ontology_main_file": "onto.owl",
+  "ontology_main_ttl": "onto.ttl",
+  "ontology_shapes": "shapes.ttl",
+  "templates_dir": "templates",
+  "config_dir": "config",
+  "min_core_version": "1.0.0",
+  "app_name": "ISA-JSON Data Steward"
+}

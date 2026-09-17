@@ -1,0 +1,40 @@
+{
+  "investigations_root": "investigations",
+  "templates_root": "templates",
+  "ontologies_root": "ontologies",
+  "exports_root": "exports",
+  "archive_root": "archive",
+  "config_root": "config",
+  "docs_root": "docs",
+  "study_subdirs": {
+    "raw_data": [],
+    "processed_data": [],
+    "versions": [],
+    "files": ["original", "converted"]
+  },
+  "investigation_subdirs": {
+    "studies": [],
+    "shared": ["sequences", "buffers", "equipment"]
+  },
+  "ontologies_subdirs": {
+    "cached": [],
+    "mappings": []
+  },
+  "templates_subdirs": {
+    "assay_templates": [],
+    "protocol_templates": []
+  },
+  "exports_subdirs": {
+    "csv": [],
+    "excel": [],
+    "isa_tab": []
+  },
+  "file_patterns": {
+    "study_json": "{study_name}_{plasmid_name}.json",
+    "investigation_json": "investigation.json",
+    "raw_image": "{sample_name}_{date}_{time}.{ext}",
+    "processed_tiff": "{sample_name}_{date}_{time}_processed.tif",
+    "sequence_file": "{study_name}.gb",
+    "report_file": "{report_type}_{study_name}_{date}.{ext}"
+  }
+}

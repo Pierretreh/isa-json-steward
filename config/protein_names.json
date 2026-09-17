@@ -1,0 +1,9 @@
+{
+  "protein_names": {
+    "GFP": "Green Fluorescent Protein",
+    "BSA": "Bovine Serum Albumin"
+  },
+  "drug_names": {
+    "DMSO": "DMSO"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "type_to_template": {
+    "facs": "facs_assay.json",
+    "calcein": "calcein_assay.json",
+    "microscopy": "microscopy_assay.json",
+    "elisa": "elisa_assay.json",
+    "western_blot": "western_blot_assay.json",
+    "tunel": "tunel_staining_assay.json",
+    "dapi": "dapi_staining_assay.json",
+    "he_staining": "he_staining_assay.json",
+    "gfap": "gfap_staining_assay.json",
+    "fluorescence": "fluorescence_assay.json",
+    "toxicity_in_vitro": "toxicity_test_in_vitro.json",
+    "toxicity_ex_vivo": "toxicity_test_ex_vivo.json",
+    "depot_microscopy": "depot_microscopy_assay.json"
+  },
+  "type_name_aliases": {
+    "facs": "facs",
+    "calcein": "calcein",
+    "calceinassay": "calcein",
+    "microscopy": "microscopy",
+    "elisa": "elisa",
+    "western_blot": "western_blot",
+    "wb": "western_blot",
+    "tunel": "tunel",
+    "dapi": "dapi",
+    "he_staining": "he_staining",
+    "gfap": "gfap",
+    "fluorescence": "fluorescence",
+    "toxicity_in_vitro": "toxicity_in_vitro",
+    "toxicity_ex_vivo": "toxicity_ex_vivo",
+    "toxicity": "toxicity_in_vitro",
+    "depot_microscopy": "depot_microscopy",
+    "explant": "explant"
+  },
+  "type_keywords": {
+    "facs": ["facs", "annexin", "pi", "propidium iodide", "flow cytometry"],
+    "calcein": ["calcein", "calceinassay"],
+    "microscopy": ["slidescanner", "microscopy", "microscope"],
+    "elisa": ["elisa", "enzyme-linked immunosorbent"],
+    "western_blot": ["wb", "western blot", "westernblot", "sds-page"],
+    "tunel": ["tunel", "tunel-stain", "tunel staining"],
+    "dapi": ["dapi", "4-6-diamidino-2-phenylindole"],
+    "he_staining": ["h&e", "h-e", "hematoxylin eosin"],
+    "gfap": ["gfap", "glial fibrillary acidic protein"],
+    "fluorescence": ["fluorescence", "fluorescence measurement", "ethidium bromide"],
+    "toxicity_in_vitro": ["toxicity", "viability", "cell viability"],
+    "toxicity_ex_vivo": ["explant", "tissue", "ex vivo"],
+    "depot_microscopy": ["depot", "microscopy depot"]
+  },
+  "type_file_indicators": {
+    "facs": [".fcs", ".wsp"],
+    "microscopy": [".czi", ".tiff", ".tif"],
+    "elisa": [".xlsx", ".xls"],
+    "western_blot": [".tiff", ".tif"],
+    "fluorescence": [".xlsx", ".xls"]
+  },
+  "cell_type_map": {
+    "endothelial_cell": "endothelial_cell",
+    "cell_explant": "cell_explant"
+  },
+  "assay_type_map": {
+    "calcein": ["calcein_assay", "fluorescence_microscopy", "calcein_assay"],
+    "calceinassay": ["calcein_assay", "fluorescence_microscopy", "calcein_assay"],
+    "facs": ["flow_cytometry_assay", "flow_cytometry", "facs_analysis"],
+    "slidescanner": ["histology", "whole_slide_imaging", "slide_scanning"],
+    "fluorescence_measurement": ["fluorescence_measurement", "fluorescence_microscopy", "fluorescence_measurement"],
+    "dapi": ["cell_viability", "flow_cytometry", "dapi_staining"],
+    "tunel": ["histology", "whole_slide_imaging", "tunel_staining"],
+    "gfap": ["histology", "whole_slide_imaging", "gfap_staining"],
+    "elisa": ["fluorescence_measurement", "fluorescence_measurement", "elisa"],
+    "wb": ["histology", "whole_slide_imaging", "western_blot"]
+  }
+}
