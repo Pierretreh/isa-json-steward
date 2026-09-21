@@ -32,6 +32,7 @@ def profile_dir(tmp_path):
         "ontologies_dir": "ontologies",
         "templates_dir": "templates",
         "app_name": "Test Data Steward",
+        "min_core_version": "1.0.0",
     }
     (config_dir / "profile.json").write_text(json.dumps(profile), encoding="utf-8")
 
@@ -350,3 +351,218 @@ class TestSingleton:
         set_profile(str(profile_dir))
         p = get_profile()
         assert p.get_namespace() == "https://example.org/test/onto#"
+
+
+# ---------------------------------------------------------------------------
+# New behaviour: profile.json discovery order, strict mode,
+# min_core_version enforcement, fallback tracking
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestProfileJsonDiscovery:
+    """profile.json may live at the profile root or in config/.
+
+    The profile root location is checked first; only when it is absent in
+    both profile locations does the loader fall back to the core default
+    ``config/profile.json`` (loudly, when an explicit profile was given).
+    """
+
+    def test_profile_json_at_profile_root_wins(self, tmp_path):
+        """profile.json at the profile root is found (E41 regression)."""
+        (tmp_path / "config").mkdir()
+        (tmp_path / "profile.json").write_text(
+            json.dumps(
+                {
+                    "name": "root-layout",
+                    "namespace": "https://example.org/root#",
+                    "min_core_version": "1.0.0",
+                }
+            ),
+            encoding="utf-8",
+        )
+        loader = ProfileLoader(str(tmp_path))
+        assert loader.profile["name"] == "root-layout"
+        assert loader.get_namespace() == "https://example.org/root#"
+        # No core-default fallback was needed for profile.json
+        assert "profile.json" not in loader.fallback_files
+
+    def test_profile_json_in_config_dir_also_works(self, tmp_path):
+        (tmp_path / "config").mkdir()
+        (tmp_path / "config" / "profile.json").write_text(
+            json.dumps(
+                {
+                    "name": "config-layout",
+                    "namespace": "https://example.org/config#",
+                    "min_core_version": "1.0.0",
+                }
+            ),
+            encoding="utf-8",
+        )
+        loader = ProfileLoader(str(tmp_path))
+        assert loader.profile["name"] == "config-layout"
+
+    def test_profile_json_missing_falls_back_loudly(self, tmp_path, caplog):
+        (tmp_path / "config").mkdir()
+        loader = ProfileLoader(str(tmp_path))
+        with caplog.at_level("WARNING", logger="utils.config_loader"):
+            result = loader.profile
+        # Falls back to the core default profile.json (name == "default")
+        assert result.get("name") == "default"
+        assert "profile.json" in loader.fallback_files
+        assert any("CORE DEFAULT" in r.message for r in caplog.records)
+
+    def test_candidate_order_prefers_profile_root(self, tmp_path):
+        loader = ProfileLoader(str(tmp_path))
+        candidates = loader._candidate_paths("profile.json")
+        # Profile root before config dir, core default last
+        assert candidates[0] == tmp_path.resolve() / "profile.json"
+        assert candidates[1] == tmp_path.resolve() / "config" / "profile.json"
+        assert candidates[-1] == loader._PROJECT_ROOT / "config" / "profile.json"
+
+    def test_candidate_order_for_regular_files(self, tmp_path):
+        loader = ProfileLoader(str(tmp_path))
+        candidates = loader._candidate_paths("people.json")
+        # No profile-root entry for regular config files
+        assert candidates[0] == tmp_path.resolve() / "config" / "people.json"
+        assert candidates[-1] == loader._PROJECT_ROOT / "config" / "people.json"
+
+
+@pytest.mark.unit
+class TestStrictMode:
+    """Strict mode: missing profile files raise instead of falling back."""
+
+    def test_missing_file_raises(self, tmp_path):
+        (tmp_path / "config").mkdir()
+        loader = ProfileLoader(str(tmp_path), strict=True)
+        with pytest.raises(Exception, match="profile.json"):
+            loader.profile
+
+    def test_complete_profile_ok(self, profile_dir):
+        loader = ProfileLoader(str(profile_dir), strict=True)
+        # profile_dir fixture contains all files → no error
+        assert loader.profile["name"] == "test-profile"
+        assert loader.get_protein_name_map()  # forces section load
+
+    def test_strict_ignores_missing_only_in_profile(self, tmp_path, profile_dir):
+        """A file present in the profile is never an error."""
+        loader = ProfileLoader(str(profile_dir), strict=True)
+        assert "YFP" in loader.get_protein_name_map()
+
+    def test_strict_false_for_implicit_profile(self):
+        """Without an explicit profile path, strict mode is inert."""
+        loader = ProfileLoader(strict=True)
+        assert loader.strict is False
+
+    def test_strict_true_for_explicit_profile(self, tmp_path):
+        loader = ProfileLoader(str(tmp_path), strict=True)
+        assert loader.strict is True
+
+
+@pytest.mark.unit
+class TestMinCoreVersion:
+    """min_core_version from profile.json is enforced on first access."""
+
+    def _profile_with(self, tmp_path, min_core_version):
+        (tmp_path / "config").mkdir()
+        data = {"name": "ver-test", "namespace": "https://example.org/ver#"}
+        if min_core_version is not None:
+            data["min_core_version"] = min_core_version
+        (tmp_path / "profile.json").write_text(json.dumps(data), encoding="utf-8")
+        return tmp_path
+
+    def test_compatible_version_accepted(self, tmp_path, monkeypatch):
+        import utils.config_loader as cl
+
+        monkeypatch.setattr(cl, "_get_core_version", lambda: "2.0.0")
+        profile_dir = self._profile_with(tmp_path, "1.0.0")
+        loader = ProfileLoader(str(profile_dir))
+        assert loader.profile["name"] == "ver-test"
+
+    def test_incompatible_version_raises(self, tmp_path, monkeypatch):
+        import utils.config_loader as cl
+
+        monkeypatch.setattr(cl, "_get_core_version", lambda: "1.5.0")
+        profile_dir = self._profile_with(tmp_path, "2.0.0")
+        loader = ProfileLoader(str(profile_dir))
+        with pytest.raises(cl.ProfileConfigError, match="requires core"):
+            loader.profile
+
+    def test_missing_field_skipped(self, tmp_path, monkeypatch):
+        import utils.config_loader as cl
+
+        monkeypatch.setattr(cl, "_get_core_version", lambda: "1.0.0")
+        profile_dir = self._profile_with(tmp_path, None)
+        loader = ProfileLoader(str(profile_dir))
+        assert loader.profile["name"] == "ver-test"
+
+    def test_unknown_core_version_skipped(self, tmp_path, monkeypatch):
+        import utils.config_loader as cl
+
+        monkeypatch.setattr(cl, "_get_core_version", lambda: None)
+        profile_dir = self._profile_with(tmp_path, "99.0.0")
+        loader = ProfileLoader(str(profile_dir))
+        assert loader.profile["name"] == "ver-test"
+
+    def test_error_message_includes_versions(self, tmp_path, monkeypatch):
+        import utils.config_loader as cl
+
+        monkeypatch.setattr(cl, "_get_core_version", lambda: "1.0.0")
+        profile_dir = self._profile_with(tmp_path, "2.0.0")
+        loader = ProfileLoader(str(profile_dir))
+        with pytest.raises(cl.ProfileConfigError, match="1\\.0\\.0"):
+            loader.profile
+
+
+@pytest.mark.unit
+class TestFallbackTracking:
+    """Fallback files are tracked and summarised for logging."""
+
+    def test_fallback_files_populated_only_for_explicit_profile(self, tmp_path):
+        loader = ProfileLoader(str(tmp_path))
+        loader.profile  # forces fallback for profile.json
+        assert "profile.json" in loader.fallback_files
+
+    def test_no_tracking_for_implicit_profile(self):
+        loader = ProfileLoader()
+        loader.profile
+        assert loader.fallback_files == []
+
+    def test_summary_logs_warning(self, tmp_path, caplog):
+        import logging
+
+        loader = ProfileLoader(str(tmp_path))
+        loader.profile
+        with caplog.at_level(logging.WARNING, logger="utils.config_loader"):
+            loader.log_profile_load_summary()
+        assert any("served from CORE" in r.message for r in caplog.records)
+
+    def test_summary_silent_when_complete(self, profile_dir, caplog):
+        import logging
+
+        loader = ProfileLoader(str(profile_dir))
+        loader.profile
+        with caplog.at_level(logging.WARNING, logger="utils.config_loader"):
+            loader.log_profile_load_summary()
+        assert not [r for r in caplog.records if "served from CORE" in r.message]
+
+
+@pytest.mark.unit
+class TestSingletonStrict:
+    """set_profile() propagates strict mode to the singleton."""
+
+    def setup_method(self):
+        import utils.config_loader
+
+        utils.config_loader._profile = None
+
+    def teardown_method(self):
+        import utils.config_loader
+
+        utils.config_loader._profile = None
+
+    def test_set_profile_strict(self, tmp_path):
+        new = set_profile(str(tmp_path), strict=True)
+        assert new.strict is True
+        with pytest.raises(Exception, match="profile.json"):
+            new.profile

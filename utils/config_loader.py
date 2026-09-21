@@ -22,7 +22,27 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    from importlib.metadata import version as _pkg_version
+except ImportError:  # pragma: no cover
+    _pkg_version = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
+
+
+def _get_core_version() -> Optional[str]:
+    """Return the installed core package version (e.g. ``2.0.0``).
+
+    Resolved via ``importlib.metadata`` from the distribution
+    ``isa-json-steward``.  Returns ``None`` when the metadata is not
+    available (e.g. running from a source checkout without an install).
+    """
+    if _pkg_version is None:
+        return None
+    try:
+        return _pkg_version("isa-json-steward")
+    except Exception:  # pragma: no cover - DistributionNotFound etc.
+        return None
 
 
 @dataclass
@@ -90,6 +110,17 @@ class ConfigError(Exception):
 
 class ConfigValidationError(ConfigError):
     """Exception raised when configuration validation fails."""
+
+    pass
+
+
+class ProfileConfigError(ConfigError):
+    """Exception raised when an explicitly supplied profile is incomplete.
+
+    Used in *strict* mode: any config file (including ``profile.json``)
+    that is missing from the profile directory and would have to be
+    served from the core defaults is an error condition.
+    """
 
     pass
 
@@ -568,77 +599,148 @@ class ProfileLoader:
     # config resolution and as the canonical investigations root.
     _PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
 
-    def __init__(self, profile_path: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        profile_path: Optional[str] = None,
+        strict: bool = False,
+    ) -> None:
         """Initialise the ProfileLoader.
 
         Args:
             profile_path: Optional path to a profile directory that
                 overrides the default ``config/`` directory.  May be a
                 string or ``None``.
+            strict: When *True* (and *profile_path* is given), any config
+                file that is missing from the profile directory and would
+                have to be served from the core default ``config/``
+                raises :class:`ProfileConfigError` instead of silently
+                falling back.  Use this to fail fast on incomplete
+                profiles, e.g. in batch pipelines.
         """
         if profile_path is not None:
             self._profile_root = Path(profile_path).resolve()
             self._config_dir = self._profile_root / "config"
+            self._profile_explicit = True
         else:
             self._profile_root = Path(__file__).resolve().parent.parent
             self._config_dir = self._profile_root / "config"
+            self._profile_explicit = False
+
+        self.strict = strict and self._profile_explicit
+        # Track files served from core defaults (for load summaries)
+        self._fallback_files: List[str] = []
 
         # Cached data – populated lazily
         self._profile: Optional[Dict[str, Any]] = None
         self._cache: Dict[str, Any] = {}
 
         logger.debug(
-            "ProfileLoader initialised with profile_root=%s, config_dir=%s",
+            "ProfileLoader initialised with profile_root=%s, config_dir=%s, strict=%s",
             self._profile_root,
             self._config_dir,
+            self.strict,
         )
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _read_json(self, filename: str) -> Dict[str, Any]:
-        """Read and parse a JSON file from the config directory.
+    def _candidate_paths(self, filename: str) -> List[Path]:
+        """Return the ordered list of lookup locations for *filename*.
 
-        If the file does not exist in the profile's config directory the
-        method falls back to the **project's** default ``config/`` directory
-        so that a partial profile (e.g. overriding only some files) still
-        has access to all configuration sections.
+        Profile directories may keep their metadata either at the profile
+        root (``profile_dir/profile.json``) or inside ``profile_dir/config/``.
+        Both layouts are supported; the profile root is checked first.
+        """
+        candidates = [self._config_dir / filename]
+        if filename == self._PROFILE_FILE:
+            candidates.insert(0, self._profile_root / filename)
+        candidates.append(self._PROJECT_ROOT / "config" / filename)
+        return candidates
+
+    def _read_json(self, filename: str) -> Dict[str, Any]:
+        """Read and parse a JSON config file.
+
+        Lookup order (first existing file wins):
+
+        1. the profile's ``config/`` directory (or the profile root for
+           ``profile.json``), then
+        2. the **core** default ``config/`` directory shipped with the
+           package, so that a partial profile (e.g. overriding only some
+           files) still has access to all configuration sections.
+
+        When a profile was explicitly supplied, serving a file from the
+        core defaults is logged at ``WARNING`` level and recorded in
+        :attr:`fallback_files` – a silently mixed config is the most
+        common way a wrong domain (namespace, people, …) ends up in
+        generated ISA-JSON.
+
+        In *strict* mode, a file missing from an explicitly supplied
+        profile raises :class:`ProfileConfigError` instead of falling
+        back, so incomplete profiles fail fast.
 
         Returns an empty dict only if the file cannot be found in *either*
         location or is invalid JSON.
         """
-        # Primary location: profile config directory
-        path = self._config_dir / filename
-        # Fallback: project-level default config directory
-        fallback_path = self._PROJECT_ROOT / "config" / filename
+        candidates = self._candidate_paths(filename)
 
-        if path.exists():
+        for index, path in enumerate(candidates):
+            is_default_fallback = index == len(candidates) - 1
+            if not path.exists():
+                continue
+
             try:
                 with open(path, "r", encoding="utf-8") as fh:
                     result: Dict[str, Any] = json.load(fh)
-                    return result
             except (json.JSONDecodeError, OSError) as exc:
                 logger.error("Error reading %s: %s", path, exc)
                 return {}
 
-        # Attempt fallback
-        if fallback_path.exists():
-            logger.info(
-                "Config file '%s' not found in profile dir, falling back to %s",
-                filename,
-                fallback_path,
-            )
-            try:
-                with open(fallback_path, "r", encoding="utf-8") as fh:
-                    fallback_result: Dict[str, Any] = json.load(fh)
-                    return fallback_result
-            except (json.JSONDecodeError, OSError) as exc:
-                logger.error("Error reading fallback %s: %s", fallback_path, exc)
-                return {}
+            if is_default_fallback:
+                if self.strict:
+                    raise ProfileConfigError(
+                        f"Profile at {self._profile_root} is missing "
+                        f"'{filename}' (would fall back to core default "
+                        f"{path}). Add the file to the profile or disable "
+                        f"strict mode."
+                    )
+                if self._profile_explicit:
+                    logger.warning(
+                        "Config file '%s' not found in profile %s – using "
+                        "CORE DEFAULT %s. The profile may be incomplete and "
+                        "the resulting config may mix domains.",
+                        filename,
+                        self._profile_root,
+                        path,
+                    )
+                    if filename not in self._fallback_files:
+                        self._fallback_files.append(filename)
+                else:
+                    logger.debug("Loaded core default config %s", path)
+            return result
 
-        logger.warning("Config file not found in profile or fallback: %s", filename)
+        logger.warning(
+            "Config file not found in profile or core defaults: %s " "(searched: %s)",
+            filename,
+            ", ".join(str(c) for c in candidates),
+        )
         return {}
+
+    def log_profile_load_summary(self) -> None:
+        """Log a summary of which files were served from core defaults.
+
+        Call this once after profile activation (e.g. in CLI entry
+        points) so that mixed-domain configurations are easy to spot in
+        batch logs.
+        """
+        if self._profile_explicit and self._fallback_files:
+            logger.warning(
+                "Profile %s: %d config file(s) were served from CORE "
+                "DEFAULTS: %s. Review the profile for missing files.",
+                self._profile_root,
+                len(self._fallback_files),
+                ", ".join(sorted(self._fallback_files)),
+            )
 
     def _get_section(self, key: str) -> Dict[str, Any]:
         """Return a cached config section, loading it if necessary."""
@@ -656,11 +758,68 @@ class ProfileLoader:
     # ------------------------------------------------------------------
 
     @property
+    def fallback_files(self) -> List[str]:
+        """Names of config files served from the core default ``config/``.
+
+        Only populated when an explicit profile is active and a file had
+        to be read from the core defaults.
+        """
+        return list(self._fallback_files)
+
+    @property
     def profile(self) -> Dict[str, Any]:
-        """Return the parsed ``profile.json`` metadata (cached)."""
+        """Return the parsed ``profile.json`` metadata (cached).
+
+        On first access the profile's ``min_core_version`` (if present)
+        is validated against the core package version; an incompatible
+        core version raises :class:`ProfileConfigError`.
+        """
         if self._profile is None:
             self._profile = self._read_json(self._PROFILE_FILE)
+            self._enforce_min_core_version(self._profile)
         return self._profile
+
+    def _enforce_min_core_version(self, profile_data: Dict[str, Any]) -> None:
+        """Validate ``min_core_version`` against the installed core.
+
+        Comparison is done on the first two version components
+        (major.minor), so a requirement of ``1.0.0`` is satisfied by core
+        ``2.0.0`` and any later version.  Missing or unparseable values
+        are ignored with a debug log – the field is optional.
+        """
+        min_version = profile_data.get("min_core_version")
+        if not min_version or not isinstance(min_version, str):
+            return
+
+        core_version = _get_core_version()
+        if core_version is None:
+            logger.debug(
+                "Could not determine core version; skipping "
+                "min_core_version check (required: %s)",
+                min_version,
+            )
+            return
+
+        def _parts(v: str) -> List[int]:
+            out: List[int] = []
+            for part in v.split(".")[:2]:
+                digits = "".join(ch for ch in part if ch.isdigit())
+                out.append(int(digits) if digits else 0)
+            return out
+
+        min_parts = _parts(min_version)
+        core_parts = _parts(core_version)
+        if core_parts[:2] < min_parts[:2]:
+            raise ProfileConfigError(
+                f"Profile '{profile_data.get('name', '?')}' requires core "
+                f"version >= {min_version}, but installed core is "
+                f"{core_version}. Upgrade the core or the profile."
+            )
+        logger.debug(
+            "min_core_version OK: required >=%s, core=%s",
+            min_version,
+            core_version,
+        )
 
     def get_namespace(self) -> str:
         """Return the ontology namespace URI, e.g. ``https://example.org/onto#``."""
@@ -855,13 +1014,19 @@ def get_profile(profile_path: Optional[str] = None) -> ProfileLoader:
     return _profile
 
 
-def set_profile(profile_path: str) -> ProfileLoader:
+def set_profile(profile_path: str, strict: bool = False) -> ProfileLoader:
     """Create a new ``ProfileLoader`` for *profile_path* and install it
     as the module-level singleton.
+
+    Args:
+        profile_path: Path to the profile directory.
+        strict: When *True*, a config file missing from the profile
+            raises :class:`ProfileConfigError` instead of falling back
+            to the core defaults.
 
     Returns:
         The newly created ``ProfileLoader`` instance.
     """
     global _profile
-    _profile = ProfileLoader(profile_path)
+    _profile = ProfileLoader(profile_path, strict=strict)
     return _profile

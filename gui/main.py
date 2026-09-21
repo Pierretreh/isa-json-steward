@@ -76,10 +76,20 @@ def main():
         profile_path = discover_profile_dir(project_root)
 
     if profile_path is not None:
-        from utils.config_loader import set_profile
+        from utils.config_loader import ProfileConfigError, get_profile, set_profile
 
         set_profile(str(profile_path))
         logger.info("Profile activated: %s", profile_path)
+        try:
+            # Force resolution of profile.json (triggers the
+            # min_core_version check) and report any config files that
+            # had to be served from the core defaults.
+            profile = get_profile()
+            profile.profile
+            profile.log_profile_load_summary()
+        except ProfileConfigError as exc:
+            logger.error("%s", exc)
+            sys.exit(1)
 
     # Create application
     app = create_app()

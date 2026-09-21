@@ -537,6 +537,16 @@ def main(argv: Optional[List[str]] = None) -> None:
         help="Path to a domain profile directory. Activates the profile before processing.",
     )
     parser.add_argument(
+        "--strict",
+        action="store_true",
+        default=False,
+        help=(
+            "Strict profile mode: a config file missing from the given "
+            "profile (which would otherwise fall back to the core "
+            "defaults) aborts the run with an error."
+        ),
+    )
+    parser.add_argument(
         "--skip-conversion",
         action="store_true",
         default=False,
@@ -570,16 +580,25 @@ def main(argv: Optional[List[str]] = None) -> None:
         profile_path = Path(args.profile)
         if not profile_path.is_dir():
             parser.error(f"Profile directory does not exist: {args.profile}")
-        from utils.config_loader import set_profile
+        from utils.config_loader import ProfileConfigError, set_profile
 
-        set_profile(str(profile_path))
-        logging.getLogger(__name__).info("Profile activated: %s", profile_path.resolve())
+        try:
+            set_profile(str(profile_path), strict=args.strict)
+        except ProfileConfigError as exc:
+            parser.error(str(exc))
 
     # ---- Resolve defaults from profile -------------------------------------
-    from utils.config_loader import get_profile
+    from utils.config_loader import ProfileConfigError, get_profile
 
     profile = get_profile()
-    defaults = profile.get_investigation_defaults()
+    # Force resolution of profile.json (namespace, min_core_version check)
+    # and log which files were served from core defaults, if any.
+    try:
+        profile.profile
+        profile.log_profile_load_summary()
+        defaults = profile.get_investigation_defaults()
+    except ProfileConfigError as exc:
+        parser.error(str(exc))
 
     inv_id = args.investigation_id or defaults.get("investigation_id", "inv_default")
     output_dir = args.output_dir or str(profile.get_investigations_root())
@@ -654,11 +673,19 @@ def main(argv: Optional[List[str]] = None) -> None:
     print("=" * 60)
 
     # ---- Exit code ---------------------------------------------------------
+    # Force UTF-8 output so the status glyphs work on any console
+    # (Windows cp1252/cp437 terminals raise UnicodeEncodeError otherwise).
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):  # pragma: no cover
+            pass
+
     if result.validation_passed and result.failed_experiments == 0:
-        print("\n✓ Batch processing completed successfully!")
+        print("\nBatch processing completed successfully!")
         sys.exit(0)
     else:
-        print("\n✗ Batch processing completed with errors!")
+        print("\nBatch processing completed with errors!")
         sys.exit(1)
 
 
