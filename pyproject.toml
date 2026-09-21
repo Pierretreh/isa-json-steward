@@ -7,7 +7,8 @@ name = "isa-json-steward"
 version = "2.0.0"
 description = "ISA-JSON Data Steward — a desktop application and toolkit for managing ISA-JSON investigation metadata"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
 requires-python = ">=3.11"
 authors = [
     {name = "ISA-JSON Data Steward Contributors"}
@@ -17,7 +18,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
@@ -66,16 +66,17 @@ isa-json-steward-gui = "gui.main:main"
 isa-json-steward-batch = "utils.batch.batch_processor:main"
 
 [project.urls]
-Homepage = "https://github.com/isa-json-data-steward/isa-json-steward"
-Documentation = "https://github.com/isa-json-data-steward/isa-json-steward#readme"
-Repository = "https://github.com/isa-json-data-steward/isa-json-steward.git"
+Homepage = "https://github.com/Pierretreh/isa-json-steward"
+Documentation = "https://github.com/Pierretreh/isa-json-steward#readme"
+Repository = "https://github.com/Pierretreh/isa-json-steward.git"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["utils*", "gui*"]
+include = ["utils*", "gui*", "config"]
 
 [tool.setuptools.package-data]
 gui = ["resources/styles/*.qss"]
+config = ["*.json"]
 
 [tool.black]
 line-length = 100
