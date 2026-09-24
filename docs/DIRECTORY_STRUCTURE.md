@@ -14,10 +14,15 @@ isa-json-steward/
 ├── README.md                           # Project overview and setup instructions
 ├── pytest.ini                          # Test configuration
 │
-├── config/                             # Application configuration
+├── config/                             # Default profile configuration (built-in profile)
 │   ├── settings.json                   # Application settings (URLs, GUI, validation)
 │   ├── directory_structure.json        # Directory layout definition
-│   ├── profile.json                    # Active profile configuration
+│   ├── profile.json                    # Profile metadata (namespace, ontology, templates dir)
+│   ├── experiment_patterns.json        # Classification patterns (type keywords, file indicators, subdirectory patterns)
+│   ├── fcs_markers.json                # FCS channel markers, operators, instrument aliases
+│   ├── protein_names.json              # Protein and drug name mappings
+│   ├── people.json                     # Investigation/study people
+│   ├── investigation_defaults.json     # Investigation defaults (id, title, generator)
 │   └── factor_extraction_rules.json    # Rules for extracting experimental factors from filenames
 │
 ├── docs/                               # Documentation
@@ -86,52 +91,70 @@ isa-json-steward/
 
 ## Profiles
 
-Domain-specific configuration (templates, ontology references, reference documents) is loaded via **profiles** rather than being bundled in the repository. A profile is a directory containing:
+Domain-specific configuration — templates, ontology references, and classification patterns — is loaded via **profiles**. A profile is a directory containing a `config/` folder with the profile's configuration files (and, typically, `templates/` and `ontologies/`):
 
-- `templates/` — Assay, protocol, material, and device templates (JSON)
-- `ontologies/` — Ontology files (TTL, OWL) and cached external ontology copies
-- `references/` — Project-specific reference documents
-- `plans/` — Architecture and planning documents
+- `config/profile.json` — Profile metadata (name, namespace, ontology files, templates directory, optional `min_core_version`)
+- `config/experiment_patterns.json` — Experiment-classification patterns (type keywords, file indicators, subdirectory assay/processing-state/timepoint patterns)
+- `config/fcs_markers.json`, `config/protein_names.json`, `config/people.json`, `config/investigation_defaults.json`, `config/settings.json` — Domain-specific reference data
+
+Lookup order for each config file: the profile's `config/` directory first (with `profile.json` also accepted at the profile root), then the built-in `config/` directory shipped with the package. A profile may therefore override only a subset of files; any file served from the built-in defaults is logged at `WARNING` level and reported via `log_profile_load_summary()`, so mixed-domain configurations are easy to spot.
+
+The built-in `config/` directory (at the repository root) acts as the default profile when no profile directory is supplied.
 
 To use a profile:
 
 ```bash
-# Via CLI flag
+# GUI — via CLI flag
 python -m gui.main --profile ./path/to/profile/
 
-# Via environment variable
+# GUI — via environment variable
 export ISA_STEWARD_PROFILE=./path/to/profile/
+
+# Batch pipeline — via CLI flag
+isa-json-steward-batch --data-root "path/to/data" --output-dir ./output --profile ./path/to/profile/
 ```
 
-See [`USER_WORKFLOW_GUIDE.md`](USER_WORKFLOW_GUIDE.md) for details on creating custom profiles.
+See [`USER_WORKFLOW_GUIDE.md`](USER_WORKFLOW_GUIDE.md) for the batch workflow and the GUI workflow.
 
 ## Investigation Output Structure
 
 When the batch pipeline or GUI creates an investigation, the output follows this structure:
 
 ```
-output/
-├── inv_name/
-│   ├── inv_name.json                   # Lightweight investigation JSON (study references)
-│   └── studies/
-│       ├── study_E1_experiment_name/
-│       │   ├── study.json              # Full study metadata (ISA-JSON)
-│       │   └── files/
-│       │       ├── original/           # Original data files
-│       │       └── converted/          # Converted files (CZI→TIFF, FCS→CSV)
-│       └── study_E2_experiment_name/
-│           ├── study.json
-│           └── files/
+{output-dir}/
+├── processing_report.json              # Batch pipeline run summary
+├── metadata/                           # Extracted metadata files + metadata_index.json
+├── converted/                          # Intermediate converted files (CZI→TIFF, FCS→CSV)
+└── {investigation_id}/
+    ├── {investigation_id}.json         # Lightweight investigation JSON (study references)
+    ├── directory_manifest.json         # File counts/sizes manifest
+    └── studies/
+        ├── study_E1/
+        │   ├── study.json              # Full study metadata (ISA-JSON)
+        │   ├── files/
+        │   │   ├── original/           # Original data files
+        │   │   └── converted/          # Converted files
+        │   └── assays/
+        │       └── {assay_id}/
+        │           ├── assay.json      # Assay metadata
+        │           └── ...             # Data files + <name>_metadata.json
+        └── study_E2/
+            └── ...
 ```
 
 ## Configuration Files
 
 | File | Purpose |
 |------|---------|
+| [`config/profile.json`](../config/profile.json) | Profile metadata (name, namespace, ontology files, templates directory) |
+| [`config/experiment_patterns.json`](../config/experiment_patterns.json) | Experiment classification: type→template map, keywords, file indicators, subdirectory assay/processing-state/timepoint patterns |
+| [`config/fcs_markers.json`](../config/fcs_markers.json) | FCS channel-marker mappings, known operators, instrument aliases |
+| [`config/protein_names.json`](../config/protein_names.json) | Protein and drug name mappings |
+| [`config/people.json`](../config/people.json) | Investigation and study people |
+| [`config/investigation_defaults.json`](../config/investigation_defaults.json) | Investigation defaults (id, title, description, generator) |
 | [`config/settings.json`](../config/settings.json) | Application settings (URLs, GUI config, validation rules, export options) |
 | [`config/directory_structure.json`](../config/directory_structure.json) | Directory layout definition for DirectoryManager |
 | [`config/factor_extraction_rules.json`](../config/factor_extraction_rules.json) | Rules for extracting experimental factors from data filenames |
-| [`config/profile.json`](../config/profile.json) | Active profile configuration |
 | [`pyproject.toml`](../pyproject.toml) | Python project metadata, dependencies, and optional extras |
 
 ## References

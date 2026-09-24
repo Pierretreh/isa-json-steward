@@ -41,24 +41,34 @@ python -m gui.main
 For converting partner experiment folders (CZI, FCS, XLSX files) into ISA-JSON studies:
 
 ```bash
-# Process all experiments
-isa-json-steward-batch --data-root "path/to/data" --investigation-id inv_ukf
+# Process all experiments (both --data-root and --output-dir are required)
+isa-json-steward-batch --data-root "path/to/data" --output-dir ./output --investigation-id inv_ukf
 
 # Or using the module invocation
-python -m utils.batch --data-root "path/to/data" --investigation-id inv_ukf
+python -m utils.batch --data-root "path/to/data" --output-dir ./output --investigation-id inv_ukf
 
 # Process with a domain profile
-isa-json-steward-batch --data-root "path/to/data" --profile ./domain-profile
+isa-json-steward-batch --data-root "path/to/data" --output-dir ./output --profile ./domain-profile
 ```
 
-The pipeline automatically:
-1. Scans experiment folders and classifies experiment types
-2. Extracts metadata from proprietary files (CZI, FCS, XLSX)
-3. Converts files to open standards (TIFF, CSV)
-4. Generates ISA-JSON study files using templates
-5. Validates output against the ISA-JSON specification
+The pipeline runs seven stages:
+1. **Scan** — Discovers experiment folders (named `E1`, `E2`, …) and inventories their files
+2. **Classify** — Determines each experiment's assay type from folder names, file types, and subdirectory structure
+3. **Extract** — Reads metadata from proprietary files (CZI, FCS, XLSX)
+4. **Convert** — Converts files to open standards (TIFF, CSV)
+5. **Generate** — Creates ISA-JSON studies using the active profile's templates
+6. **Organize** — Writes the investigation, per-study JSONs, and original/converted files
+7. **Validate** — Checks the ISA-JSON structure, data files, and metadata
 
-Output is written to `investigations/{investigation_id}/`.
+The investigation is written to `{--output-dir}/{investigation_id}/` and a `processing_report.json` summary is written to `{--output-dir}/`.
+
+### How experiments are classified
+
+Classification combines three signals, all configurable through the active profile's `experiment_patterns` section:
+
+- **Folder name keywords** (e.g. `facs`, `calcein`, `tunel`)
+- **File-type indicators** (e.g. `.fcs` → FACS, `.czi`/`.tiff` → microscopy, `.xlsx` → ELISA)
+- **Subdirectory structure** — subdirectory names that indicate assay types (`FACS/`, `ELISA/`, …), timepoints (`D0`, `Day1`, `T2`, …), or processing states (`filtriert`, `unfiltered`, `raw`, compensation runs). The structure signal corroborates an already-agreed type with a modest confidence boost and breaks near-ties when the name and file heuristics disagree — it never overrides a clear winner.
 
 ## Tips for Scientists
 

@@ -67,20 +67,33 @@ cat ontologies/validation_report.json
 
 ## Batch Data Processing
 
-To process partner experimental data into ISA-JSON:
+To process partner experimental data into ISA-JSON, run the 7-stage batch pipeline (scan → classify → extract → convert → generate → organize → validate). Both `--data-root` and `--output-dir` are **required**:
 
 ```bash
-# Process all experiments from a data directory
-isa-json-steward-batch --data-root "path/to/data" --investigation-id inv_ukf
+# Process all experiment folders found in the data directory
+isa-json-steward-batch --data-root "path/to/data" --output-dir ./output
 
-# Process specific experiments from a data directory (module invocation)
-python -m utils.batch --data-root "path/to/data" --investigation-id inv_ukf
+# Or using the module invocation
+python -m utils.batch --data-root "path/to/data" --output-dir ./output
 
 # Process with a domain profile and skip conversion
-isa-json-steward-batch --data-root "path/to/data" --profile ./domain-profile --skip-conversion
+isa-json-steward-batch --data-root "path/to/data" --output-dir ./output \
+    --profile ./domain-profile --skip-conversion
 ```
 
-Output is written to the profile's investigations root (or `--output-dir` if specified).
+### Batch CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `--data-root` *(required)* | Root directory containing experiment folders (named `E1`, `E2`, …) |
+| `--output-dir` *(required)* | Output directory for the processed investigation |
+| `--profile` | Path to a domain profile directory; defaults to the built-in `config/` |
+| `--investigation-id` | Investigation identifier (default: from the profile's investigation defaults) |
+| `--inv-inm-path` | Optional path to an existing investigation for material references |
+| `--skip-conversion` | Skip the file format conversion stage |
+| `--skip-validation` | Skip the validation stage |
+
+The output investigation is written to `{--output-dir}/{investigation_id}/`, and a `processing_report.json` summary is written to `{--output-dir}/`.
 
 ## Running Tests
 

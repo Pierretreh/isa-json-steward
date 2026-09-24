@@ -509,15 +509,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     Returns:
         Process exit code: 0 on success, 1 otherwise.
     """
-    from utils.config_loader import get_profile, set_profile
+    import sys
+
+    from utils.config_loader import ProfileConfigError, get_profile, set_profile
 
     args = build_arg_parser().parse_args(argv)
 
     # Activate the profile (defaults to the built-in profile when omitted).
     profile = set_profile(args.profile) if args.profile else get_profile()
-    defaults = profile.get_investigation_defaults()
+    # Force resolution of profile.json (namespace, min_core_version check)
+    # and log which files were served from core defaults, if any.
+    try:
+        profile.profile
+        profile.log_profile_load_summary()
+        defaults = profile.get_investigation_defaults()
+    except ProfileConfigError as exc:
+        print(f"Profile error: {exc}", file=sys.stderr)
+        return 1
     inv_id = args.investigation_id or defaults.get("investigation_id", "inv_default")
-    templates_root = str(Path(profile.get_templates_dir()) / "assay_templates")
+    templates_root = str(profile.get_templates_root() / "assay_templates")
 
     processor_name = defaults.get("processor_name", "ISA-JSON Data Steward")
 
