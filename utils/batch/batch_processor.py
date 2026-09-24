@@ -1,7 +1,7 @@
 """
-Batch Processor for processing partner data in bulk.
+Batch processor for the ISA-JSON Data Steward 7-stage pipeline.
 
-This module orchestrates the entire data transfer pipeline:
+This module orchestrates the entire batch processing pipeline:
 1. Scan experiment folders
 2. Classify experiments
 3. Extract metadata
@@ -9,8 +9,13 @@ This module orchestrates the entire data transfer pipeline:
 5. Generate ISA-JSON
 6. Organize files
 7. Validate results
+
+It can be run from the command line::
+
+    python -m utils.batch.batch_processor --data-root ./data --output-dir ./output
 """
 
+import argparse
 import json
 import logging
 from dataclasses import dataclass, field
@@ -48,14 +53,13 @@ class BatchProcessingResult:
 
 
 class BatchProcessor:
-    """Batch processor for partner data transfer."""
+    """Batch processor orchestrating the 7-stage ISA-JSON pipeline."""
 
     def __init__(
         self,
         investigation_id: str = "inv_default",
         inv_inm_path: Optional[str] = None,
-        investigation_title: Optional[str] = None,
-        investigation_description: Optional[str] = None,
+        templates_root: Optional[str] = None,
     ):
         """
         Initialize the batch processor.
@@ -63,29 +67,22 @@ class BatchProcessor:
         Args:
             investigation_id: Investigation identifier
             inv_inm_path: Path to inv_inm investigation for material references
-            investigation_title: Investigation title for ISA-JSON output
-            investigation_description: Investigation description for ISA-JSON output
+            templates_root: Optional assay-templates directory (the active
+                profile's ``templates/assay_templates``). When provided, the
+                classifier and ISA-JSON generator resolve templates from the
+                profile; otherwise the built-in default location is used.
         """
-        from utils.config_loader import get_profile
-
         self.investigation_id = investigation_id
         self.inv_inm_path = inv_inm_path
-        self.investigation_title = investigation_title or f"{investigation_id} Investigation"
-        self.investigation_description = (
-            investigation_description or f"Investigation for {investigation_id}"
-        )
         self.logger = logging.getLogger(__name__)
-
-        # Resolve templates root from the active profile
-        profile = get_profile()
-        templates_root = str(profile.get_templates_root() / "assay_templates")
 
         # Initialize components
         self.scanner: Optional[FolderScanner] = None  # Will be initialized with data_root
-        self.classifier = ExperimentClassifier(templates_root=templates_root)
+        template_root = templates_root or "templates/assay_templates"
+        self.classifier = ExperimentClassifier(template_root)
         self.metadata_extractor = MetadataExtractor()
         self.format_converter = FormatConverter()
-        self.isa_generator = ISAJsonGenerator(templates_root=templates_root)
+        self.isa_generator = ISAJsonGenerator(template_root)
         self.file_organizer = FileOrganizer(investigation_id)
         self.isa_validator = ISAJsonValidator()
         self.file_validator = DataFileValidator()
@@ -94,7 +91,7 @@ class BatchProcessor:
     def process_batch(
         self,
         data_root: str,
-        output_dir: Optional[str] = None,
+        output_dir: str,
         skip_conversion: bool = False,
         skip_validation: bool = False,
     ) -> BatchProcessingResult:
@@ -103,18 +100,13 @@ class BatchProcessor:
 
         Args:
             data_root: Root directory containing experiment folders
-            output_dir: Output directory for processed data.  When *None* the
-                ``investigations`` directory from the active profile is used.
+            output_dir: Output directory for processed data
             skip_conversion: Skip file format conversion
             skip_validation: Skip validation step
 
         Returns:
             BatchProcessingResult object
         """
-        if output_dir is None:
-            from utils.config_loader import get_profile
-
-            output_dir = str(get_profile().get_investigations_root())
         start_time = datetime.now()
 
         result = BatchProcessingResult(
@@ -185,8 +177,8 @@ class BatchProcessor:
             investigation = self.isa_generator.generate_investigation(
                 experiments=experiments,
                 investigation_id=self.investigation_id,
-                investigation_title=self.investigation_title,
-                investigation_description=self.investigation_description,
+                investigation_title=f"{self.investigation_id} Investigation",
+                investigation_description=f"Investigation for {self.investigation_id}",
             )
 
             # Use lightweight investigation dict (study references only)
@@ -236,9 +228,7 @@ class BatchProcessor:
                 self.logger.info("Step 7: Validating results")
                 self.logger.info("=" * 60)
 
-                # Resolve the investigation JSON file path from the directory
-                inv_json_path = str(Path(inv_path) / f"{self.investigation_id}.json")
-                validation_results = self._validate_results(inv_json_path)
+                validation_results = self._validate_results(inv_path)
                 result.validation_passed = validation_results["passed"]
                 result.errors.extend(validation_results["errors"])
                 result.warnings.extend(validation_results["warnings"])
@@ -456,238 +446,116 @@ class BatchProcessor:
         self.logger.info("=" * 60)
 
 
-def main(argv: Optional[List[str]] = None) -> None:
-    """CLI entry point for the ISA-JSON batch processing pipeline.
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the command-line argument parser for the batch processor.
 
-    Parses command-line arguments via :mod:`argparse`, configures logging,
-    optionally activates a domain profile, and runs
-    :class:`BatchProcessor` against the provided data root.
-
-    Args:
-        argv: Argument list for testing.  When *None*, ``sys.argv[1:]``
-            is used (standard argparse behaviour).
+    Returns:
+        A configured ``ArgumentParser`` instance.
     """
-    import argparse
-    import sys
-
     parser = argparse.ArgumentParser(
         prog="isa-json-steward-batch",
         description=(
-            "ISA-JSON Batch Processing Pipeline\n"
-            "\n"
-            "Scan experiment folders, classify experiments, extract metadata,\n"
-            "convert file formats, generate ISA-JSON, and validate results."
+            "ISA-JSON Data Steward — run the 7-stage batch pipeline "
+            "(scan → classify → extract → convert → generate → organize → validate)."
         ),
-        epilog=(
-            "examples:\n"
-            "  isa-json-steward-batch -d ./partner-data\n"
-            "  isa-json-steward-batch -d ./data -o ./output -i inv_my_study -v\n"
-            "  isa-json-steward-batch -d ./data -p ./domain-profile --skip-conversion\n"
-            "  python -m utils.batch -d ./data -o ./output"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-
-    # ---- Required arguments ------------------------------------------------
     parser.add_argument(
-        "-d",
         "--data-root",
         required=True,
-        help="Path to the root directory containing experiment folders (E1_, E2_, etc.).",
+        help="Root directory containing experiment folders",
     )
-
-    # ---- Optional arguments ------------------------------------------------
     parser.add_argument(
-        "-o",
         "--output-dir",
+        required=True,
+        help="Output directory for the processed investigation",
+    )
+    parser.add_argument(
+        "--profile",
         default=None,
         help=(
-            "Output directory for results. "
-            "Default: resolved from the profile's investigations root."
+            "Path to a domain profile directory (config/ + templates/ + ontologies/). "
+            "Defaults to the built-in profile."
         ),
     )
     parser.add_argument(
-        "-i",
         "--investigation-id",
         default=None,
-        help="Investigation identifier. Default: read from profile's investigation defaults.",
-    )
-    parser.add_argument(
-        "--investigation-title",
-        default=None,
-        help='Investigation title. Default: "{investigation_id} Investigation".',
-    )
-    parser.add_argument(
-        "--investigation-description",
-        default=None,
-        help=(
-            "Investigation description. "
-            'Default: "Batch-processed investigation from {data_root}".'
-        ),
+        help="Investigation identifier (default: from the profile's investigation defaults)",
     )
     parser.add_argument(
         "--inv-inm-path",
         default=None,
-        help="Path to an existing inv_inm investigation for material cross-references.",
-    )
-    parser.add_argument(
-        "-p",
-        "--profile",
-        default=None,
-        help="Path to a domain profile directory. Activates the profile before processing.",
-    )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        default=False,
-        help=(
-            "Strict profile mode: a config file missing from the given "
-            "profile (which would otherwise fall back to the core "
-            "defaults) aborts the run with an error."
-        ),
+        help="Optional path to an existing investigation for material references",
     )
     parser.add_argument(
         "--skip-conversion",
         action="store_true",
-        default=False,
-        help="Skip file format conversion (czi->tiff, fcs->csv, etc.).",
+        help="Skip the file format conversion stage",
     )
     parser.add_argument(
         "--skip-validation",
         action="store_true",
-        default=False,
-        help="Skip ISA-JSON validation.",
+        help="Skip the validation stage",
     )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        default=False,
-        help="Enable verbose/debug logging.",
-    )
+    return parser
 
-    args = parser.parse_args(argv)
 
-    # ---- Logging -----------------------------------------------------------
-    log_level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
+def main(argv: Optional[List[str]] = None) -> int:
+    """Run the batch processor CLI.
 
-    # ---- Profile activation (must happen before BatchProcessor creation) ----
-    if args.profile is not None:
-        profile_path = Path(args.profile)
-        if not profile_path.is_dir():
-            parser.error(f"Profile directory does not exist: {args.profile}")
-        from utils.config_loader import ProfileConfigError, set_profile
+    Args:
+        argv: Optional argument list (defaults to ``sys.argv[1:]``).
 
-        try:
-            set_profile(str(profile_path), strict=args.strict)
-        except ProfileConfigError as exc:
-            parser.error(str(exc))
+    Returns:
+        Process exit code: 0 on success, 1 otherwise.
+    """
+    from utils.config_loader import get_profile, set_profile
 
-    # ---- Resolve defaults from profile -------------------------------------
-    from utils.config_loader import ProfileConfigError, get_profile
+    args = build_arg_parser().parse_args(argv)
 
-    profile = get_profile()
-    # Force resolution of profile.json (namespace, min_core_version check)
-    # and log which files were served from core defaults, if any.
-    try:
-        profile.profile
-        profile.log_profile_load_summary()
-        defaults = profile.get_investigation_defaults()
-    except ProfileConfigError as exc:
-        parser.error(str(exc))
-
+    # Activate the profile (defaults to the built-in profile when omitted).
+    profile = set_profile(args.profile) if args.profile else get_profile()
+    defaults = profile.get_investigation_defaults()
     inv_id = args.investigation_id or defaults.get("investigation_id", "inv_default")
-    output_dir = args.output_dir or str(profile.get_investigations_root())
-    inv_title = args.investigation_title or f"{inv_id} Investigation"
-    inv_description = (
-        args.investigation_description or f"Batch-processed investigation from {args.data_root}"
-    )
+    templates_root = str(Path(profile.get_templates_dir()) / "assay_templates")
 
-    # ---- Print banner ------------------------------------------------------
-    processor_name = defaults.get("processor_name", "Bulk Data Transfer Processor")
+    processor_name = defaults.get("processor_name", "ISA-JSON Data Steward")
+
     print("=" * 60)
     print(processor_name)
     print("=" * 60)
     print(f"Data root:          {args.data_root}")
-    print(f"Output directory:   {output_dir}")
-    print(f"Investigation ID:   {inv_id}")
-    print(f"Investigation title: {inv_title}")
-    print(f"inv_inm path:       {args.inv_inm_path or '(none)'}")
+    print(f"Output directory:   {args.output_dir}")
+    print(f"Profile:            {profile.get_config_dir()}")
+    print(f"Templates:          {templates_root}")
     print(f"Skip conversion:    {args.skip_conversion}")
     print(f"Skip validation:    {args.skip_validation}")
-    print(f"Verbose:            {args.verbose}")
+    if args.inv_inm_path:
+        print(f"inv_inm path:       {args.inv_inm_path}")
     print("=" * 60)
     print()
 
-    # ---- Create processor and run ------------------------------------------
     processor = BatchProcessor(
         investigation_id=inv_id,
         inv_inm_path=args.inv_inm_path,
-        investigation_title=inv_title,
-        investigation_description=inv_description,
+        templates_root=templates_root,
     )
 
     result = processor.process_batch(
         data_root=args.data_root,
-        output_dir=output_dir,
+        output_dir=args.output_dir,
         skip_conversion=args.skip_conversion,
         skip_validation=args.skip_validation,
     )
 
-    # ---- Print summary -----------------------------------------------------
-    print()
-    print("=" * 60)
-    print("BATCH PROCESSING RESULTS")
-    print("=" * 60)
-    print(f"Total experiments:    {result.total_experiments}")
-    print(f"Successful:           {result.successful_experiments}")
-    print(f"Failed:               {result.failed_experiments}")
-    print(f"Total files:          {result.total_files}")
-    print(f"Converted files:      {result.converted_files}")
-    print(f"Failed conversions:   {result.failed_conversions}")
-    print(f"Validation passed:    {result.validation_passed}")
-    print(f"Processing time:      {result.processing_time_seconds:.1f}s")
-
-    if result.errors:
-        print(f"\nERRORS ({len(result.errors)}):")
-        for err in result.errors:
-            print(f"  - {err}")
-
-    if result.warnings:
-        shown = result.warnings[:10]
-        print(f"\nWARNINGS ({len(result.warnings)}):")
-        for w in shown:
-            print(f"  - {w}")
-        if len(result.warnings) > 10:
-            print(f"  ... and {len(result.warnings) - 10} more warnings")
-
-    if result.info:
-        print(f"\nINFO ({len(result.info)}):")
-        for info_msg in result.info:
-            print(f"  - {info_msg}")
-
-    print("=" * 60)
-
-    # ---- Exit code ---------------------------------------------------------
-    # Force UTF-8 output so the status glyphs work on any console
-    # (Windows cp1252/cp437 terminals raise UnicodeEncodeError otherwise).
-    if hasattr(sys.stdout, "reconfigure"):
-        try:
-            sys.stdout.reconfigure(encoding="utf-8")
-        except (AttributeError, ValueError):  # pragma: no cover
-            pass
-
-    if result.validation_passed and result.failed_experiments == 0:
-        print("\nBatch processing completed successfully!")
-        sys.exit(0)
-    else:
-        print("\nBatch processing completed with errors!")
-        sys.exit(1)
+    if result.validation_passed and result.failed_experiments == 0 and not result.errors:
+        print("\n✓ Batch processing completed successfully!")
+        return 0
+    print("\n✗ Batch processing completed with errors!")
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    sys.exit(main())

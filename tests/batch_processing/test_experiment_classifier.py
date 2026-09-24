@@ -171,6 +171,154 @@ class TestExperimentClassifier:
 
 @pytest.mark.unit
 @pytest.mark.batch_component
+class TestStructureDisambiguation:
+    """Tests for the Stage-1 folder-structure disambiguation signal.
+
+    The folder-structure analysis (``SubdirectoryHints.assay_dirs``) is
+    used as a disambiguation signal: it corroborates an already-agreed
+    type with a modest confidence boost, and it breaks near-ties (within
+    ``TIE_BREAK_MARGIN``) when the name and file heuristics disagree.
+    It never overrides a clear winner.
+    """
+
+    def test_structure_corroborates_agreed_type(self):
+        """Agreed type + matching structure hint → extra confidence boost."""
+        from utils.batch.folder_scanner import FileInventory, FolderMetadata, SubdirectoryHints
+
+        hints = SubdirectoryHints(
+            assay_dirs={"FACS": "facs"},
+            immediate_subdirs=["FACS"],
+            has_structure=True,
+        )
+        metadata = FolderMetadata(
+            experiment_id="E1",
+            experiment_name="E1_FACS",
+            folder_path="E1_FACS",
+            file_inventory=FileInventory(fcs_files=["E1_FACS/run.fcs"]),
+            subdirectory_hints=hints,
+        )
+
+        classifier = ExperimentClassifier()
+        with_structure = classifier.classify_experiment(metadata)
+
+        metadata_no_hints = FolderMetadata(
+            experiment_id="E1",
+            experiment_name="E1_FACS",
+            folder_path="E1_FACS",
+            file_inventory=FileInventory(fcs_files=["E1_FACS/run.fcs"]),
+            subdirectory_hints=None,
+        )
+        without_structure = classifier.classify_experiment(metadata_no_hints)
+
+        assert with_structure.type_name == "facs"
+        assert without_structure.type_name == "facs"
+        # The corroborating structure hint adds the modest boost
+        assert with_structure.confidence > without_structure.confidence
+        boost = ExperimentClassifier.STRUCTURE_CORROBORATION_BOOST
+        assert with_structure.confidence == min(without_structure.confidence + boost, 1.0)
+
+    def test_structure_breaks_near_tie(self):
+        """Name/file disagree within TIE_BREAK_MARGIN → structure breaks the tie."""
+        from utils.batch.folder_scanner import FileInventory, FolderMetadata, SubdirectoryHints
+
+        # Name votes facs (all 5 facs keywords present → 5/5 = 1.0);
+        # file votes elisa (1 .xlsx of 1 file → 1.0).  They disagree with a
+        # zero spread (a true tie); structure points at elisa → elisa wins
+        # with the shared confidence retained.
+        hints = SubdirectoryHints(
+            assay_dirs={"ELISA": "elisa"},
+            immediate_subdirs=["ELISA"],
+            has_structure=True,
+        )
+        metadata = FolderMetadata(
+            experiment_id="E2",
+            experiment_name="E2_facs annexin pi propidium iodide flow cytometry",
+            folder_path="E2_facs annexin pi propidium iodide flow cytometry",
+            file_inventory=FileInventory(xlsx_files=["E2/run.xlsx"]),
+            subdirectory_hints=hints,
+        )
+
+        classifier = ExperimentClassifier()
+        result = classifier.classify_experiment(metadata)
+
+        assert result.type_name == "elisa"
+        assert result.assay_template == "elisa_assay.json"
+        assert result.confidence == 1.0
+
+    def test_structure_does_not_override_clear_winner(self):
+        """Name/file disagree beyond TIE_BREAK_MARGIN → winner stands."""
+        from utils.batch.folder_scanner import FileInventory, FolderMetadata, SubdirectoryHints
+
+        # Name votes facs strongly (0.5), file votes microscopy (0.4):
+        # spread 0.1 is at the margin boundary — use a wider spread instead:
+        # name "facs" (1/5 = 0.2) vs file microscopy 1/1 = 1.0 → spread 0.8.
+        # Structure points at facs but must NOT override the file winner.
+        hints = SubdirectoryHints(
+            assay_dirs={"FACS": "facs"},
+            immediate_subdirs=["FACS"],
+            has_structure=True,
+        )
+        metadata = FolderMetadata(
+            experiment_id="E3",
+            experiment_name="E3_facs",
+            folder_path="E3_facs",
+            file_inventory=FileInventory(tiff_files=["E3_facs/image.tiff"]),
+            subdirectory_hints=hints,
+        )
+
+        classifier = ExperimentClassifier()
+        result = classifier.classify_experiment(metadata)
+
+        assert result.type_name == "microscopy"
+
+    def test_ambiguous_structure_does_not_break_tie(self):
+        """Multiple assay dirs → no tie-break, higher-confidence winner kept."""
+        from utils.batch.folder_scanner import FileInventory, FolderMetadata, SubdirectoryHints
+
+        # True tie as in the previous test (name facs 1.0 vs file elisa 1.0),
+        # but the structure hints are ambiguous (two assay types) → no
+        # tie-break; the name winner (facs) is kept.
+        hints = SubdirectoryHints(
+            assay_dirs={"FACS": "facs", "ELISA": "elisa"},
+            immediate_subdirs=["FACS", "ELISA"],
+            has_structure=True,
+        )
+        metadata = FolderMetadata(
+            experiment_id="E4",
+            experiment_name="E4_facs annexin pi propidium iodide flow cytometry",
+            folder_path="E4_facs annexin pi propidium iodide flow cytometry",
+            file_inventory=FileInventory(xlsx_files=["E4/run.xlsx"]),
+            subdirectory_hints=hints,
+        )
+
+        classifier = ExperimentClassifier()
+        result = classifier.classify_experiment(metadata)
+
+        # Ambiguous hints must not flip the outcome; the name winner stays.
+        assert result.type_name == "facs"
+
+    def test_no_hints_behaves_as_before(self):
+        """Absent structure hints → identical to the two-heuristic result."""
+        from utils.batch.folder_scanner import FileInventory, FolderMetadata
+
+        metadata = FolderMetadata(
+            experiment_id="E5",
+            experiment_name="E5_FACS",
+            folder_path="E5_FACS",
+            file_inventory=FileInventory(fcs_files=["E5_FACS/run.fcs"]),
+            subdirectory_hints=None,
+        )
+
+        classifier = ExperimentClassifier()
+        result = classifier.classify_experiment(metadata)
+
+        assert result.type_name == "facs"
+        # name confidence 1/5 = 0.2 + corroboration boost 0.2 (no structure boost)
+        assert abs(result.confidence - 0.4) < 1e-9
+
+
+@pytest.mark.unit
+@pytest.mark.batch_component
 class TestExperimentType:
     """Tests for ExperimentType enum."""
 

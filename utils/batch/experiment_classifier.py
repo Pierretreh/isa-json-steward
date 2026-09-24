@@ -2,10 +2,16 @@
 Experiment Classifier for classifying experiments by type.
 
 This module classifies experiments based on folder names, file contents,
-and suggests appropriate assay templates.  Domain-specific knowledge
-(keywords, templates, file indicators) is loaded from the active profile
-via :func:`utils.config_loader.get_profile`, making the classifier
-reusable for any project.
+and folder-structure analysis, and suggests appropriate assay templates.
+Domain-specific knowledge (keywords, templates, file indicators) is
+loaded from the active profile via :func:`utils.config_loader.get_profile`,
+making the classifier reusable for any project.
+
+The name-keyword and file-type heuristics are the primary votes.  The
+Stage-1 folder-structure analysis (subdirectory hints) acts as a
+*disambiguation signal*: it corroborates an already-agreed type with a
+modest confidence boost and breaks near-ties when the two primary
+heuristics disagree.  It never overrides a clear winner.
 """
 
 import logging
@@ -13,9 +19,15 @@ import os
 import re
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
 
-from utils.batch.folder_scanner import FileInventory, FolderMetadata
+from utils.batch.folder_scanner import (
+    FileInventory,
+    FolderMetadata,
+    FolderScanner,
+    SubdirectoryHints,
+)
 from utils.config_loader import get_profile
 
 logging.basicConfig(level=logging.INFO)
@@ -117,6 +129,19 @@ class ExperimentClassifier:
         """
         return get_profile().get_type_file_indicators()
 
+    # ------------------------------------------------------------------
+    # Confidence-combination constants
+    # ------------------------------------------------------------------
+
+    #: Boost applied when the name and file heuristics agree.
+    CORROBORATION_BOOST = 0.2
+    #: Modest additional boost when the Stage-1 folder-structure analysis
+    #: corroborates an already-agreed type.
+    STRUCTURE_CORROBORATION_BOOST = 0.1
+    #: Name/file scores within this margin are considered a tie that the
+    #: folder-structure analysis may break.
+    TIE_BREAK_MARGIN = 0.1
+
     def __init__(self, templates_root: str = "templates/assay_templates"):
         """
         Initialize the experiment classifier.
@@ -165,21 +190,36 @@ class ExperimentClassifier:
         # Determine best classification
         type_name = None
         confidence = 0.0
+        structure_hints = self._get_subdirectory_hints(path)
 
         if name_has_match and file_has_match:
             assert file_classification is not None  # guaranteed by file_has_match above
             if name_classification.type_name == file_classification.type_name:
                 # Both agree - boost confidence
-                confidence = min(name_classification.confidence + 0.2, 1.0)
+                confidence = min(name_classification.confidence + self.CORROBORATION_BOOST, 1.0)
                 type_name = name_classification.type_name
+                # Folder-structure analysis corroborates the agreed type
+                if self._structure_corroborates(type_name, structure_hints):
+                    confidence = min(confidence + self.STRUCTURE_CORROBORATION_BOOST, 1.0)
             else:
-                # Disagreement - use higher confidence
+                # Disagreement - use higher confidence; the folder-structure
+                # analysis breaks near-ties (within TIE_BREAK_MARGIN)
                 if name_classification.confidence >= file_classification.confidence:
                     type_name = name_classification.type_name
                     confidence = name_classification.confidence
                 else:
                     type_name = file_classification.type_name
                     confidence = file_classification.confidence
+
+                spread = abs(name_classification.confidence - file_classification.confidence)
+                if spread <= self.TIE_BREAK_MARGIN:
+                    structure_type = self._structure_tie_break(type_name, structure_hints)
+                    if structure_type is not None:
+                        self.logger.info("Folder structure broke near-tie: %s", structure_type)
+                        type_name = structure_type
+                        confidence = max(
+                            name_classification.confidence, file_classification.confidence
+                        )
         elif name_has_match:
             type_name = name_classification.type_name
             confidence = name_classification.confidence
@@ -334,7 +374,14 @@ class ExperimentClassifier:
 
     def classify_experiment(self, metadata: FolderMetadata) -> ExperimentClassification:
         """
-        Classify experiment using both name and file analysis.
+        Classify experiment using name, file, and folder-structure analysis.
+
+        The name-keyword and file-type heuristics are the primary votes.
+        The Stage-1 folder-structure analysis (``metadata.subdirectory_hints``)
+        acts as a disambiguation signal: it corroborates an already-agreed
+        type with a modest confidence boost and breaks near-ties (within
+        ``TIE_BREAK_MARGIN``) when the two primary heuristics disagree.
+        It never overrides a clear winner.
 
         Args:
             metadata: Folder metadata for the experiment
@@ -352,7 +399,16 @@ class ExperimentClassifier:
             # Combine classifications
             if name_classification.type_name == file_classification.type_name:
                 # Both agree - boost confidence
-                combined_confidence = min(name_classification.confidence + 0.2, 1.0)
+                combined_confidence = min(
+                    name_classification.confidence + self.CORROBORATION_BOOST, 1.0
+                )
+                # Folder-structure analysis corroborates the agreed type
+                if self._structure_corroborates(
+                    name_classification.type_name, metadata.subdirectory_hints
+                ):
+                    combined_confidence = min(
+                        combined_confidence + self.STRUCTURE_CORROBORATION_BOOST, 1.0
+                    )
                 return ExperimentClassification(
                     type_name=name_classification.type_name,
                     assay_template=name_classification.assay_template,
@@ -363,11 +419,70 @@ class ExperimentClassifier:
             else:
                 # Disagreement - use higher confidence
                 if name_classification.confidence >= file_classification.confidence:
-                    return name_classification
+                    winner = name_classification
                 else:
-                    return file_classification
+                    winner = file_classification
+
+                # The folder-structure analysis breaks near-ties
+                spread = abs(name_classification.confidence - file_classification.confidence)
+                if spread <= self.TIE_BREAK_MARGIN:
+                    tie_break_type = self._structure_tie_break(
+                        winner.type_name, metadata.subdirectory_hints
+                    )
+                    if tie_break_type is not None:
+                        self.logger.info("Folder structure broke near-tie: %s", tie_break_type)
+                        assay_template = self.TYPE_TO_TEMPLATE.get(
+                            tie_break_type, "microscopy_assay.json"
+                        )
+                        return ExperimentClassification(
+                            type_name=tie_break_type,
+                            assay_template=assay_template,
+                            confidence=max(
+                                name_classification.confidence, file_classification.confidence
+                            ),
+                            detected_keywords=winner.detected_keywords,
+                            detected_files=winner.detected_files,
+                        )
+
+                return winner
         else:
             return name_classification
+
+    # ------------------------------------------------------------------
+    # Folder-structure disambiguation (Stage-1 hints)
+    # ------------------------------------------------------------------
+
+    def _get_subdirectory_hints(self, folder_path: Path) -> Optional[SubdirectoryHints]:
+        """Analyze the subdirectory structure of *folder_path* (or ``None``)."""
+        try:
+            return FolderScanner(str(folder_path))._analyze_subdirectory_structure(folder_path)
+        except Exception as exc:  # pragma: no cover - defensive
+            self.logger.debug("Subdirectory analysis failed for %s: %s", folder_path, exc)
+            return None
+
+    @staticmethod
+    def _structure_assay_types(hints: Optional[SubdirectoryHints]) -> List[str]:
+        """Return the distinct assay types indicated by the structure hints."""
+        if not hints or not hints.assay_dirs:
+            return []
+        return sorted(set(hints.assay_dirs.values()))
+
+    def _structure_corroborates(self, type_name: str, hints: Optional[SubdirectoryHints]) -> bool:
+        """Whether the structure hints indicate the already-agreed type."""
+        return type_name in self._structure_assay_types(hints)
+
+    def _structure_tie_break(
+        self, default_type: str, hints: Optional[SubdirectoryHints]
+    ) -> Optional[str]:
+        """Break a near-tie using the structure hints.
+
+        Returns the single indicated assay type, or ``None`` when the hints
+        are absent, uninformative, or ambiguous (multiple assay types).
+        """
+        structure_types = self._structure_assay_types(hints)
+        if len(structure_types) == 1 and structure_types[0] != default_type:
+            return structure_types[0]
+        return None
 
     def suggest_template(self, experiment_type) -> str:
         """

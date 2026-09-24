@@ -3,6 +3,12 @@ Folder Scanner for discovering experiment folders in partner data.
 
 This module scans the partner representative data directory to discover
 experiment folders and extract basic metadata.
+
+The subdirectory-structure analysis (timepoints, processing states, assay
+sub-plates) resolves its pattern sets from the active profile's
+``experiment_patterns`` configuration, falling back to built-in defaults
+when a profile omits them — keeping the scanner usable with minimal
+profiles while remaining fully profile-driven.
 """
 
 import json
@@ -12,6 +18,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from utils.config_loader import get_profile
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -264,6 +272,47 @@ class FolderScanner:
         if not folder_path.exists() or not folder_path.is_dir():
             return hints
 
+        # Resolve pattern sets from the active profile (built-in defaults
+        # apply when a profile omits a section).
+        profile = get_profile()
+        prefix_map = profile.get_subdirectory_timepoint_prefixes() or {
+            "D": "Day",
+            "T": "Time",
+            "W": "Week",
+        }
+        processing_map = [
+            (entry["pattern"], entry["state"])
+            for entry in profile.get_subdirectory_processing_states()
+        ] or [
+            ("unfiltriert", "unfiltered"),
+            ("unfiltered", "unfiltered"),
+            ("filtriert", "filtered"),
+            ("filtered", "filtered"),
+            ("processed", "processed"),
+            ("bearbeitet", "processed"),
+            ("raw", "raw"),
+            ("roh", "raw"),
+        ]
+        # Longer patterns first so e.g. "unfiltriert" wins over "filtriert"
+        processing_map = sorted(processing_map, key=lambda ps: len(ps[0]), reverse=True)
+        compensation_patterns = profile.get_subdirectory_compensation_patterns() or [
+            "kompensation",
+            "compensation",
+            "compensierung",
+        ]
+        assay_map = profile.get_subdirectory_assay_patterns() or {
+            "facs": "facs",
+            "flow cytometry": "facs",
+            "microscopy": "microscopy",
+            "calcein": "calcein",
+            "dapi": "dapi",
+            "elisa": "elisa",
+            "western blot": "western_blot",
+            "wb": "western_blot",
+            "tunel": "tunel",
+            "slidescanner": "slidescanner",
+        }
+
         # Scan immediate subdirectories
         for item in sorted(folder_path.iterdir()):
             if not item.is_dir():
@@ -285,25 +334,12 @@ class FolderScanner:
             if timepoint_match:
                 raw_prefix = timepoint_match.group(1)
                 num = timepoint_match.group(2)
-                # Expand single-letter abbreviations to full words
-                prefix_map = {"D": "Day", "T": "Time", "W": "Week"}
+                # Expand single-letter abbreviations to full words (profile-driven)
                 prefix = prefix_map.get(raw_prefix.upper(), raw_prefix.capitalize())
                 hints.timepoint_dirs[name] = f"{prefix} {num}"
                 continue
 
             # --- Processing state detection ---
-            # Sort by length descending so longer patterns match first
-            # (e.g., 'unfiltriert' before 'filtriert')
-            processing_map = [
-                ("unfiltriert", "unfiltered"),
-                ("unfiltered", "unfiltered"),
-                ("filtriert", "filtered"),
-                ("filtered", "filtered"),
-                ("processed", "processed"),
-                ("bearbeitet", "processed"),
-                ("raw", "raw"),
-                ("roh", "raw"),
-            ]
             name_lower = name.lower()
             processing_matched = False
             for pattern, state in processing_map:
@@ -320,7 +356,6 @@ class FolderScanner:
 
             # C5: Compensation run detection
             # e.g., "alte Kompensation", "neue Kompensation", "Compensation vom 04.03"
-            compensation_patterns = ["kompensation", "compensation", "compensierung"]
             for pattern in compensation_patterns:
                 if pattern in name_lower:
                     hints.processing_dirs[name] = "compensation_run"
@@ -330,19 +365,7 @@ class FolderScanner:
             if processing_matched:
                 continue
 
-            # --- Assay type detection ---
-            assay_map = {
-                "facs": "facs",
-                "flow cytometry": "facs",
-                "microscopy": "microscopy",
-                "calcein": "calcein",
-                "dapi": "dapi",
-                "elisa": "elisa",
-                "western blot": "western_blot",
-                "wb": "western_blot",
-                "tunel": "tunel",
-                "slidescanner": "slidescanner",
-            }
+            # --- Assay type detection (profile-driven) ---
             for pattern, assay_type in assay_map.items():
                 if pattern in name_lower:
                     hints.assay_dirs[name] = assay_type

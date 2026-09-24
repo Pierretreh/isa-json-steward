@@ -55,6 +55,38 @@
     "western_blot": [".tiff", ".tif"],
     "fluorescence": [".xlsx", ".xls"]
   },
+  "subdirectory_assay_patterns": {
+    "facs": "facs",
+    "flow cytometry": "facs",
+    "microscopy": "microscopy",
+    "calcein": "calcein",
+    "dapi": "dapi",
+    "elisa": "elisa",
+    "western blot": "western_blot",
+    "wb": "western_blot",
+    "tunel": "tunel",
+    "slidescanner": "slidescanner"
+  },
+  "subdirectory_processing_states": [
+    {"pattern": "unfiltriert", "state": "unfiltered"},
+    {"pattern": "unfiltered", "state": "unfiltered"},
+    {"pattern": "filtriert", "state": "filtered"},
+    {"pattern": "filtered", "state": "filtered"},
+    {"pattern": "processed", "state": "processed"},
+    {"pattern": "bearbeitet", "state": "processed"},
+    {"pattern": "raw", "state": "raw"},
+    {"pattern": "roh", "state": "raw"}
+  ],
+  "subdirectory_compensation_patterns": [
+    "kompensation",
+    "compensation",
+    "compensierung"
+  ],
+  "subdirectory_timepoint_prefixes": {
+    "D": "Day",
+    "T": "Time",
+    "W": "Week"
+  },
   "cell_type_map": {
     "endothelial_cell": "endothelial_cell",
     "cell_explant": "cell_explant"
