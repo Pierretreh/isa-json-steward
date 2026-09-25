@@ -593,6 +593,7 @@ class ProfileLoader:
         "people": "people.json",
         "investigation_defaults": "investigation_defaults.json",
         "settings": "settings.json",
+        "factor_extraction_rules": "factor_extraction_rules.json",
     }
 
     # The project root is the parent of ``utils/`` – used for fallback
@@ -908,6 +909,20 @@ class ProfileLoader:
     def get_drug_name_map(self) -> Dict[str, str]:
         """Return the full drug-name mapping dict."""
         return dict(self._get_section("protein_names").get("drug_names", {}))
+
+    # ------------------------------------------------------------------
+    # Factor extraction rules
+    # ------------------------------------------------------------------
+
+    def get_factor_extraction_rules(self) -> Dict[str, Any]:
+        """Return the parsed ``factor_extraction_rules.json`` content.
+
+        Includes the ``rules`` list and the optional ``factor_aliases``
+        mapping.  Returns an empty dict when the file is absent or empty.
+        """
+        data = self._get_section("factor_extraction_rules")
+        result: Dict[str, Any] = dict(data) if data else {}
+        return result
 
     # ------------------------------------------------------------------
     # Experiment patterns

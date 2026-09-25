@@ -550,9 +550,33 @@ class ExperimentClassifier:
 
         return None
 
+    def _get_factor_rules_extractor(self):
+        """Return a :class:`FactorRulesExtractor` for the active profile.
+
+        Returns ``None`` when the profile has no usable rules so the caller
+        can fall back to the hardcoded heuristics.
+        """
+        try:
+            from utils.batch.factor_rules import FactorRulesExtractor
+
+            rules_data = get_profile().get_factor_extraction_rules()
+            if not rules_data or not rules_data.get("rules"):
+                return None
+            return FactorRulesExtractor(rules_data)
+        except Exception as exc:
+            self.logger.debug("Factor rules unavailable: %s", exc)
+            return None
+
     def extract_parameters_from_name(self, folder_name: str) -> Dict[str, Any]:
         """
         Extract experimental parameters from folder name.
+
+        The shared declarative rules from ``factor_extraction_rules.json``
+        (via :class:`utils.batch.factor_rules.FactorRulesExtractor`) are
+        consulted first so the classifier and the ISA-JSON generator never
+        disagree on factor values; the hardcoded heuristics below remain as
+        fallbacks for parameters the rules do not produce (protein
+        variants, sample counts, cell types, time points, controls).
 
         Args:
             folder_name: Name of the experiment folder
@@ -561,6 +585,29 @@ class ExperimentClassifier:
             Dictionary of extracted parameters
         """
         parameters = {}
+
+        # ── Shared factor rules (factor_extraction_rules.json) ──
+        # Rule-derived factor values take precedence per factor.
+        extractor = self._get_factor_rules_extractor()
+        if extractor is not None:
+            try:
+                result = extractor.extract(folder_name, [folder_name])
+                if result is not None:
+                    factor_values, _combinations = result
+                    if "treatment" in factor_values:
+                        parameters["treatments"] = sorted(factor_values["treatment"])
+                    if "concentration" in factor_values:
+                        conc_values: List[float] = []
+                        for c in sorted(factor_values["concentration"]):
+                            num = re.sub(r"[^0-9,.]", "", c).replace(",", ".")
+                            try:
+                                conc_values.append(float(num))
+                            except ValueError:
+                                pass
+                        if conc_values:
+                            parameters["concentrations_uM"] = conc_values
+            except Exception as exc:
+                self.logger.debug("Factor rule extraction failed: %s", exc)
 
         # Extract protein variants (pVV019, pVV021, etc.)
         protein_variants = re.findall(r"pVV\d+", folder_name, re.IGNORECASE)

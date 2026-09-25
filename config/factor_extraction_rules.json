@@ -1,6 +1,315 @@
 {
-  "description": "Rules for extracting experimental factors from folder/file names. Customize for your project.",
+  "_metadata": {
+    "description": "Configurable factor extraction rules for partner data experiments. Each rule matches experiment folder names and extracts structured factors from file names using regex patterns. When no rule matches, the pipeline falls back to single-axis condition detection.",
+    "version": "1.0"
+  },
   "rules": [
+    {
+      "name": "explant_scaffold_calcein",
+      "description": "E10-style scaffold comparison: {Scaffold}_{FBS}_Calcein {location}[_{time}]_{replicate}",
+      "match_experiment_name": {
+        "contains_all": [
+          "explant",
+          "calcein"
+        ]
+      },
+      "min_factors_to_match": 2,
+      "factors": [
+        {
+          "name": "scaffold_type",
+          "regex": "^(Collagen|Speed Coating)_",
+          "group": 1
+        },
+        {
+          "name": "fbs_condition",
+          "regex": "_(mit FBS|ohne FBS)_",
+          "group": 1,
+          "value_map": {
+            "mit FBS": "+FBS",
+            "ohne FBS": "-FBS"
+          }
+        },
+        {
+          "name": "anatomical_location",
+          "regex": "Calcein (innen|außen)",
+          "group": 1,
+          "value_map": {
+            "innen": "inside",
+            "außen": "outside"
+          }
+        },
+        {
+          "name": "time_point",
+          "regex": "(\\d+)h(?:_|\\.)",
+          "group": 1,
+          "suffix": "h",
+          "default_if_absent": "baseline"
+        }
+      ]
+    },
+    {
+      "name": "explant_facs_static",
+      "description": "E11-style: Explant {size}mm_{treatment}_{concentration}_{duration}",
+      "match_experiment_name": {
+        "contains_all": [
+          "explant",
+          "static"
+        ]
+      },
+      "min_factors_to_match": 2,
+      "factors": [
+        {
+          "name": "explant_size",
+          "regex": "Explant (\\d+)mm",
+          "group": 1,
+          "suffix": "mm"
+        },
+        {
+          "name": "treatment",
+          "regex": "(Controlle|Static|Isopropanol)",
+          "group": 1,
+          "value_map": {
+            "Controlle": "Control"
+          }
+        },
+        {
+          "name": "concentration",
+          "regex": "Static ([\\d,]+)uM",
+          "group": 1,
+          "suffix": "uM"
+        },
+        {
+          "name": "stimulation_duration",
+          "regex": "(\\d+\\s*(?:Tag|min))\\s+Stimulierung",
+          "group": 1
+        }
+      ]
+    },
+    {
+      "name": "explant_facs_treatment_donor",
+      "description": "E100-style Live/Dead explant FACS: 'L D_{date}_{donor}_{treatment}'. Extracts donor (A/B), the full treatment condition string and, where present, the concentration (dose with units). Requires >=2 factors so it actually fires (previously dead: only 1 factor defined).",
+      "match_experiment_name": {
+        "contains_any": [
+          "pvv021",
+          "cleav"
+        ]
+      },
+      "min_factors_to_match": 2,
+      "factors": [
+        {
+          "name": "donor",
+          "regex": "_([AB])_",
+          "group": 1
+        },
+        {
+          "name": "treatment",
+          "regex": "_[AB]_(.+?)\\s*(?:\\(\\d+\\))?$",
+          "group": 1
+        },
+        {
+          "name": "concentration",
+          "regex": "(\\d+(?:[.,]\\d+)?\\s*(?:zu\\s+\\d+\\s*)?(?:uM|mM))",
+          "group": 1
+        }
+      ]
+    },
+    {
+      "name": "explant_facs_sorafenib",
+      "description": "E15/E16-style: Explant FACS with Sorafenib at various concentrations. FCS filenames: poriceRetina_{date}_{treatment} {concentration}_{replicate}.fcs",
+      "match_experiment_name": {
+        "contains_all": [
+          "explant",
+          "sorafenib"
+        ]
+      },
+      "min_factors_to_match": 2,
+      "factors": [
+        {
+          "name": "treatment",
+          "regex": "_(Sorafenib|Sora|lebend|Controlle|tot|flach)[_ ]",
+          "group": 1,
+          "value_map": {
+            "Sora": "Sorafenib",
+            "lebend": "Control",
+            "Controlle": "Control",
+            "tot": "Dead control",
+            "flach": "Sorafenib"
+          }
+        },
+        {
+          "name": "concentration",
+          "regex": "(\\d+(?:[.,]\\d+)?\\s*(?:uM|mM|µM))",
+          "group": 1
+        },
+        {
+          "name": "stimulation_duration",
+          "regex": "(\\d+(?:[.,]\\d+)?\\s*(?:h|min))",
+          "group": 1
+        },
+        {
+          "name": "volume",
+          "regex": "(viel|wenig)",
+          "group": 1,
+          "value_map": {
+            "viel": "high",
+            "wenig": "low"
+          },
+          "default_if_absent": "standard"
+        },
+        {
+          "name": "insert_status",
+          "regex": "(ohne Insert|mit Insert)",
+          "group": 1,
+          "value_map": {
+            "ohne Insert": "without_insert",
+            "mit Insert": "with_insert"
+          },
+          "default_if_absent": "with_insert"
+        }
+      ]
+    },
+    {
+      "name": "hrmvec_calcein_proteins",
+      "description": "E17/E18-style: HRMVEC Calcein with protein treatments (MBP, YFP, PPEP1, ZZ, pVV) at various concentrations. Filenames: {treatment}_{concentration}_{replicate}.czi or {treatment} {concentration}_{replicate}.czi",
+      "match_experiment_name": {
+        "contains_all": [
+          "hrmvec",
+          "calcein"
+        ]
+      },
+      "min_factors_to_match": 2,
+      "factors": [
+        {
+          "name": "treatment",
+          "regex": "^(MBP|YFP|PPEP1|ZZ[\\w-]*|pVV\\d+|Controlle)",
+          "group": 1,
+          "value_map": {
+            "Controlle": "Control"
+          }
+        },
+        {
+          "name": "concentration",
+          "regex": "(\\d+(?:[.,]\\d+)?\\s*(?:uM|mM|µM))",
+          "group": 1
+        }
+      ]
+    },
+    {
+      "name": "explant_facs_wirkstoffe",
+      "description": "E20-style: Explant FACS with drug treatments at two concentrations. FCS filenames: PorcineRetina_{date}_{treatment} {concentration}.fcs",
+      "match_experiment_name": {
+        "contains_all": [
+          "wirkstoffe"
+        ]
+      },
+      "min_factors_to_match": 2,
+      "factors": [
+        {
+          "name": "treatment",
+          "regex": "_(Axitinib|Sorafenib|Sora|Sunitinib|Controlle)",
+          "group": 1,
+          "value_map": {
+            "Sora": "Sorafenib",
+            "Controlle": "Control"
+          }
+        },
+        {
+          "name": "concentration",
+          "regex": "(\\d+(?:[.,]\\d+)?\\s*(?:uM|mM|µM))",
+          "group": 1
+        }
+      ]
+    },
+    {
+      "name": "hrmvec_protein_dose",
+      "description": "E41-style: HRMVEC with protein treatments at various concentrations. Matches folder name and scans subfolder names for concentrations.",
+      "match_experiment_name": {
+        "contains_all": [
+          "hrmvec"
+        ],
+        "contains_any": [
+          "mbp",
+          "ppep1",
+          "yfp",
+          "zz"
+        ]
+      },
+      "min_factors_to_match": 2,
+      "scan_subfolders": true,
+      "factors": [
+        {
+          "name": "treatment",
+          "regex": "(Controlle lebend|Controlle tot|MBP|YFP|PPEP1|ZZ[\\w-]*|Controlle)",
+          "group": 1,
+          "value_map": {
+            "Controlle lebend": "Live control",
+            "Controlle tot": "Dead control",
+            "Controlle": "Control"
+          }
+        },
+        {
+          "name": "concentration",
+          "regex": "(\\d+(?:[.,]\\d+)?\\s*(?:uM|mM|µM))",
+          "group": 1
+        },
+        {
+          "name": "modifier",
+          "regex": "(verändert|modified|adjusted)",
+          "group": 1,
+          "default_if_absent": "standard"
+        }
+      ]
+    },
+    {
+      "name": "mullerzellen_calcein_proteins",
+      "description": "E28/E30-style: Müllerzellen Calcein with protein treatments (MBP, YFP, ZZ, pVV) at various concentrations. Same filename pattern as HRMVEC but different cell type name.",
+      "match_experiment_name": {
+        "contains_any": [
+          "müllerzellen",
+          "mullerzellen",
+          "muller"
+        ]
+      },
+      "min_factors_to_match": 2,
+      "factors": [
+        {
+          "name": "treatment",
+          "regex": "^(MBP|YFP|PPEP1|ZZ[\\w-]*|pVV\\d+|Controlle)",
+          "group": 1,
+          "value_map": {
+            "Controlle": "Control"
+          }
+        },
+        {
+          "name": "concentration",
+          "regex": "(\\d+(?:[.,]\\d+)?\\s*(?:uM|mM|µM))",
+          "group": 1
+        }
+      ]
+    },
+    {
+      "name": "mullerzellen_komplexproteine",
+      "description": "E30-style: Müllerzellen Calcein Komplexproteine. Treatment info encoded in subdirectory names like 'PPEP1 mit pVV013 (6)', 'Controlle + (19)', 'Medium_PBS (10)'. File names are just numbers. Uses automatic subdirectory factor extraction.",
+      "match_experiment_name": {
+        "contains_any": [
+          "komplexproteine"
+        ]
+      },
+      "min_factors_to_match": 1,
+      "factors": [
+        {
+          "name": "treatment",
+          "regex": "(Controlle\\s*[+-]|Medium[_\\s]PBS|PPEP1(?:\\s+mit\\s+pVV\\d+)?|MBP|YFP|ZZ[\\w-]*)",
+          "group": 1,
+          "value_map": {
+            "Controlle +": "Control positive",
+            "Controlle -": "Control negative",
+            "Medium_PBS": "Medium/PBS",
+            "Medium PBS": "Medium/PBS"
+          }
+        }
+      ]
+    },
     {
       "pattern": "E(?P<experiment_number>\\d+)",
       "description": "Extract experiment number from folder name",
@@ -8,5 +317,67 @@
         "experiment_number": "int"
       }
     }
-  ]
+  ],
+  "factor_aliases": {
+    "treatment": {
+      "control": [
+        "ctrl",
+        "control",
+        "controlle",
+        "contr",
+        "controlle +",
+        "controlle -",
+        "living",
+        "lebend",
+        "live control"
+      ],
+      "dead control": [
+        "controlle tot",
+        "dead",
+        "tot"
+      ],
+      "isopropanol": [
+        "isopropanol",
+        "isoprop"
+      ],
+      "static": [
+        "static"
+      ],
+      "amfenac": [
+        "amfenac"
+      ],
+      "pvv021": [
+        "pvv021",
+        "pvv-021"
+      ],
+      "vabysmo": [
+        "vabysmo",
+        "faricimab"
+      ],
+      "cleav": [
+        "cleav"
+      ],
+      "sorafenib": [
+        "sorafenib",
+        "sora"
+      ],
+      "sunitinib": [
+        "sunitinib",
+        "suni"
+      ],
+      "axitinib": [
+        "axitinib"
+      ]
+    },
+    "scaffold_type": {
+      "collagen": [
+        "collagen"
+      ],
+      "speed coating": [
+        "speed coating",
+        "speed_coating",
+        "speedcoating"
+      ]
+    }
+  }
 }

@@ -313,17 +313,74 @@ class ISAJsonGenerator:
 
     # ── Parameter extraction ─────────────────────────────────────────────
 
-    def _extract_experiment_metadata(self, folder_name: str) -> Dict[str, Any]:
+    @staticmethod
+    def _list_folder_contents(folder_path: Optional[str]):
+        """Return (file_names, subfolder_names) for *folder_path* (rglob).
+
+        File names are returned without directory prefixes; subdirectory
+        names are the relative parts (no extension).  Missing/unreadable
+        folders yield empty lists.
+        """
+        if not folder_path:
+            return [], []
+        try:
+            root = Path(folder_path)
+            if not root.is_dir():
+                return [], []
+            file_names = sorted({p.name for p in root.rglob("*") if p.is_file()})
+            subfolder_names = sorted({p.name for p in root.rglob("*") if p.is_dir()})
+            return file_names, subfolder_names
+        except OSError:
+            return [], []
+
+    def _get_factor_rules_extractor(self):
+        """Return a :class:`FactorRulesExtractor` for the active profile.
+
+        Returns ``None`` when the profile has no usable rules so callers
+        can fall back to the hardcoded heuristics.
+        """
+        try:
+            from utils.batch.factor_rules import FactorRulesExtractor
+
+            rules_data = get_profile().get_factor_extraction_rules()
+            if not rules_data or not rules_data.get("rules"):
+                return None
+            return FactorRulesExtractor(rules_data)
+        except Exception as exc:  # pragma: no cover - defensive
+            self.logger.debug("Factor rules unavailable: %s", exc)
+            return None
+
+    def _extract_experiment_metadata(
+        self,
+        folder_name: str,
+        file_names: Optional[List[str]] = None,
+        subfolder_names: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """
         Extract comprehensive metadata from an experiment folder name.
 
         Parses the naming convention: E{id}_{CellType}_{AssayType}_{Compounds}_{Conditions}
 
+        When ``file_names`` (and optionally ``subfolder_names``) are
+        provided, the declarative rules from
+        ``factor_extraction_rules.json`` are evaluated first via
+        :class:`utils.batch.factor_rules.FactorRulesExtractor`; any factor
+        the rules produce (e.g. ``donor``, ``treatment``, ``concentration``)
+        takes precedence over the hardcoded regex heuristics below.  The
+        heuristics are kept as core fallbacks (experiment ID ``^E\\d+``,
+        sample count ``n=``, time points, ...) so behaviour is unchanged
+        when no rule fires.
+
         Args:
             folder_name: Experiment folder name
+            file_names: Optional file names (with or without extensions)
+                to scan for factor extraction
+            subfolder_names: Optional subdirectory names to scan (rules
+                with ``scan_subfolders: true``)
 
         Returns:
-            Dictionary with extracted metadata
+            Dictionary with extracted metadata (including optional keys
+            ``factor_values`` and ``factor_combinations`` when a rule fires)
         """
         meta: Dict[str, Any] = {
             "experiment_id": "",
@@ -377,6 +434,39 @@ class ISAJsonGenerator:
         protein_variants = re.findall(r"pVV\d+", folder_name, re.IGNORECASE)
         if protein_variants:
             meta["protein_variants"] = list(set(protein_variants))
+
+        # ── Declarative factor rules (factor_extraction_rules.json) ──
+        # Rule-derived values take precedence per factor; the heuristics
+        # below stay as fallbacks for factors a rule did not produce.
+        extractor = self._get_factor_rules_extractor()
+        if extractor is not None and file_names:
+            try:
+                result = extractor.extract(folder_name, file_names, subfolder_names)
+                if result is not None:
+                    factor_values, combinations = result
+                    meta["factor_values"] = {k: sorted(v) for k, v in factor_values.items()}
+                    meta["factor_combinations"] = combinations
+
+                    treatments = factor_values.get("treatment")
+                    if treatments:
+                        for t in sorted(treatments):
+                            label = _get_protein_names().get(t, t)
+                            if label not in meta["drugs"]:
+                                meta["drugs"].append(label)
+
+                    concentrations = factor_values.get("concentration")
+                    if concentrations:
+                        for c in sorted(concentrations):
+                            num = re.sub(r"[^0-9,.]", "", c).replace(",", ".")
+                            try:
+                                fval = float(num)
+                            except ValueError:
+                                continue
+                            if fval not in meta["concentrations"]:
+                                meta["concentrations"].append(fval)
+                                meta["concentrations_raw"].append(c)
+            except Exception as exc:  # pragma: no cover - defensive
+                self.logger.debug("Factor rule extraction failed: %s", exc)
 
         # Extract known drug/treatment names
         for drug_key in _get_drug_names():
@@ -538,8 +628,13 @@ class ISAJsonGenerator:
                 experiment_id=study_id, experiment_name=path.name, folder_path=str(path)
             )
 
-        # Extract rich metadata from folder name
-        exp_meta = self._extract_experiment_metadata(metadata.experiment_name or path.name)
+        # Extract rich metadata from folder name (rules use file names too)
+        file_names, subfolder_names = self._list_folder_contents(str(path))
+        exp_meta = self._extract_experiment_metadata(
+            metadata.experiment_name or path.name,
+            file_names=file_names or None,
+            subfolder_names=subfolder_names or None,
+        )
 
         # Build title and description
         title, description = self._build_study_description(
@@ -741,8 +836,15 @@ class ISAJsonGenerator:
         studies = []
 
         for exp_metadata in experiments:
-            # Extract rich metadata from folder name
-            exp_meta = self._extract_experiment_metadata(exp_metadata.experiment_name)
+            # Extract rich metadata from folder name (rules use file names too)
+            file_names, subfolder_names = self._list_folder_contents(
+                getattr(exp_metadata, "folder_path", None)
+            )
+            exp_meta = self._extract_experiment_metadata(
+                exp_metadata.experiment_name,
+                file_names=file_names or None,
+                subfolder_names=subfolder_names or None,
+            )
 
             # Create a unique study ID from the experiment ID
             exp_id = exp_metadata.experiment_id
@@ -1130,6 +1232,32 @@ class ISAJsonGenerator:
             List of sample material dictionaries
         """
         samples: List[Dict[str, Any]] = []
+
+        # Rule-derived factor combinations: emit one sample per combination
+        # (e.g. one sample per donor x treatment x concentration file group).
+        # Each sample carries its own #factor/<name> values.
+        combinations = exp_meta.get("factor_combinations")
+        if combinations and sources:
+            primary = sources[0]
+            for idx, combo in enumerate(combinations, start=1):
+                label = "_".join(str(v) for v in combo.values()) or "unknown"
+                samples.append(
+                    {
+                        "@id": f"#sample/{idx}",
+                        "name": f"Sample_{label}",
+                        "characteristics": [],
+                        "derivesFrom": {"@id": primary.get("@id", "")},
+                        "factorValues": [
+                            {
+                                "category": {"@id": f"#factor/{name}"},
+                                "value": {"annotationValue": value},
+                            }
+                            for name, value in combo.items()
+                        ],
+                    }
+                )
+            return samples
+
         sample_counts = exp_meta.get("sample_counts") or [1]
         sample_count = max(sample_counts) if sample_counts else 1
 
