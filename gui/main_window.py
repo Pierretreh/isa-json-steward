@@ -16,6 +16,7 @@ from .pages.assays import AssaysPage
 from .pages.base_page import BasePage
 from .pages.dashboard import DashboardPage
 from .pages.files import FilesPage
+from .pages.images import ImagesPage
 from .pages.materials import MaterialsPage
 from .pages.ontology_browser import OntologyBrowserPage
 from .pages.process_sequence import ProcessSequencePage
@@ -112,6 +113,7 @@ class MainWindow(QMainWindow):
         self.pages["materials"] = MaterialsPage(self)
         self.pages["assays"] = AssaysPage(self)
         self.pages["files"] = FilesPage(self)
+        self.pages["images"] = ImagesPage(self)
         self.pages["ontology"] = OntologyBrowserPage(self)
         self.pages["templates"] = TemplatesPage(self)
         self.pages["settings"] = SettingsPage(self)

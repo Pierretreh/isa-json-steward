@@ -18,6 +18,7 @@ It can be run from the command line::
 import argparse
 import json
 import logging
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -50,6 +51,9 @@ class BatchProcessingResult:
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     info: List[str] = field(default_factory=list)
+    # Structured per-experiment classification (D5, backward-compatible:
+    # defaults to an empty dict for CLI and existing callers).
+    classifications: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 class BatchProcessor:
@@ -94,6 +98,7 @@ class BatchProcessor:
         output_dir: str,
         skip_conversion: bool = False,
         skip_validation: bool = False,
+        cancel_event: Optional[threading.Event] = None,
     ) -> BatchProcessingResult:
         """
         Process a batch of experiment folders.
@@ -103,6 +108,10 @@ class BatchProcessor:
             output_dir: Output directory for processed data
             skip_conversion: Skip file format conversion
             skip_validation: Skip validation step
+            cancel_event: Optional ``threading.Event``; when set, the pipeline
+                stops before the next stage (checked between Steps 1..7).
+                Defaults to ``None`` (no cancellation), keeping the CLI
+                signature behavior unchanged.
 
         Returns:
             BatchProcessingResult object
@@ -136,6 +145,9 @@ class BatchProcessor:
                 result.errors.append("No experiment folders found")
                 return result
 
+            if self._check_cancel(result, cancel_event):
+                return result
+
             # Step 2: Classify experiments
             self.logger.info("\n" + "=" * 60)
             self.logger.info("Step 2: Classifying experiments")
@@ -143,6 +155,10 @@ class BatchProcessor:
 
             classification_results = self._classify_experiments(experiments)
             result.info.extend(classification_results["info"])
+            result.classifications = dict(classification_results.get("classifications", {}))
+
+            if self._check_cancel(result, cancel_event):
+                return result
 
             # Step 3: Extract metadata
             self.logger.info("\n" + "=" * 60)
@@ -152,6 +168,9 @@ class BatchProcessor:
             metadata_results = self._extract_metadata(experiments)
             result.total_files = metadata_results["total_files"]
             result.info.extend(metadata_results["info"])
+
+            if self._check_cancel(result, cancel_event):
+                return result
 
             # Step 4: Convert file formats
             conversion_results = []
@@ -168,6 +187,9 @@ class BatchProcessor:
                 result.info.append(f"  Failed: {result.failed_conversions}")
             else:
                 self.logger.info("\nSkipping file conversion")
+
+            if self._check_cancel(result, cancel_event):
+                return result
 
             # Step 5: Generate ISA-JSON (one study per experiment)
             self.logger.info("\n" + "=" * 60)
@@ -188,6 +210,9 @@ class BatchProcessor:
             result.info.append(
                 f"Generated investigation with {len(investigation.studies)} studies (one per experiment)"  # noqa: E501
             )
+
+            if self._check_cancel(result, cancel_event):
+                return result
 
             # Step 6: Organize files
             self.logger.info("\n" + "=" * 60)
@@ -222,6 +247,9 @@ class BatchProcessor:
             result.info.append(f"Total files: {manifest['file_count']}")
             result.info.append(f"Total size: {manifest['total_size_bytes'] / (1024*1024):.2f} MB")
 
+            if self._check_cancel(result, cancel_event):
+                return result
+
             # Step 7: Validate results
             if not skip_validation:
                 self.logger.info("\n" + "=" * 60)
@@ -254,6 +282,22 @@ class BatchProcessor:
         self._log_summary(result)
 
         return result
+
+    def _check_cancel(self, result: BatchProcessingResult, cancel_event) -> bool:
+        """Check the optional cancel event between pipeline stages.
+
+        Args:
+            result: The in-progress result object (annotated on cancellation).
+            cancel_event: Optional ``threading.Event`` (or ``None``).
+
+        Returns:
+            True if the pipeline should stop before the next stage.
+        """
+        if cancel_event is not None and cancel_event.is_set():
+            result.errors.append("Pipeline cancelled by user")
+            self.logger.warning("Pipeline cancelled by user")
+            return True
+        return False
 
     def _classify_experiments(self, experiments: List[FolderMetadata]) -> Dict[str, Any]:
         """

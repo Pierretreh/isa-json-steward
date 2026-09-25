@@ -72,6 +72,10 @@ class DashboardPage(ScrollablePage):
         browse_ontology_btn.clicked.connect(self._on_browse_ontology)
         actions_layout.addWidget(browse_ontology_btn)
 
+        batch_btn = PrimaryButton("Run Batch Pipeline")
+        batch_btn.clicked.connect(self._on_run_batch_pipeline)
+        actions_layout.addWidget(batch_btn)
+
         actions_widget = QWidget()
         actions_widget.setLayout(actions_layout)
         self.add_widget(actions_widget)
@@ -200,6 +204,13 @@ class DashboardPage(ScrollablePage):
     def _on_browse_ontology(self):
         """Handle browse ontology button click."""
         self.main_window._navigate_to_page("ontology")
+
+    def _on_run_batch_pipeline(self):
+        """Handle run batch pipeline button click."""
+        from ..dialogs.batch_processing import BatchProcessingDialog
+
+        dialog = BatchProcessingDialog(self)
+        dialog.exec()
 
     def on_enter(self):
         """Called when the page is shown."""

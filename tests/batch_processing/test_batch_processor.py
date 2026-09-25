@@ -2,6 +2,8 @@
 Unit tests for BatchProcessor component.
 """
 
+import threading
+
 import pytest
 
 from utils.batch.batch_processor import BatchProcessingResult, BatchProcessor
@@ -158,6 +160,53 @@ class TestBatchProcessor:
         # File organizer saves as {output_dir}/{investigation_id}/{investigation_id}.json
         inv_files = list(output_dir.glob("**/*.json"))
         assert len(inv_files) > 0
+
+    def test_process_batch_populates_classifications(self, batch_processor, temp_dir):
+        """Test that per-experiment classifications are captured (D5)."""
+        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir.mkdir()
+        (exp_dir / "data.csv").write_text("data\n")
+
+        output_dir = temp_dir / "output"
+        output_dir.mkdir()
+
+        result = batch_processor.process_batch(
+            data_root=str(temp_dir),
+            output_dir=str(output_dir),
+            skip_conversion=True,
+            skip_validation=True,
+        )
+
+        assert result.classifications, "expected at least one classification"
+        entry = result.classifications["E1"]
+        assert "type" in entry
+        assert "template" in entry
+        assert "confidence" in entry
+
+    def test_process_batch_cancel_event_short_circuits(self, batch_processor, temp_dir):
+        """Test that a pre-set cancel_event stops the run before Step 2 (D5)."""
+        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir.mkdir()
+        (exp_dir / "data.csv").write_text("data\n")
+
+        output_dir = temp_dir / "output"
+        output_dir.mkdir()
+
+        cancel_event = threading.Event()
+        cancel_event.set()
+
+        result = batch_processor.process_batch(
+            data_root=str(temp_dir),
+            output_dir=str(output_dir),
+            skip_conversion=True,
+            skip_validation=True,
+            cancel_event=cancel_event,
+        )
+
+        assert "Pipeline cancelled by user" in result.errors
+        assert result.classifications == {}
+        # The run stopped before Step 6/7, so no report or study JSON was written.
+        assert not (output_dir / "processing_report.json").exists()
 
 
 @pytest.mark.unit

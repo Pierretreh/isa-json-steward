@@ -87,6 +87,11 @@ class Sidebar(QWidget):
             ),
             ("files", "Files", style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton)),
             (
+                "images",
+                "Images",
+                style.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
+            ),
+            (
                 "ontology",
                 "Ontology Browser",
                 style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView),

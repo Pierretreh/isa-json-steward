@@ -92,6 +92,74 @@ class TestMainWindow:
         # The class should reference Sidebar in its __init__
         assert hasattr(MainWindow, "setup_ui")
 
+    @pytest.fixture
+    def main_window(self, qapp):
+        """Construct a real MainWindow with a lightweight app stub."""
+        from gui.main_window import MainWindow
+
+        class _StubApp:
+            """Minimal stand-in for StewardApp (settings + window state)."""
+
+            class _Settings:
+                @staticmethod
+                def value(key, default=None, type=None):
+                    return default
+
+            def __init__(self):
+                self.settings = self._Settings()
+
+            def get_window_geometry(self):
+                return None
+
+            def get_window_state(self):
+                return None
+
+            def set_window_geometry(self, geometry):
+                pass
+
+            def set_window_state(self, state):
+                pass
+
+            def set_current_investigation(self, investigation_id):
+                pass
+
+            def set_current_study(self, study_id):
+                pass
+
+        window = MainWindow(_StubApp())
+        window.close()
+        return window
+
+    def test_main_window_registers_10_pages(self, main_window):
+        """The GUI has exactly 10 content pages (paper claim (a))."""
+        assert len(main_window.pages) == 10
+        expected = {
+            "dashboard",
+            "studies",
+            "process_sequence",
+            "materials",
+            "assays",
+            "files",
+            "images",
+            "ontology",
+            "templates",
+            "settings",
+        }
+        assert set(main_window.pages.keys()) == expected
+
+    def test_main_window_registers_images_page(self, main_window):
+        """The ImagesPage is registered (closes the dead-code audit finding)."""
+        from gui.pages.images import ImagesPage
+
+        assert "images" in main_window.pages
+        assert isinstance(main_window.pages["images"], ImagesPage)
+
+    def test_sidebar_has_10_navigation_buttons(self, main_window):
+        """The sidebar exposes one navigation button per content page."""
+        assert len(main_window.sidebar.button_group.buttons()) == 10
+        page_ids = {btn.property("pageId") for btn in main_window.sidebar.button_group.buttons()}
+        assert page_ids == set(main_window.pages.keys())
+
 
 @pytest.mark.gui
 class TestSidebar:

@@ -6,6 +6,7 @@ from .assays import AssaysPage
 from .base_page import BasePage
 from .dashboard import DashboardPage
 from .files import FilesPage
+from .images import ImagesPage
 from .ontology_browser import OntologyBrowserPage
 from .process_sequence import ProcessSequencePage
 from .settings import SettingsPage
@@ -19,6 +20,7 @@ __all__ = [
     "ProcessSequencePage",
     "AssaysPage",
     "FilesPage",
+    "ImagesPage",
     "OntologyBrowserPage",
     "TemplatesPage",
     "SettingsPage",
