@@ -9,6 +9,7 @@ while preserving all metadata.
 import csv
 import json
 import logging
+import os
 import re
 import struct
 from dataclasses import dataclass, field
@@ -16,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from utils.batch.metadata_extractor import MetadataExtractor
+from utils.batch.metadata_extractor import MetadataExtractor, _clean_cell, read_excel_structure
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -657,7 +658,21 @@ class FormatConverter:
 
     def convert_excel_to_csv(self, excel_path: str, output_dir: str) -> Tuple[str, str]:
         """
-        Convert Excel files to CSV format.
+        Convert Excel files (``.xlsx``/``.xlsm``) to CSV format.
+
+        The auto-detected primary data sheet (see ``read_excel_structure`` and
+        ``plans/xlsx-conversion-plan.md`` §3.4) is written as ``{stem}.csv``
+        (UTF-8, RFC-4180 quoting, ints as-is, floats via shortest round-trip,
+        ``None`` as empty); a ``{stem}_metadata.json`` sidecar carries the full
+        multi-sheet structure, per-sheet headers/row counts/data ranges, sheet
+        roles and detected concentrations.
+
+        On any parse failure (corrupt/truncated file, password-protected
+        workbook, legacy ``.xls`` OLE2, zero-byte file, missing openpyxl, ...)
+        the conversion degrades gracefully: a CSV with a single ``Note`` row
+        and a sidecar with ``conversion.real_conversion=False`` + ``error``
+        are still emitted so downstream stages always find files.  Only a
+        missing input file / catastrophic I/O error yields ``("", "")``.
 
         Args:
             excel_path: Path to the Excel file
@@ -669,37 +684,157 @@ class FormatConverter:
         excel_file = Path(excel_path)
         output_path = Path(output_dir)
 
+        # Missing input (or unreadable stat) → no output at all (kept contract)
+        if not excel_file.is_file():
+            self.logger.error(f"Cannot convert {excel_path}: file not found")
+            return "", ""
+
         try:
-            # Create output directory
             output_path.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            self.logger.error(f"Cannot create output directory {output_dir}: {e}")
+            return "", ""
 
-            # Extract metadata
-            metadata = self.metadata_extractor.extract_excel_metadata(excel_path)
+        csv_path = output_path / (excel_file.stem + ".csv")
+        metadata_path = output_path / (excel_file.stem + "_metadata.json")
+        csv_name = excel_file.stem + ".csv"
 
-            # Note: Full Excel to CSV conversion requires specialized library (openpyxl or pandas)
-            # For now, we'll create placeholder files and preserve metadata
-            csv_name = excel_file.stem + ".csv"
-            csv_path = output_path / csv_name
-            metadata_path = output_path / (excel_file.stem + "_metadata.json")
+        try:
+            file_info = self._excel_file_info(excel_path)
+        except OSError as e:
+            self.logger.error(f"Cannot stat {excel_path}: {e}")
+            file_info = {}
 
-            # Create placeholder CSV file
+        structure = read_excel_structure(excel_path)
+        primary: Optional[Dict[str, Any]] = None
+
+        if structure["ok"] and structure.get("sheets"):
+            primary = structure["sheets"][structure["primary_index"]]
+            rows_written, note = self._write_excel_csv(csv_path, primary)
+            metadata = file_info
+            metadata.update(
+                {
+                    "file_type": "excel",
+                    "format": structure["format"],
+                    "conversion": {
+                        "library": "openpyxl",
+                        "real_conversion": True,
+                        "csv_file": csv_name,
+                        "primary_sheet": primary["name"],
+                        "rows_written": rows_written,
+                        **({"note": note} if note else {}),
+                    },
+                    "sheet_count": len(structure["sheet_names"]),
+                    "sheet_names": list(structure["sheet_names"]),
+                    "sheets": [
+                        {
+                            "name": sheet["name"],
+                            "is_primary": idx == structure["primary_index"],
+                            "role": sheet["role"],
+                            "headers": sheet["headers"],
+                            "row_count": sheet["row_count"],
+                            "column_count": sheet["column_count"],
+                            "data_range": sheet["data_range"],
+                            "detected_concentrations": sheet["detected_concentrations"],
+                        }
+                        for idx, sheet in enumerate(structure["sheets"])
+                    ],
+                    "concentrations": list(structure["concentrations"]),
+                }
+            )
+        else:
+            # Graceful degradation: still emit a CSV (single Note row) and a
+            # sidecar with real_conversion=False so downstream always has files
+            error = structure["error"] or "unknown error"
+            rows_written = 0
             with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["Row", "Column A", "Column B", "Note"])
-                writer.writerow(["1", "", "", "Full Excel conversion requires openpyxl or pandas"])
+                writer.writerow(["Note"])
+                writer.writerow([f"XLSX→CSV conversion degraded: {error}"])
+            metadata = file_info
+            metadata.update(
+                {
+                    "file_type": "excel",
+                    "format": structure["format"],
+                    "conversion": {
+                        "library": "openpyxl",
+                        "real_conversion": False,
+                        "csv_file": csv_name,
+                        "primary_sheet": None,
+                        "rows_written": 0,
+                        "note": error,
+                    },
+                    "error": error,
+                    "sheet_count": 0,
+                    "sheet_names": [],
+                    "sheets": [],
+                    "concentrations": [],
+                }
+            )
+            self.logger.warning(
+                f"Excel→CSV degraded for {excel_file.name} ({error}) – "
+                "Note-row CSV + sidecar written"
+            )
 
-            # Save metadata
-            with open(metadata_path, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, indent=2, default=str)
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False, default=str)
 
-            self.logger.info(f"Converted {excel_file.name} to CSV (placeholder)")
-            self.logger.warning("Full Excel to CSV conversion requires openpyxl or pandas library")
+        if structure["ok"] and primary is not None:
+            self.logger.info(
+                f"Converted {excel_file.name} → {excel_file.stem}.csv "
+                f"({rows_written} rows, sheet '{primary['name']}') (real)"
+            )
+        return str(csv_path), str(metadata_path)
 
-            return str(csv_path), str(metadata_path)
+    @staticmethod
+    def _excel_file_info(excel_path: str) -> Dict[str, Any]:
+        """Basic file info (size/dates/source) for the XLSX sidecar schema."""
+        stat_info = os.stat(excel_path)
+        return {
+            "source_file": str(Path(excel_path)),
+            "file_size": str(stat_info.st_size),
+            "created_date": str(stat_info.st_ctime),
+            "modified_date": str(stat_info.st_mtime),
+        }
 
-        except Exception as e:
-            self.logger.error(f"Error converting {excel_path} to CSV: {e}")
-            return "", ""
+    @staticmethod
+    def _write_excel_csv(csv_path: Path, primary: Dict[str, Any]) -> Tuple[int, Optional[str]]:
+        """Write the primary sheet to CSV.
+
+        Header row = the sheet's first non-empty row; one row per data row.
+        UTF-8 with RFC-4180 quoting, ints as-is, floats via Python's shortest
+        round-trip (``0.5`` → ``"0.5"``), ``None`` → empty.  Returns the
+        number of data rows written plus an optional note (e.g. when formula
+        cells had no cached value and were written as empty).
+        """
+        headers: List[str] = list(primary["headers"])
+        data_rows: List[Tuple[Any, ...]] = list(primary["rows"])
+        column_count = int(
+            primary.get("column_count") or max((len(row) for row in data_rows), default=0)
+        )
+
+        # Normalise each row to the sheet's column width (trailing Nones)
+        normalised = [
+            [_clean_cell(cell) for cell in list(row)[:column_count]]
+            + [""] * max(0, column_count - len(row))
+            for row in data_rows
+        ]
+        if headers and column_count:
+            headers = headers[:column_count] + [""] * max(0, column_count - len(headers))
+
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if headers:
+                writer.writerow(headers)
+            for row in normalised:
+                writer.writerow(row)
+
+        # Formula cells with no cached value were written as empty (plan §3.5)
+        note: Optional[str] = None
+        uncached = int(primary.get("uncached_formula_cells") or 0)
+        if uncached > 0:
+            note = f"{uncached} formula cell(s) had no cached value and were written as empty"
+        return len(normalised), note
 
     def convert_flowjo_to_json(self, wsp_path: str, output_dir: str) -> str:
         """
@@ -915,7 +1050,7 @@ class FormatConverter:
                                 )
                             )
 
-                    elif suffix in [".xlsx", ".xls"]:
+                    elif suffix in [".xlsx", ".xlsm", ".xls"]:
                         csv_path, metadata_path = self.convert_excel_to_csv(
                             str(item), str(output_path / "converted")
                         )

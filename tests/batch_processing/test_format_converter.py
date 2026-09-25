@@ -365,39 +365,301 @@ class TestConvertFcsToCsv:
 
 @pytest.mark.unit
 class TestConvertExcelToCsv:
-    """Tests for FormatConverter.convert_excel_to_csv."""
+    """Tests for FormatConverter.convert_excel_to_csv (real XLSX→CSV)."""
 
-    def test_convert_excel_creates_placeholder(self, tmp_path):
-        """Test that Excel→CSV creates a placeholder CSV."""
-        # Create a minimal XLSX-like file (just needs to exist)
-        xlsx_path = tmp_path / "data.xlsx"
-        xlsx_path.write_bytes(b"\x50\x4b\x03\x04" + b"\x00" * 100)  # ZIP signature
-        output_dir = tmp_path / "output"
+    # -- workbook fixtures (built with openpyxl, like test_parse_excel_metadata) --
 
+    @staticmethod
+    def _single_sheet_xlsx(tmp_path: Path) -> Path:
+        import openpyxl
+
+        path = tmp_path / "single.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        ws.append(["Sample", "Concentration (ng/ul)", "Readout"])
+        ws.append(["S1", 0.5, 12.3])
+        ws.append(["S2", 1.25, 45.6])
+        ws.append(["S3", "5 ng/ml", 7])
+        wb.save(str(path))
+        wb.close()
+        return path
+
+    @staticmethod
+    def _multi_sheet_xlsx(tmp_path: Path) -> Path:
+        import openpyxl
+
+        path = tmp_path / "multi.xlsx"
+        wb = openpyxl.Workbook()
+        notes = wb.active
+        notes.title = "Notes"
+        notes.append(["method", "value"])
+        notes.append(["note one", "x"])
+        data = wb.create_sheet("Data")
+        data.append(["Sample", "Value"])
+        data.append(["A", 1])
+        data.append(["B", 2])
+        data.append(["C", 3])
+        wb.save(str(path))
+        wb.close()
+        return path
+
+    @staticmethod
+    def _read_sidecar(meta_path: str) -> dict:
+        with open(meta_path, encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_convert_excel_real_single_sheet(self, tmp_path):
+        """Real conversion: CSV rows + sidecar schema (plan §2.1)."""
+        xlsx_path = self._single_sheet_xlsx(tmp_path)
         fc = FormatConverter()
-        csv_path, meta_path = fc.convert_excel_to_csv(str(xlsx_path), str(output_dir))
+        csv_path, meta_path = fc.convert_excel_to_csv(str(xlsx_path), str(tmp_path / "out"))
 
         assert csv_path != ""
         assert Path(csv_path).exists()
         assert Path(meta_path).exists()
 
-        content = Path(csv_path).read_text()
-        assert "Row" in content  # header row
+        rows = Path(csv_path).read_text(encoding="utf-8").splitlines()
+        assert rows[0] == "Sample,Concentration (ng/ul),Readout"
+        assert rows[1] == "S1,0.5,12.3"
+        assert rows[2] == "S2,1.25,45.6"
+        assert rows[3] == "S3,5 ng/ml,7"
+
+        md = self._read_sidecar(meta_path)
+        assert md["file_type"] == "excel"
+        assert md["format"] == "XLSX (ZIP-based)"
+        assert md["sheet_count"] == 1
+        assert md["sheet_names"] == ["Sheet1"]
+        assert md["conversion"]["real_conversion"] is True
+        assert md["conversion"]["library"] == "openpyxl"
+        assert md["conversion"]["primary_sheet"] == "Sheet1"
+        assert md["conversion"]["rows_written"] == 3
+
+        sheet = md["sheets"][0]
+        assert sheet["is_primary"] is True
+        assert sheet["role"] == "data"
+        assert sheet["headers"] == ["Sample", "Concentration (ng/ul)", "Readout"]
+        assert sheet["row_count"] == 3
+        assert sheet["column_count"] == 3
+        assert sheet["data_range"] == {
+            "first_row": 1,
+            "last_row": 4,
+            "first_col": 1,
+            "last_col": 3,
+        }
+
+    def test_convert_excel_multi_sheet_primary_detection(self, tmp_path):
+        """Multi-sheet workbook: the 'Data' sheet is exported, not 'Notes'."""
+        xlsx_path = self._multi_sheet_xlsx(tmp_path)
+        fc = FormatConverter()
+        csv_path, meta_path = fc.convert_excel_to_csv(str(xlsx_path), str(tmp_path / "out"))
+
+        rows = Path(csv_path).read_text(encoding="utf-8").splitlines()
+        assert rows[0] == "Sample,Value"
+        assert len(rows) == 4  # header + 3 data rows
+
+        md = self._read_sidecar(meta_path)
+        assert md["sheet_names"] == ["Notes", "Data"]
+        assert [s["is_primary"] for s in md["sheets"]] == [False, True]
+        assert md["conversion"]["primary_sheet"] == "Data"
+        assert md["conversion"]["real_conversion"] is True
+
+    def test_convert_excel_formula_cell_value_not_formula(self, tmp_path):
+        """Formula cells must never leak the formula string into the CSV."""
+        import openpyxl
+
+        path = tmp_path / "formula.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Calc"
+        ws.append(["A", "B", "Sum"])
+        ws.append([1, 2, "=A2+B2"])
+        wb.save(str(path))
+        wb.close()
+
+        fc = FormatConverter()
+        csv_path, meta_path = fc.convert_excel_to_csv(str(path), str(tmp_path / "out"))
+
+        content = Path(csv_path).read_text(encoding="utf-8")
+        assert "=A2+B2" not in content
+        assert content.splitlines()[0] == "A,B,Sum"
+
+        # openpyxl (written without Excel) has no cached value → empty cell +
+        # a conversion note (plan §3.5)
+        md = self._read_sidecar(meta_path)
+        assert md["conversion"]["real_conversion"] is True
+        assert "formula" in md["conversion"]["note"].lower()
+
+    def test_convert_excel_merged_cells(self, tmp_path):
+        """Merged cells: non-top-left cells come out empty."""
+        import openpyxl
+
+        path = tmp_path / "merged.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "M"
+        ws.append(["Title", None])
+        ws.append(["a", "b"])
+        ws.merge_cells("A1:B1")
+        wb.save(str(path))
+        wb.close()
+
+        fc = FormatConverter()
+        csv_path, meta_path = fc.convert_excel_to_csv(str(path), str(tmp_path / "out"))
+        rows = Path(csv_path).read_text(encoding="utf-8").splitlines()
+        assert rows[0] == "Title,"
+        assert rows[1] == "a,b"
+
+    def test_convert_excel_concentration_detection_and_precision(self, tmp_path):
+        """Concentration column detected; 0.5 kept exactly in the CSV."""
+        xlsx_path = self._single_sheet_xlsx(tmp_path)
+        fc = FormatConverter()
+        csv_path, meta_path = fc.convert_excel_to_csv(str(xlsx_path), str(tmp_path / "out"))
+
+        content = Path(csv_path).read_text(encoding="utf-8")
+        assert "0.5" in content
+        assert "0.50" not in content
+
+        md = self._read_sidecar(meta_path)
+        concs = md["sheets"][0]["detected_concentrations"]
+        assert concs[0] == {
+            "header": "Concentration (ng/ul)",
+            "value": 0.5,
+            "unit": "ng/ul",
+            "row": 1,
+        }
+        assert concs[2]["value"] == 5.0
+        assert concs[2]["unit"] == "ng/ml"
+        assert len(md["concentrations"]) == 3
+
+    def test_convert_excel_empty_sheet_excluded_from_primary(self, tmp_path):
+        """An empty sheet first must not win primary-sheet selection."""
+        import openpyxl
+
+        path = tmp_path / "empty_first.xlsx"
+        wb = openpyxl.Workbook()
+        wb.active.title = "Empty"
+        results = wb.create_sheet("Results")
+        results.append(["x", "y"])
+        results.append([1, 2])
+        results.append([3, 4])
+        wb.save(str(path))
+        wb.close()
+
+        fc = FormatConverter()
+        csv_path, meta_path = fc.convert_excel_to_csv(str(path), str(tmp_path / "out"))
+
+        rows = Path(csv_path).read_text(encoding="utf-8").splitlines()
+        assert rows[0] == "x,y"
+        assert len(rows) == 3  # header + 2 data rows
+
+        md = self._read_sidecar(meta_path)
+        assert md["conversion"]["primary_sheet"] == "Results"
+        assert [s["is_primary"] for s in md["sheets"]] == [False, True]
+
+    def test_convert_excel_non_ascii_headers(self, tmp_path):
+        """Non-ASCII headers round-trip as UTF-8 in CSV and sidecar."""
+        import openpyxl
+
+        path = tmp_path / "nonascii.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Übersicht"
+        ws.append(["Konzentration", "Messung"])
+        ws.append(["5 ng/ul", 3.14])
+        wb.save(str(path))
+        wb.close()
+
+        fc = FormatConverter()
+        csv_path, meta_path = fc.convert_excel_to_csv(str(path), str(tmp_path / "out"))
+
+        content = Path(csv_path).read_text(encoding="utf-8")
+        assert "Konzentration" in content
+        assert "5 ng/ul" in content
+
+        md = self._read_sidecar(meta_path)
+        assert md["sheets"][0]["headers"][0] == "Konzentration"
+        assert md["concentrations"][0]["unit"] == "ng/ul"
+
+    def test_convert_excel_degrades_on_invalid(self, tmp_path):
+        """Corrupt file: CSV + sidecar still emitted, real_conversion=False."""
+        xlsx_path = tmp_path / "data.xlsx"
+        xlsx_path.write_bytes(b"\x50\x4b\x03\x04" + b"\x00" * 100)  # ZIP signature only
+        fc = FormatConverter()
+        csv_path, meta_path = fc.convert_excel_to_csv(str(xlsx_path), str(tmp_path / "out"))
+
+        assert csv_path != ""
+        assert Path(csv_path).exists()
+        assert Path(meta_path).exists()
+
+        rows = Path(csv_path).read_text(encoding="utf-8").splitlines()
+        assert rows[0] == "Note"
+        assert len(rows) == 2
+
+        md = self._read_sidecar(meta_path)
+        assert md["conversion"]["real_conversion"] is False
+        assert md["conversion"]["note"]
+        assert md["error"]
+        assert md["sheet_count"] == 0
+
+    def test_convert_excel_zero_byte_file(self, tmp_path):
+        """Zero-byte file degrades with a 'zero-byte' error."""
+        xlsx_path = tmp_path / "zero.xlsx"
+        xlsx_path.write_bytes(b"")
+        fc = FormatConverter()
+        csv_path, meta_path = fc.convert_excel_to_csv(str(xlsx_path), str(tmp_path / "out"))
+
+        assert csv_path != ""
+        md = self._read_sidecar(meta_path)
+        assert md["conversion"]["real_conversion"] is False
+        assert "zero-byte" in md["conversion"]["note"]
+
+    def test_convert_excel_legacy_xls_degrades(self, tmp_path):
+        """Legacy .xls (OLE2) degrades with an 'export to .xlsx' hint."""
+        xls_path = tmp_path / "legacy.xls"
+        xls_path.write_bytes(b"\xd0\xcf\x11\xe0" + b"\x00" * 100)  # OLE2 signature
+        fc = FormatConverter()
+        csv_path, meta_path = fc.convert_excel_to_csv(str(xls_path), str(tmp_path / "out"))
+
+        assert csv_path != ""
+        md = self._read_sidecar(meta_path)
+        assert md["format"] == "XLS (OLE2)"
+        assert md["conversion"]["real_conversion"] is False
+        assert "export to .xlsx" in md["conversion"]["note"]
+
+    def test_convert_excel_xlsm(self, tmp_path):
+        """Macro-enabled .xlsm converts read-only, format 'XLSM (ZIP-based)'."""
+        import openpyxl
+
+        path = tmp_path / "macro.xlsm"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Data"
+        ws.append(["a", "b"])
+        ws.append([1, 2])
+        wb.save(str(path))
+        wb.close()
+
+        fc = FormatConverter()
+        csv_path, meta_path = fc.convert_excel_to_csv(str(path), str(tmp_path / "out"))
+
+        rows = Path(csv_path).read_text(encoding="utf-8").splitlines()
+        assert rows[0] == "a,b"
+        assert rows[1] == "1,2"
+
+        md = self._read_sidecar(meta_path)
+        assert md["format"] == "XLSM (ZIP-based)"
+        assert md["conversion"]["real_conversion"] is True
+        assert md["conversion"]["primary_sheet"] == "Data"
 
     def test_convert_excel_nonexistent(self, tmp_path):
-        """Test convert_excel_to_csv with nonexistent file.
-
-        Note: extract_excel_metadata catches exceptions internally and returns
-        a metadata dict with an 'error' key, so convert_excel_to_csv still
-        produces output files (placeholder CSV + metadata JSON).
-        """
+        """Missing input file → no output files at all ("", "")."""
         fc = FormatConverter()
         csv_path, meta_path = fc.convert_excel_to_csv(
             str(tmp_path / "missing.xlsx"), str(tmp_path / "out")
         )
-        # The method still creates placeholder files even for missing input
-        assert csv_path != ""
-        assert Path(csv_path).exists()
+        assert csv_path == ""
+        assert meta_path == ""
 
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ Covers additional methods beyond the existing test_metadata_extractor_fcs.py:
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -354,7 +355,22 @@ class TestExtractTiffMetadata:
 
 @pytest.mark.unit
 class TestExtractExcelMetadata:
-    """Tests for extract_excel_metadata."""
+    """Tests for extract_excel_metadata (basic info + real structure)."""
+
+    @staticmethod
+    def _real_xlsx(tmp_path) -> Path:
+        import openpyxl
+
+        path = tmp_path / "real.xlsx"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Data"
+        ws.append(["Sample", "Concentration (ng/ul)"])
+        ws.append(["S1", 0.5])
+        ws.append(["S2", "10 ng/ml"])
+        wb.save(str(path))
+        wb.close()
+        return path
 
     def test_extract_xlsx(self, extractor, tmp_path):
         xlsx_path = tmp_path / "data.xlsx"
@@ -362,9 +378,10 @@ class TestExtractExcelMetadata:
 
         md = extractor.extract_excel_metadata(str(xlsx_path))
         assert md["file_type"] == "excel"
-        # Note: code reads 8 bytes but compares with 4-byte ZIP signature,
-        # so the comparison always fails and format is "Unknown"
+        # Signature check compares the first 4 bytes → real ZIP signature
+        # now correctly reports XLSX (the 8-byte-vs-4-byte bug is fixed)
         assert "format" in md
+        assert md["format"] == "XLSX (ZIP-based)"
 
     def test_extract_xls(self, extractor, tmp_path):
         xls_path = tmp_path / "data.xls"
@@ -372,6 +389,26 @@ class TestExtractExcelMetadata:
 
         md = extractor.extract_excel_metadata(str(xls_path))
         assert "XLS" in md["format"]
+
+    def test_extract_xlsx_real_structure(self, extractor, tmp_path):
+        """A real workbook yields sheet names, headers, counts, concentrations."""
+        xlsx_path = self._real_xlsx(tmp_path)
+
+        md = extractor.extract_excel_metadata(str(xlsx_path))
+        assert md["file_type"] == "excel"
+        assert md["format"] == "XLSX (ZIP-based)"
+        assert md["sheet_count"] == 1
+        assert md["sheet_names"] == ["Data"]
+        assert md["sheets"][0]["headers"] == ["Sample", "Concentration (ng/ul)"]
+        assert md["sheets"][0]["row_count"] == 2
+        assert md["sheets"][0]["column_count"] == 2
+        assert "data_range" in md["sheets"][0]
+        assert md["concentrations"][0] == {
+            "header": "Concentration (ng/ul)",
+            "value": 0.5,
+            "unit": "ng/ul",
+            "row": 1,
+        }
 
 
 # ---------------------------------------------------------------------------

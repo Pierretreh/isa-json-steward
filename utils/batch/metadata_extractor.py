@@ -27,6 +27,382 @@ from utils.config_loader import get_profile
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Excel (XLSX/XLSM) structure helpers — shared single source of truth for
+# :meth:`MetadataExtractor.extract_excel_metadata` and
+# :meth:`FormatConverter.convert_excel_to_csv`
+# (see plans/xlsx-conversion-plan.md)
+# ---------------------------------------------------------------------------
+
+try:
+    import openpyxl
+except ImportError:  # pragma: no cover - openpyxl is a core dependency
+    openpyxl = None  # type: ignore[assignment, misc]
+
+# Concentration units recognised in ``number + unit`` cells.  Keys are the
+# lowercase spellings accepted in cells/headers (``µ`` and ``U`` are both
+# accepted); values are the canonical unit reported in the metadata sidecar.
+_CONC_UNIT_ALIASES = {
+    "ng/ul": "ng/ul",
+    "ng/ml": "ng/ml",
+    "mg/ml": "mg/ml",
+    "ug/ml": "ug/ml",
+    "µg/ml": "ug/ml",
+    "um": "um",
+    "µm": "um",
+    "nm": "nm",
+    "mm": "mm",
+    "ug": "ug",
+    "µg": "ug",
+    "ng": "ng",
+    "mg": "mg",
+    "%": "%",
+}
+
+# Longest first so e.g. "mg/ml" wins over "mg" in alternation.
+_CONC_UNITS = sorted({key.lower() for key in _CONC_UNIT_ALIASES}, key=len, reverse=True)
+
+_CONC_VALUE_RE = re.compile(
+    r"^\s*([-+]?(?:\d+\.?\d*|\.\d+))\s*(" + "|".join(_CONC_UNITS) + r")\s*$",
+    re.IGNORECASE,
+)
+
+_CONC_UNIT_TAIL_RE = re.compile(
+    r"(" + "|".join(_CONC_UNITS) + r")\s*[\)\]\}.:]*\s*$", re.IGNORECASE
+)
+
+
+def _clean_cell(value: Any) -> str:
+    """Normalise one worksheet cell to its string form ("" for ``None``).
+
+    Ints are written as-is; floats via Python's shortest round-trip
+    representation (``0.5`` → ``"0.5"``); integral floats are written as
+    ints (``42.0`` → ``"42"``).
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, float):
+        if value.is_integer():
+            return str(int(value))
+        return repr(value)
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value).strip()
+
+
+def _split_concentration(value: Any) -> Optional[Tuple[float, str]]:
+    """Split a ``number + unit`` cell value into ``(number, canonical_unit)``.
+
+    Returns ``None`` when the value is not a number followed by a known
+    concentration unit.
+    """
+    if value is None or isinstance(value, (int, float, bool)):
+        return None
+    match = _CONC_VALUE_RE.match(str(value))
+    if not match:
+        return None
+    try:
+        number = float(match.group(1))
+    except ValueError:
+        return None
+    return number, _CONC_UNIT_ALIASES[match.group(2).lower()]
+
+
+def _header_unit(header: str) -> str:
+    """Extract a concentration unit from the tail of a header, if any."""
+    match = _CONC_UNIT_TAIL_RE.search(header.lower())
+    if not match:
+        return ""
+    return _CONC_UNIT_ALIASES[match.group(1).lower()]
+
+
+def _count_numeric(rows: List[Tuple[Any, ...]]) -> int:
+    """Count numeric cells across ``rows`` (bools excluded)."""
+    return sum(
+        1
+        for row in rows
+        for cell in row
+        if isinstance(cell, (int, float)) and not isinstance(cell, bool)
+    )
+
+
+def _detect_concentrations(
+    headers: List[str], data_rows: List[Tuple[Any, ...]]
+) -> List[Dict[str, Any]]:
+    """Best-effort concentration detection for one sheet (plan §3.1).
+
+    A column qualifies when its header contains ``conc`` (case-insensitive)
+    or when its cells look like ``number + unit`` with a known concentration
+    unit.  One entry ``{header, value, unit, row}`` is recorded per
+    qualifying cell (``row`` is the 1-based data-row index).
+    """
+    found: List[Dict[str, Any]] = []
+    if not headers or not data_rows:
+        return found
+    for col_idx, header in enumerate(headers):
+        if not header:
+            continue
+        header_match = "conc" in header.lower()
+        fallback_unit = _header_unit(header)
+        for row_idx, row in enumerate(data_rows, start=1):
+            if col_idx >= len(row):
+                continue
+            value = row[col_idx]
+            split = _split_concentration(value)
+            if split is not None:
+                number, unit = split
+            elif header_match and isinstance(value, (int, float)) and not isinstance(value, bool):
+                number, unit = float(value), fallback_unit or "unknown"
+            else:
+                continue
+            found.append({"header": header, "value": number, "unit": unit, "row": row_idx})
+    return found
+
+
+def _infer_sheet_role(name: str, headers: List[str], data_rows: List[Tuple[Any, ...]]) -> str:
+    """Heuristic sheet role: ``data`` / ``calibration`` / ``metadata`` / ``unknown``."""
+    if not headers and not data_rows:
+        return "unknown"
+    text = " ".join([name] + [h for h in headers if h]).lower()
+    if re.search(r"calibrat|standard|y\s*=\s*m\s*x\s*\+\s*b|curve", text):
+        return "calibration"
+    if re.search(r"\b(metadata|notes?|info)\b", text):
+        return "metadata"
+    if _count_numeric(data_rows) >= 3:
+        return "data"
+    if any("conc" in h.lower() or _split_concentration(h) for h in headers):
+        return "data"
+    if data_rows:
+        return "metadata"
+    return "unknown"
+
+
+def _score_primary_sheet(name: str, headers: List[str], data_rows: List[Tuple[Any, ...]]) -> int:
+    """Score a sheet for primary-sheet selection (plan §3.4, deterministic).
+
+    - ``+3`` header row has ≥ 2 non-empty string cells (looks like a table)
+    - ``+2`` has ≥ 3 numeric data values
+    - ``+2`` name matches ``data|result|readings?|measurement|sample``
+    (the ``+1`` most-data-rows bonus is applied cross-sheet by
+    :func:`read_excel_structure`).
+    """
+    score = 0
+    if sum(1 for h in headers if _clean_cell(h)) >= 2:
+        score += 3
+    if _count_numeric(data_rows) >= 3:
+        score += 2
+    if re.search(r"data|result|readings?|measurement|sample", name, re.IGNORECASE):
+        score += 2
+    return score
+
+
+def _count_uncached_formulas(
+    file_path: str,
+    sheet_name: str,
+    header_excel_row: Optional[int],
+    data_rows: List[Tuple[Any, ...]],
+) -> int:
+    """Best-effort count of formula cells whose cached value is missing.
+
+    With ``data_only=True`` a formula cell yields its cached computed value;
+    when the workbook was never opened in Excel the cache is absent and the
+    cell reads as ``None`` (never the formula string).  A second read-only
+    pass in formula mode identifies the formula cells, which are then
+    cross-checked against the cached values already read.  Returns 0 on any
+    problem (best-effort, never raises).
+    """
+    if openpyxl is None or header_excel_row is None or not data_rows:
+        return 0
+    try:
+        workbook = openpyxl.load_workbook(str(file_path), read_only=True)
+    except Exception:  # noqa: BLE001 - best-effort helper
+        return 0
+    try:
+        worksheet = workbook[sheet_name]
+        count = 0
+        for excel_row_idx, row in enumerate(worksheet.iter_rows(values_only=True), start=1):
+            if excel_row_idx <= header_excel_row:
+                continue
+            data_row_offset = excel_row_idx - header_excel_row - 1
+            if data_row_offset >= len(data_rows):
+                break
+            cached_row = data_rows[data_row_offset]
+            for col_idx, value in enumerate(row, start=1):
+                if not (isinstance(value, str) and value.lstrip().startswith("=")):
+                    continue
+                if col_idx - 1 >= len(cached_row) or cached_row[col_idx - 1] is None:
+                    count += 1
+        return count
+    except Exception:  # noqa: BLE001 - best-effort helper
+        return 0
+    finally:
+        workbook.close()
+
+
+def _detect_excel_format(file_path: str) -> str:
+    """Detect the Excel container format from the file's magic bytes.
+
+    Reads exactly 4 bytes (the historical bug compared an 8-byte read
+    against a 4-byte signature, so real ``.xlsx`` files reported
+    "Unknown"); a ``.xlsm`` extension is reported as XLSM.
+    """
+    if os.path.splitext(str(file_path))[1].lower() == ".xlsm":
+        return "XLSM (ZIP-based)"
+    try:
+        with open(file_path, "rb") as f:
+            signature = f.read(4)
+    except OSError:
+        return "Unknown"
+    if signature[:4] == b"\x50\x4b\x03\x04":
+        return "XLSX (ZIP-based)"
+    if signature[:2] == b"\xd0\xcf":
+        return "XLS (OLE2)"
+    return "Unknown"
+
+
+def read_excel_structure(file_path: str) -> Dict[str, Any]:
+    """Open an ``.xlsx``/``.xlsm`` workbook read-only and return its structure.
+
+    Shared single source of truth for :meth:`MetadataExtractor.extract_excel_metadata`
+    and :meth:`FormatConverter.convert_excel_to_csv`.  Uses
+    ``openpyxl.load_workbook(read_only=True, data_only=True)`` so formula
+    cells yield their cached computed value (never the formula string) and
+    large workbooks stream with low memory.
+
+    Never raises: every failure (missing file, zero-byte file, corrupt or
+    truncated ZIP, password-protected workbook, missing openpyxl, ...) is
+    reported in the ``error`` field so callers can degrade gracefully.
+
+    Args:
+        file_path: Path to the Excel file.
+
+    Returns:
+        ``{"ok": bool, "error": Optional[str], "format": str,
+        "sheet_names": List[str], "sheets": List[dict],
+        "primary_index": int, "concentrations": List[dict]}`` where each
+        sheet entry has ``name``, ``headers``, ``rows`` (raw data rows),
+        ``row_count``, ``column_count``, ``role``,
+        ``detected_concentrations`` and ``data_range``.
+    """
+    result: Dict[str, Any] = {
+        "ok": False,
+        "error": None,
+        "format": _detect_excel_format(file_path),
+        "sheet_names": [],
+        "sheets": [],
+        "primary_index": 0,
+        "concentrations": [],
+    }
+
+    try:
+        if not os.path.exists(file_path):
+            result["error"] = f"file not found: {file_path}"
+            return result
+        if os.stat(file_path).st_size == 0:
+            result["error"] = "zero-byte file"
+            return result
+    except OSError as e:
+        result["error"] = f"cannot access file: {e}"
+        return result
+
+    if openpyxl is None:
+        result["error"] = "openpyxl is required – install with: pip install openpyxl"
+        return result
+
+    try:
+        workbook = openpyxl.load_workbook(str(file_path), read_only=True, data_only=True)
+    except Exception as e:  # noqa: BLE001 - openpyxl raises many exception types
+        if result["format"] == "XLS (OLE2)":
+            result["error"] = "legacy .xls (OLE2) is not supported by openpyxl – export to .xlsx"
+        else:
+            result["error"] = (
+                f"openpyxl could not open the file ({e}); "
+                "the workbook may be corrupt, truncated, or password-protected"
+            )
+        return result
+
+    sheets: List[Dict[str, Any]] = []
+    sheet_names: List[str] = []
+    try:
+        for worksheet in workbook.worksheets:
+            name = worksheet.title
+            # Keep only non-empty rows together with their 1-based Excel row
+            # number (needed for data_range); merged non-top-left cells
+            # surface as None here and are written as empty CSV cells.
+            rows_with_idx: List[Tuple[int, Tuple[Any, ...]]] = []
+            for excel_row_idx, row in enumerate(worksheet.iter_rows(values_only=True), start=1):
+                if row and any(_clean_cell(cell) != "" for cell in row):
+                    rows_with_idx.append((excel_row_idx, row))
+
+            headers: List[str] = []
+            data_rows: List[Tuple[Any, ...]] = []
+            first_row: Optional[int] = None
+            last_row: Optional[int] = None
+            uncached_formulas = 0
+            if rows_with_idx:
+                first_row = rows_with_idx[0][0]
+                last_row = rows_with_idx[-1][0]
+                headers = [_clean_cell(cell) for cell in rows_with_idx[0][1]]
+                data_rows = [row for _, row in rows_with_idx[1:]]
+                uncached_formulas = _count_uncached_formulas(file_path, name, first_row, data_rows)
+
+            column_count = max((len(row) for _, row in rows_with_idx), default=0)
+            detected = _detect_concentrations(headers, data_rows)
+            sheet_names.append(name)
+            sheets.append(
+                {
+                    "name": name,
+                    "headers": headers,
+                    "rows": data_rows,
+                    "row_count": len(data_rows),
+                    "column_count": column_count,
+                    "role": _infer_sheet_role(name, headers, data_rows),
+                    "detected_concentrations": detected,
+                    "uncached_formula_cells": uncached_formulas,
+                    "data_range": {
+                        "first_row": first_row,
+                        "last_row": last_row,
+                        "first_col": 1,
+                        "last_col": column_count,
+                    },
+                }
+            )
+    except Exception as e:  # noqa: BLE001 - keep the never-raises contract
+        result["error"] = f"failed while reading workbook: {e}"
+        return result
+    finally:
+        workbook.close()
+
+    # Primary-sheet selection (plan §3.4): highest score wins, ties go to
+    # the earliest sheet; the "+1 most data rows" bonus is cross-sheet.
+    max_row_count = max((sheet["row_count"] for sheet in sheets), default=0)
+    best_index = 0
+    best_score = -1
+    for idx, sheet in enumerate(sheets):
+        score = _score_primary_sheet(sheet["name"], sheet["headers"], sheet["rows"])
+        if max_row_count > 0 and sheet["row_count"] == max_row_count:
+            score += 1
+        if score > best_score:
+            best_score = score
+            best_index = idx
+
+    result.update(
+        {
+            "ok": True,
+            "sheet_names": sheet_names,
+            "sheets": sheets,
+            "primary_index": best_index,
+            "concentrations": [
+                conc for sheet in sheets for conc in sheet["detected_concentrations"]
+            ],
+        }
+    )
+    return result
+
 
 @dataclass
 class FileMetadata:
@@ -603,16 +979,20 @@ class MetadataExtractor:
         """
         Extract metadata from Excel files.
 
+        In addition to the basic file info, the full workbook structure is
+        extracted via :func:`read_excel_structure` (sheet names, per-sheet
+        headers, row counts, data ranges, sheet roles and detected
+        concentrations) — see plans/xlsx-conversion-plan.md.
+
         Args:
             file_path: Path to the Excel file
 
         Returns:
             Dictionary of extracted metadata
         """
-        metadata = {
+        metadata: Dict[str, Any] = {
             "file_type": "excel",
             "extraction_method": "basic_file_info",
-            "notes": "Full Excel metadata extraction requires specialized library (openpyxl or pandas)",  # noqa: E501
         }
 
         try:
@@ -622,15 +1002,34 @@ class MetadataExtractor:
             metadata["created_date"] = str(stat_info.st_ctime)
             metadata["modified_date"] = str(stat_info.st_mtime)
 
-            # Read Excel file signature
-            with open(file_path, "rb") as f:
-                signature = f.read(8)
-                if signature == b"\x50\x4b\x03\x04":
-                    metadata["format"] = "XLSX (ZIP-based)"
-                elif signature[:2] == b"\xd0\xcf":
-                    metadata["format"] = "XLS (OLE2)"
-                else:
-                    metadata["format"] = "Unknown"
+            # Detect container format from the file signature
+            # (compares exactly the first 4 bytes – the historical bug
+            # compared an 8-byte read against a 4-byte signature)
+            metadata["format"] = _detect_excel_format(file_path)
+
+            # Real workbook structure (never raises; see read_excel_structure)
+            structure = read_excel_structure(file_path)
+            if structure["ok"]:
+                metadata["extraction_method"] = "basic_file_info + openpyxl"
+                metadata["sheet_count"] = len(structure["sheet_names"])
+                metadata["sheet_names"] = list(structure["sheet_names"])
+                metadata["sheets"] = [
+                    {
+                        "name": sheet["name"],
+                        "role": sheet["role"],
+                        "headers": sheet["headers"],
+                        "row_count": sheet["row_count"],
+                        "column_count": sheet["column_count"],
+                        "data_range": sheet["data_range"],
+                        "detected_concentrations": sheet["detected_concentrations"],
+                    }
+                    for sheet in structure["sheets"]
+                ]
+                metadata["concentrations"] = list(structure["concentrations"])
+            else:
+                if structure["error"]:
+                    metadata["error"] = structure["error"]
+                metadata["notes"] = structure["error"] or "workbook structure unavailable"
 
             self.logger.info(f"Extracted Excel metadata from {file_path}")
 
@@ -765,7 +1164,7 @@ class MetadataExtractor:
             file_metadata.raw_metadata = self.extract_fcs_metadata(str(file_path))
         elif suffix == ".wsp":
             file_metadata.raw_metadata = self.extract_flowjo_metadata(str(file_path))
-        elif suffix in [".xlsx", ".xls"]:
+        elif suffix in [".xlsx", ".xlsm", ".xls"]:
             file_metadata.raw_metadata = self.extract_excel_metadata(str(file_path))
         else:
             file_metadata.raw_metadata = {
@@ -944,7 +1343,7 @@ class MetadataExtractor:
                 metadata = self.extract_fcs_metadata(str(file_path))
             elif file_path.suffix == ".wsp":
                 metadata = self.extract_flowjo_metadata(str(file_path))
-            elif file_path.suffix in [".xlsx", ".xls"]:
+            elif file_path.suffix in [".xlsx", ".xlsm", ".xls"]:
                 metadata = self.extract_excel_metadata(str(file_path))
             else:
                 metadata = {
