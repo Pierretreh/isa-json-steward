@@ -6,7 +6,7 @@ Scans the templates/ directory and generates:
   - templates/template_list.txt    (human-readable list)
 
 Assay and protocol templates get full metadata extracted.
-Material templates are listed at file level only.
+Material and device templates are listed at file level only.
 
 Usage:
     from utils.template_index import write_template_index
@@ -78,6 +78,16 @@ def _summarise_material_file(data: Dict, file_path: Path, templates_root: Path) 
     }
 
 
+def _summarise_device_file(data: Dict, file_path: Path, templates_root: Path) -> Dict:
+    """Extract file-level metadata from a device template file."""
+    templates_list = data.get("templates", []) if isinstance(data, dict) else []
+    return {
+        "filename": file_path.name,
+        "path": _relative_path(file_path, templates_root),
+        "template_count": len(templates_list),
+    }
+
+
 def scan_assay_templates(templates_root: Path) -> List[Dict]:
     """Scan assay_templates/ and return a list of metadata dicts."""
     assay_dir = templates_root / "assay_templates"
@@ -135,6 +145,25 @@ def scan_material_templates(templates_root: Path) -> List[Dict]:
     return results
 
 
+def scan_device_templates(templates_root: Path) -> List[Dict]:
+    """Scan device_templates/ and return file-level metadata."""
+    device_dir = templates_root / "device_templates"
+    results: List[Dict] = []
+    if not device_dir.exists():
+        logger.warning("Device templates directory not found: %s", device_dir)
+        return results
+
+    for json_file in sorted(device_dir.glob("*.json")):
+        try:
+            with open(json_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            results.append(_summarise_device_file(data, json_file, templates_root))
+        except Exception as e:
+            logger.warning("Error reading device template %s: %s", json_file, e)
+
+    return results
+
+
 def generate_template_index(templates_root: Path) -> Dict:
     """
     Scan all template directories and build the consolidated index.
@@ -148,6 +177,7 @@ def generate_template_index(templates_root: Path) -> Dict:
     assay_templates = scan_assay_templates(templates_root)
     protocol_templates = scan_protocol_templates(templates_root)
     material_templates = scan_material_templates(templates_root)
+    device_templates = scan_device_templates(templates_root)
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -155,10 +185,12 @@ def generate_template_index(templates_root: Path) -> Dict:
             "assay": len(assay_templates),
             "protocol": len(protocol_templates),
             "material_files": len(material_templates),
+            "device_files": len(device_templates),
         },
         "assay_templates": assay_templates,
         "protocol_templates": protocol_templates,
         "material_templates": material_templates,
+        "device_templates": device_templates,
     }
 
 
@@ -181,6 +213,12 @@ def _format_template_list(index: Dict) -> str:
     # Material template files
     lines.append("=== Material Template Files ===")
     for t in index.get("material_templates", []):
+        lines.append(t.get("filename", "Unknown"))
+    lines.append("")
+
+    # Device template files
+    lines.append("=== Device Template Files ===")
+    for t in index.get("device_templates", []):
         lines.append(t.get("filename", "Unknown"))
     lines.append("")
 
@@ -222,10 +260,11 @@ def write_template_index(templates_root: Path) -> Dict:
     # Summary
     counts = index.get("counts", {})
     logger.info(
-        "Template index: %d assay, %d protocol, %d material files",
+        "Template index: %d assay, %d protocol, %d material files, %d device files",
         counts.get("assay", 0),
         counts.get("protocol", 0),
         counts.get("material_files", 0),
+        counts.get("device_files", 0),
     )
 
     return index

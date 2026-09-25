@@ -50,6 +50,7 @@ def main():
     print(f"  Assay templates:      {counts.get('assay', 0)}")
     print(f"  Protocol templates:   {counts.get('protocol', 0)}")
     print(f"  Material template files: {counts.get('material_files', 0)}")
+    print(f"  Device template files:   {counts.get('device_files', 0)}")
 
 
 if __name__ == "__main__":

@@ -4,9 +4,10 @@ Unit tests for utils.template_index.
 These tests cover:
 - pure helper functions: _extract_annotation_label, _relative_path,
   _summarise_assay, _summarise_protocol, _summarise_material_file,
-  _format_template_list
+  _summarise_device_file, _format_template_list
 - scanner functions against a tmp_path-based mock template tree:
-  scan_assay_templates, scan_protocol_templates, scan_material_templates
+  scan_assay_templates, scan_protocol_templates, scan_material_templates,
+  scan_device_templates
 - generate_template_index and write_template_index
 - edge cases: missing subdirectories, empty directories, malformed JSON,
   non-JSON files, and missing keys
@@ -23,10 +24,12 @@ from utils.template_index import (
     _format_template_list,
     _relative_path,
     _summarise_assay,
+    _summarise_device_file,
     _summarise_material_file,
     _summarise_protocol,
     generate_template_index,
     scan_assay_templates,
+    scan_device_templates,
     scan_material_templates,
     scan_protocol_templates,
     write_template_index,
@@ -38,11 +41,12 @@ from utils.template_index import (
 
 
 @pytest.fixture
-def templates_root(tmp_path) -> Path:
-    """A mock templates/ root with all three template subdirectories."""
+def templates_root(tmp_path: Path) -> Path:
+    """A mock templates/ root with all four template subdirectories."""
     (tmp_path / "assay_templates").mkdir(parents=True)
     (tmp_path / "protocol_templates").mkdir(parents=True)
     (tmp_path / "material_templates").mkdir(parents=True)
+    (tmp_path / "device_templates").mkdir(parents=True)
     return tmp_path
 
 
@@ -51,8 +55,15 @@ def _write_json(path: Path, data: Any) -> None:
 
 
 @pytest.fixture
-def populated_root(templates_root) -> Path:
+def populated_root(templates_root: Path) -> Path:
     """Templates root populated with one valid file per subdirectory."""
+    device = {
+        "templates": [
+            {"name": "Incubator", "deviceCategory": "culture"},
+            {"name": "Shaking Incubator", "deviceCategory": "culture"},
+        ]
+    }
+    _write_json(templates_root / "device_templates" / "culture_devices.json", device)
     assay = {
         "@id": "https://example.org/assays/microscopy",
         "@type": "onto:MicroscopyAssay",
@@ -289,6 +300,36 @@ class TestSummariseMaterialFile:
 
 
 # ----------------------------------------------------------------------
+# _summarise_device_file
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestSummariseDeviceFile:
+    """Tests for _summarise_device_file."""
+
+    def test_template_count(self, tmp_path):
+        """The number of templates in the file is counted."""
+        data = {"templates": [{"name": "Incubator"}, {"name": "Shaker"}, {"name": "Balance"}]}
+        file_path = tmp_path / "device_templates" / "culture_devices.json"
+        result = _summarise_device_file(data, file_path, tmp_path)
+
+        assert result["filename"] == "culture_devices.json"
+        assert result["path"].endswith("device_templates/culture_devices.json")
+        assert result["template_count"] == 3
+
+    def test_missing_templates_key(self, tmp_path):
+        """A file without a templates list yields template_count 0."""
+        file_path = tmp_path / "device_templates" / "empty.json"
+        assert _summarise_device_file({}, file_path, tmp_path)["template_count"] == 0
+
+    def test_non_dict_data(self, tmp_path):
+        """Non-dict payload yields template_count 0."""
+        file_path = tmp_path / "device_templates" / "weird.json"
+        assert _summarise_device_file(None, file_path, tmp_path)["template_count"] == 0
+
+
+# ----------------------------------------------------------------------
 # _format_template_list
 # ----------------------------------------------------------------------
 
@@ -298,11 +339,12 @@ class TestFormatTemplateList:
     """Tests for _format_template_list."""
 
     def test_full_index(self):
-        """All three sections are rendered with their entries."""
+        """All four sections are rendered with their entries."""
         index = {
             "assay_templates": [{"name": "Microscopy assay"}, {"name": "ELISA"}],
             "protocol_templates": [{"name": "Bacterial culture"}],
             "material_templates": [{"filename": "sample_templates.json"}],
+            "device_templates": [{"filename": "culture_devices.json"}],
         }
         text = _format_template_list(index)
 
@@ -313,6 +355,8 @@ class TestFormatTemplateList:
         assert "Bacterial culture" in text
         assert "=== Material Template Files ===" in text
         assert "sample_templates.json" in text
+        assert "=== Device Template Files ===" in text
+        assert "culture_devices.json" in text
 
     def test_missing_sections_render_headers_only(self):
         """Missing sections still render their headers."""
@@ -320,6 +364,7 @@ class TestFormatTemplateList:
         assert "=== Assay Templates ===" in text
         assert "=== Protocol Templates ===" in text
         assert "=== Material Template Files ===" in text
+        assert "=== Device Template Files ===" in text
 
     def test_entries_without_names_use_fallback(self):
         """Assay entries without a name fall back to 'Unknown'."""
@@ -474,6 +519,45 @@ class TestScanMaterialTemplates:
 
 
 # ----------------------------------------------------------------------
+# scan_device_templates
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestScanDeviceTemplates:
+    """Tests for scan_device_templates."""
+
+    def test_scans_valid_templates(self, templates_root):
+        """Device template files are listed with their template counts."""
+        _write_json(
+            templates_root / "device_templates" / "culture_devices.json",
+            {"templates": [{"name": "Incubator"}, {"name": "Shaker"}]},
+        )
+        results = scan_device_templates(templates_root)
+
+        assert len(results) == 1
+        assert results[0]["filename"] == "culture_devices.json"
+        assert results[0]["template_count"] == 2
+
+    def test_missing_directory_returns_empty(self, tmp_path):
+        """A missing device_templates directory yields an empty list."""
+        assert scan_device_templates(tmp_path) == []
+
+    def test_empty_directory_returns_empty(self, templates_root):
+        """An empty device_templates directory yields an empty list."""
+        assert scan_device_templates(templates_root) == []
+
+    def test_malformed_json_is_skipped(self, templates_root):
+        """Malformed device JSON files are skipped."""
+        device_dir = templates_root / "device_templates"
+        (device_dir / "broken.json").write_text("[", encoding="utf-8")
+        _write_json(device_dir / "good.json", {"templates": [{"name": "Incubator"}]})
+
+        results = scan_device_templates(templates_root)
+        assert [r["filename"] for r in results] == ["good.json"]
+
+
+# ----------------------------------------------------------------------
 # generate_template_index
 # ----------------------------------------------------------------------
 
@@ -483,7 +567,7 @@ class TestGenerateTemplateIndex:
     """Tests for generate_template_index."""
 
     def test_full_index_structure(self, populated_root):
-        """The index contains counts and all three template sections."""
+        """The index contains counts and all four template sections."""
         index = generate_template_index(populated_root)
 
         assert set(index) == {
@@ -492,11 +576,19 @@ class TestGenerateTemplateIndex:
             "assay_templates",
             "protocol_templates",
             "material_templates",
+            "device_templates",
         }
-        assert index["counts"] == {"assay": 1, "protocol": 1, "material_files": 1}
+        assert index["counts"] == {
+            "assay": 1,
+            "protocol": 1,
+            "material_files": 1,
+            "device_files": 1,
+        }
         assert index["assay_templates"][0]["name"] == "Microscopy assay"
         assert index["protocol_templates"][0]["name"] == "Bacterial culture"
         assert index["material_templates"][0]["filename"] == "sample_templates.json"
+        assert index["device_templates"][0]["filename"] == "culture_devices.json"
+        assert index["device_templates"][0]["template_count"] == 2
 
     def test_generated_at_is_iso8601(self, populated_root):
         """generated_at is a parseable ISO-8601 timestamp."""
@@ -509,10 +601,16 @@ class TestGenerateTemplateIndex:
     def test_empty_root(self, tmp_path):
         """A root without template subdirectories yields zero counts."""
         index = generate_template_index(tmp_path)
-        assert index["counts"] == {"assay": 0, "protocol": 0, "material_files": 0}
+        assert index["counts"] == {
+            "assay": 0,
+            "protocol": 0,
+            "material_files": 0,
+            "device_files": 0,
+        }
         assert index["assay_templates"] == []
         assert index["protocol_templates"] == []
         assert index["material_templates"] == []
+        assert index["device_templates"] == []
 
     def test_requires_path_object(self, populated_root):
         """generate_template_index expects a Path (strings are not converted)."""
@@ -553,7 +651,12 @@ class TestWriteTemplateIndex:
         assert index_path.exists()
         loaded = json.loads(index_path.read_text(encoding="utf-8"))
         assert loaded == index
-        assert loaded["counts"] == {"assay": 1, "protocol": 1, "material_files": 1}
+        assert loaded["counts"] == {
+            "assay": 1,
+            "protocol": 1,
+            "material_files": 1,
+            "device_files": 1,
+        }
 
     def test_writes_text_list(self, populated_root):
         """template_list.txt is written and lists the templates."""
@@ -568,6 +671,8 @@ class TestWriteTemplateIndex:
         assert "Bacterial culture" in text
         assert "=== Material Template Files ===" in text
         assert "sample_templates.json" in text
+        assert "=== Device Template Files ===" in text
+        assert "culture_devices.json" in text
 
     def test_returns_index_dict(self, populated_root):
         """The returned value is the generated index dict."""
