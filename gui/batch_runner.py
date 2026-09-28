@@ -9,10 +9,13 @@ identical pipeline code.
 
 Design notes (see ``plans/gui-parity-plan.md``, decisions D2/D3/D5):
 
-* ``BatchConfig`` is a plain ``str``/``bool`` dataclass snapshot taken on the
-  main thread.  The worker never touches the ``ProfileLoader`` singleton:
-  ``investigation_id`` and ``templates_root`` must already be resolved on the
-  main thread (``get_profile()``) and passed in as plain strings.
+* ``BatchConfig`` is a plain ``str``/``bool`` dataclass snapshot taken on
+  the main thread, defined in the Qt-free :mod:`gui.batch_config` module
+  (stdlib ``dataclasses`` only, no PyQt6) so it stays importable on
+  machines where PyQt6 or its native graphics libraries are missing.  The
+  worker never touches the ``ProfileLoader`` singleton:
+  ``investigation_id`` and ``templates_root`` must already be resolved on
+  the main thread (``get_profile()``) and passed in as plain strings.
 * Per-stage progress is obtained by attaching a private ``logging.Handler``
   to the ``utils.batch.batch_processor`` logger and regex-matching the
   ``Step 1: ...`` .. ``Step 7: ...`` lines.  The handler is attached inside
@@ -22,11 +25,14 @@ Design notes (see ``plans/gui-parity-plan.md``, decisions D2/D3/D5):
 import logging
 import re
 import threading
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal
+
+# Qt-free config snapshot, re-exported for backward compatibility (consumers
+# may keep using ``from gui.batch_runner import BatchConfig``).
+from .batch_config import BatchConfig  # noqa: F401
 
 # Matches the per-stage log lines emitted by BatchProcessor.process_batch(),
 # e.g. "Step 1: Scanning experiment folders" (batch_processor.py, "Step N: ...").
@@ -34,23 +40,6 @@ STAGE_LOG_PATTERN = re.compile(r"^Step ([1-7]): (.*)$")
 
 # Total number of pipeline stages (used to scale the progress bar).
 TOTAL_STAGES = 7
-
-
-@dataclass
-class BatchConfig:
-    """Main-thread snapshot of everything the worker needs.
-
-    All fields are plain strings/booleans (no profile objects) so they are
-    safe to read from a worker thread.
-    """
-
-    data_root: str = ""
-    output_dir: str = ""
-    investigation_id: str = "inv_default"
-    templates_root: str = ""
-    inv_inm_path: str = ""
-    skip_conversion: bool = True
-    skip_validation: bool = True
 
 
 class _StageHandler(logging.Handler):
@@ -128,6 +117,8 @@ class BatchWorker(QThread):
                 skip_conversion=self.cfg.skip_conversion,
                 skip_validation=self.cfg.skip_validation,
                 cancel_event=self._cancel_event,
+                validation_layers=self.cfg.validation_layers or None,
+                enable_ols=self.cfg.enable_ols,
             )
             report_path = str(Path(self.cfg.output_dir) / "processing_report.json")
             self.succeeded.emit(result, report_path)

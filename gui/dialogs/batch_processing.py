@@ -45,6 +45,50 @@ _INFO_EXPERIMENT_PATTERN = re.compile(
     r"^\s*(?P<id>\S+):\s*(?P<type>.+?)\s*\((?P<conf>[\d.]+)\s*confidence\)$"
 )
 
+# Core validation layers offered as checkboxes (canonical order, all
+# default-checked).  The optional ``ols`` layer is deliberately NOT in this
+# list — it has its own, clearly-labeled checkbox (network-dependent).
+_LAYER_CHECKS: list[tuple[str, str]] = [
+    (
+        "schema",
+        "ISA-JSON structure, required fields & data types, plus offline "
+        "isatools spec validation where available. Errors block export.",
+    ),
+    (
+        "semantic",
+        "Ontology term verification via prefix/namespace resolution and "
+        "local rdflib lookup of cached ontologies (offline). Warnings only.",
+    ),
+    ("data_file", "Data-file presence, type & FAIR checks. Errors block export."),
+    (
+        "template",
+        "Generated assay vs the profile assay template: parameter "
+        "presence, unit-accession match, required attachments. Warnings only.",
+    ),
+    (
+        "shacl",
+        "SHACL shape validation of the profile ontology via pyshacl. "
+        "Constraint violations are errors; skipped gracefully when "
+        "pyshacl or the shapes file is absent.",
+    ),
+    (
+        "owl",
+        "rdflib-only OWL structural consistency checks (circular "
+        "subclassOf, conflicting definitions, unsatisfiable-lite). Errors "
+        "block export; deep reasoning stays with the HermiT offline/CI gate.",
+    ),
+]
+
+_OLS_CHECKBOX_TIP = (
+    "OPTIONAL, network-dependent layer (default OFF).\n\n"
+    "Queries the EBI Ontology Lookup Service (OLS) web service "
+    "(https://www.ebi.ac.uk/ols4/api) to cross-check terms that could not be "
+    "verified against locally downloaded ontologies. Slower than the local "
+    "lookup and requires an internet connection; it degrades gracefully "
+    "(skipped with a note) when the network or OLS is unavailable.\n\n"
+    "Intended for users who have not downloaded the reference ontologies."
+)
+
 
 class BatchProcessingDialog(QDialog):
     """Modal dialog to run the 7-stage batch pipeline."""
@@ -106,9 +150,38 @@ class BatchProcessingDialog(QDialog):
 
         self.skip_validation_check = QCheckBox("Skip validation (stage 7)")
         self.skip_validation_check.setChecked(True)
+        self.skip_validation_check.toggled.connect(self._on_skip_validation_toggled)
         form.addRow("Options", self.skip_validation_check)
 
         layout.addLayout(form)
+
+        # --- Validation layers section -----------------------------------
+        layout.addWidget(SectionHeader("Validation Layers (stage 7)"))
+
+        self._layer_checks: dict[str, QCheckBox] = {}
+        layers_widget = QWidget()
+        layers_layout = QVBoxLayout(layers_widget)
+        layers_layout.setContentsMargins(0, 0, 0, 0)
+        for name, tooltip in _LAYER_CHECKS:
+            check = QCheckBox(name)
+            check.setChecked(True)
+            check.setToolTip(tooltip)
+            layers_layout.addWidget(check)
+            self._layer_checks[name] = check
+
+        self.ols_check = QCheckBox("OLS lookup (network, slow) — optional")
+        self.ols_check.setChecked(False)
+        self.ols_check.setToolTip(_OLS_CHECKBOX_TIP)
+        layers_layout.addWidget(self.ols_check)
+
+        skip_validation_hint = QLabel(
+            "Note: checking “Skip validation (stage 7)” above disables all layers."
+        )
+        skip_validation_hint.setStyleSheet("color: #888; font-size: 11px;")
+        skip_validation_hint.setWordWrap(True)
+        layers_layout.addWidget(skip_validation_hint)
+        layout.addWidget(layers_widget)
+        self._sync_layer_check_states()
 
         # Prefill the investigation id from the active profile (main thread).
         self._prefill_from_profile()
@@ -173,6 +246,18 @@ class BatchProcessingDialog(QDialog):
         cards.addWidget(self.card_validation, 0, 2)
         cards.addWidget(self.card_duration, 0, 3)
         layout.addLayout(cards)
+
+        # Per-layer status chips (passed / failed / skipped)
+        self.layer_chip_row = QHBoxLayout()
+        self.layer_chip_row.setSpacing(6)
+        self._layer_chips: dict[str, QLabel] = {}
+        for name, _tooltip in _LAYER_CHECKS + [("ols", "optional OLS lookup")]:
+            chip = QLabel(f"{name}: —")
+            chip.setStyleSheet("padding: 2px 6px; border-radius: 4px; background: #e8e8e8;")
+            self.layer_chip_row.addWidget(chip)
+            self._layer_chips[name] = chip
+        self.layer_chip_row.addStretch()
+        layout.addLayout(self.layer_chip_row)
 
         # Per-experiment table
         self.experiment_tree = QTreeWidget()
@@ -240,6 +325,18 @@ class BatchProcessingDialog(QDialog):
         if path:
             self.output_dir_edit.setText(path)
 
+    def _sync_layer_check_states(self) -> None:
+        """Enable/disable the layer checkboxes based on the skip-validation state."""
+        enabled = not self.skip_validation_check.isChecked()
+        for check in self._layer_checks.values():
+            check.setEnabled(enabled)
+        self.ols_check.setEnabled(enabled)
+
+    @pyqtSlot(bool)
+    def _on_skip_validation_toggled(self, checked: bool) -> None:
+        """Toggle layer-checkbox availability when validation is skipped."""
+        self._sync_layer_check_states()
+
     def _set_inputs_enabled(self, enabled: bool) -> None:
         """Enable/disable the setup inputs and Start button."""
         for widget in (
@@ -249,9 +346,12 @@ class BatchProcessingDialog(QDialog):
             self.inv_inm_edit,
             self.skip_conversion_check,
             self.skip_validation_check,
+            self.ols_check,
             self.start_btn,
         ):
             widget.setEnabled(enabled)
+        for check in self._layer_checks.values():
+            check.setEnabled(enabled)
 
     # ------------------------------------------------------------------
     # Slots
@@ -284,6 +384,10 @@ class BatchProcessingDialog(QDialog):
         self.progress_bar.setValue(1)
         self.log_view.setPlainText("")
 
+        selected = [name for name, check in self._layer_checks.items() if check.isChecked()]
+        if self.ols_check.isChecked():
+            selected.append("ols")
+
         cfg = BatchConfig(
             data_root=data_root,
             output_dir=output_dir,
@@ -292,6 +396,8 @@ class BatchProcessingDialog(QDialog):
             inv_inm_path=self.inv_inm_edit.text().strip(),
             skip_conversion=self.skip_conversion_check.isChecked(),
             skip_validation=self.skip_validation_check.isChecked(),
+            validation_layers=",".join(selected),
+            enable_ols=self.ols_check.isChecked(),
         )
 
         self.worker = BatchWorker(cfg, self)
@@ -364,6 +470,7 @@ class BatchProcessingDialog(QDialog):
         validation_text = "✓ PASSED" if result.validation_passed else "✗ FAILED"
         self.card_validation.value_label.setText(validation_text)
         self.card_duration.value_label.setText(f"{result.processing_time_seconds:.1f}s")
+        self._update_layer_chips(result)
 
         # Per-experiment table: prefer structured classifications (D5), fall back
         # to parsing the human-readable info lines (D4) so no data is lost.
@@ -427,6 +534,32 @@ class BatchProcessingDialog(QDialog):
             if match:
                 rows.append((match.group("id"), match.group("type"), match.group("conf")))
         return rows
+
+    def _update_layer_chips(self, result) -> None:
+        """Fill the per-layer status chips from ``result.validation_report``.
+
+        Chips not present in the report (validation skipped, or a layer not
+        run) stay neutral; OLS is shown as "n/a" when it was not enabled.
+        """
+        chip_styles = {
+            "passed": "background: #d4edda; color: #155724; border: 1px solid #a3d9b1;",
+            "failed": "background: #f8d7da; color: #721c24; border: 1px solid #f1aeb5;",
+            "skipped": "background: #fff3cd; color: #856404; border: 1px solid #ffe69c;",
+        }
+        report = getattr(result, "validation_report", None) or {}
+        layers = report.get("layers") or []
+        for name, chip in self._layer_chips.items():
+            match = next((layer for layer in layers if layer.get("layer") == name), None)
+            if match is None:
+                chip.setText(f"{name}: not run")
+                chip.setStyleSheet("padding: 2px 6px; border-radius: 4px; background: #e8e8e8;")
+                continue
+            status = str(match.get("status", "unknown"))
+            chip.setText(f"{name}: {status}")
+            chip.setStyleSheet(
+                f"padding: 2px 6px; border-radius: 4px; "
+                f"{chip_styles.get(status, chip_styles['skipped'])}"
+            )
 
     def _open_report_folder(self) -> None:
         if not self._report_path:

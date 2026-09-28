@@ -2,7 +2,8 @@
 Tests for the GUI batch pipeline worker and dialog (plan §5, T3–T6).
 
 These tests verify:
-* ``BatchConfig`` defaults and ``BatchWorker`` construction (headless-safe, T3)
+* ``BatchConfig`` defaults (plain-fields contract, headless-safe, T3)
+* ``BatchWorker`` construction (headless-safe, T3)
 * a worker end-to-end run on a temp data root (T4)
 * GUI↔CLI parity: same inputs via ``BatchProcessor`` directly vs. the
   ``BatchWorker`` yield identical summary fields (T5, the executable proof of
@@ -10,7 +11,11 @@ These tests verify:
 * the dialog smoke test: Start with an empty ``data_root`` shows a validation
   error and does not start a thread (T6)
 
-Qt-dependent tests skip cleanly when PyQt6 is unavailable.
+``TestBatchConfig`` imports only the Qt-free :mod:`gui.batch_config`
+module (no PyQt6) so it RUNS on every machine, including headless CI
+runners where ``libEGL.so.1`` is missing.  The Qt-dependent
+``BatchWorker``/dialog tests skip cleanly (not fail) when PyQt6 cannot
+be imported.
 """
 
 import time
@@ -23,6 +28,8 @@ try:
 
     PYQT6_AVAILABLE = True
 except (ImportError, OSError):
+    # OSError catches missing shared libraries (e.g. libEGL.so.1 on
+    # headless CI runners where the Qt platform plugin cannot load).
     PYQT6_AVAILABLE = False
 
 
@@ -73,7 +80,9 @@ class TestBatchConfig:
     """BatchConfig dataclass defaults (T3, headless-safe)."""
 
     def test_batch_config_defaults(self):
-        from gui.batch_runner import BatchConfig
+        # Import the Qt-free module directly (NOT gui.batch_runner, which
+        # pulls in PyQt6) so this contract test runs on every machine.
+        from gui.batch_config import BatchConfig
 
         cfg = BatchConfig()
         assert cfg.data_root == ""
@@ -88,10 +97,25 @@ class TestBatchConfig:
         """The config snapshot uses only str/bool fields (thread-safe)."""
         from dataclasses import fields
 
-        from gui.batch_runner import BatchConfig
+        from gui.batch_config import BatchConfig
 
         for f in fields(BatchConfig):
             assert f.type in (str, bool, "str", "bool"), f"{f.name} is not a plain str/bool"
+
+    def test_batch_config_validation_fields(self):
+        """Additive validation-layer fields with safe defaults (no OLS by default)."""
+        from gui.batch_config import BatchConfig
+
+        cfg = BatchConfig()
+        # Default: no explicit layer selection (engine falls back to the
+        # core set) and the optional OLS layer is OFF.
+        assert cfg.validation_layers == ""
+        assert cfg.enable_ols is False
+
+        # Explicit selection is accepted (comma string, per the GUI contract).
+        cfg2 = BatchConfig(validation_layers="schema,semantic,ols", enable_ols=True)
+        assert cfg2.validation_layers == "schema,semantic,ols"
+        assert cfg2.enable_ols is True
 
 
 @pytest.mark.gui
