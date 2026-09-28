@@ -382,7 +382,10 @@ class DataFileValidator:
 
         data_files = assay.get("dataFiles", [])
         for data_file in data_files:
-            filename = data_file.get("filename", "unknown")
+            # ISA-JSON uses 'name' for data files (the generator emits both
+            # 'name' and 'filename'); prefer 'name', fall back to 'filename'
+            # for spec-only inputs (see plans/validation-layers-plan.md §3.1).
+            filename = data_file.get("name") or data_file.get("filename") or "unknown"
 
             # Try to find the file
             file_path = self._find_file(filename, investigation_dir, study_id, assay_id)

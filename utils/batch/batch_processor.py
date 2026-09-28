@@ -22,7 +22,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from utils.batch.experiment_classifier import ExperimentClassifier
 from utils.batch.file_organizer import FileOrganizer
@@ -30,6 +30,7 @@ from utils.batch.folder_scanner import FolderMetadata, FolderScanner
 from utils.batch.format_converter import ConversionResult, FormatConverter
 from utils.batch.isa_json_generator import ISAJsonGenerator
 from utils.batch.metadata_extractor import MetadataExtractor
+from utils.batch.validation_layers import DEFAULT_LAYERS, LAYER_NAMES, ValidationEngine
 from utils.batch.validator import DataFileValidator, ISAJsonValidator, MetadataValidator
 
 logging.basicConfig(level=logging.INFO)
@@ -54,6 +55,9 @@ class BatchProcessingResult:
     # Structured per-experiment classification (D5, backward-compatible:
     # defaults to an empty dict for CLI and existing callers).
     classifications: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # Structured per-layer validation outcome (additive, backward-compatible:
+    # None when validation was skipped or an older code path produced the result).
+    validation_report: Optional[Dict[str, Any]] = None
 
 
 class BatchProcessor:
@@ -99,6 +103,8 @@ class BatchProcessor:
         skip_conversion: bool = False,
         skip_validation: bool = False,
         cancel_event: Optional[threading.Event] = None,
+        validation_layers: Optional[Any] = None,
+        enable_ols: bool = False,
     ) -> BatchProcessingResult:
         """
         Process a batch of experiment folders.
@@ -112,6 +118,16 @@ class BatchProcessor:
                 stops before the next stage (checked between Steps 1..7).
                 Defaults to ``None`` (no cancellation), keeping the CLI
                 signature behavior unchanged.
+            validation_layers: Optional list of validation-layer names to run
+                in Stage 7 (subset of ``schema, semantic, data_file,
+                template, shacl, owl, ols``).  ``None`` = the default set —
+                all six core layers, **except** the optional ``ols`` layer
+                (see ``utils/batch/validation_layers.py``).
+            enable_ols: Explicitly enable the optional, network-dependent
+                OLS (EBI Ontology Lookup Service) layer.  Default ``False`` —
+                OLS is only run when this is true *and* ``ols`` is present in
+                ``validation_layers`` (or the default set is requested with
+                ``enable_ols=True``).
 
         Returns:
             BatchProcessingResult object
@@ -250,17 +266,31 @@ class BatchProcessor:
             if self._check_cancel(result, cancel_event):
                 return result
 
-            # Step 7: Validate results
+            # Step 7: Validate results (layered engine — see
+            # utils/batch/validation_layers.py).  Layers run in canonical
+            # order; the flat errors/warnings/info are aggregated exactly as
+            # before so existing consumers keep working.
             if not skip_validation:
                 self.logger.info("\n" + "=" * 60)
                 self.logger.info("Step 7: Validating results")
                 self.logger.info("=" * 60)
 
-                validation_results = self._validate_results(inv_path)
+                validation_results, validation_report_dict = self._validate_results(
+                    inv_path,
+                    validation_layers=validation_layers,
+                    enable_ols=enable_ols,
+                    classifications=result.classifications,
+                )
                 result.validation_passed = validation_results["passed"]
+                result.validation_report = validation_report_dict
                 result.errors.extend(validation_results["errors"])
                 result.warnings.extend(validation_results["warnings"])
                 result.info.extend(validation_results["info"])
+                for layer in validation_report_dict["layers"]:
+                    self.logger.info(
+                        "  [%s] %s (%s)"
+                        % (layer["layer"], layer["status"].upper(), layer["validator"])
+                    )
             else:
                 self.logger.info("\nSkipping validation")
 
@@ -377,52 +407,132 @@ class BatchProcessor:
 
         return conversion_results
 
-    def _validate_results(self, investigation_path: str) -> Dict[str, Any]:
+    def _validate_results(
+        self,
+        investigation_path: str,
+        validation_layers: Optional[List[str]] = None,
+        enable_ols: bool = False,
+        classifications: Optional[Dict[str, Dict[str, Any]]] = None,
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
-        Validate the processed investigation.
+        Validate the processed investigation via the layered engine.
 
         Args:
             investigation_path: Path to investigation JSON file
+            validation_layers: Optional layer subset (see ``process_batch``).
+            enable_ols: Enable the optional OLS layer (see ``process_batch``).
+            classifications: Per-experiment classifications for the template
+                layer (defaults to ``{}``).
 
         Returns:
-            Dictionary with validation results
+            Tuple of (flat dict with ``passed/errors/warnings/info``,
+            the serializable ``validation`` report block).
         """
-        results: Dict[str, Any] = {"passed": True, "errors": [], "warnings": [], "info": []}
+        profile = self._active_profile()
+        enabled = self._resolve_enabled_layers(validation_layers, enable_ols, profile)
 
-        # Validate ISA-JSON structure
-        self.logger.info("  Validating ISA-JSON structure...")
-        isa_result = self.isa_validator.validate_investigation(investigation_path)
+        shapes_file: Optional[str] = None
+        cache_dir: Optional[str] = None
+        max_parse_bytes = 50 * 1024 * 1024
+        if profile is not None:
+            try:
+                vconfig = profile.get_validation_config()
+                shapes_raw = (vconfig.get("shacl") or {}).get("shapes_file")
+                if shapes_raw:
+                    shapes_file = str(Path(profile.get_profile_root()) / shapes_raw)
+                semantic_raw = vconfig.get("semantic") or {}
+                if semantic_raw.get("cache_dir"):
+                    cache_dir = str(Path(profile.get_profile_root()) / semantic_raw["cache_dir"])
+                if semantic_raw.get("max_parse_mb"):
+                    max_parse_bytes = int(semantic_raw["max_parse_mb"]) * 1024 * 1024
+            except Exception:  # noqa: BLE001 - malformed config → code defaults
+                pass
 
-        if not isa_result.is_valid:
-            results["passed"] = False
-            results["errors"].extend(isa_result.errors)
+        engine = ValidationEngine(
+            templates_root=str(self.classifier.templates_root) if self.classifier else None,
+            classifications=classifications or {},
+            enabled_layers=enabled,
+            profile=profile,
+            shapes_file=shapes_file,
+            cache_dir=cache_dir,
+            max_parse_bytes=max_parse_bytes,
+            ols_enabled=enable_ols and "ols" in enabled,
+        )
+        self.logger.info("  Running validation layers: %s", ", ".join(engine.enabled_layers))
+        report = engine.run(investigation_path)
 
-        results["warnings"].extend(isa_result.warnings)
-        results["info"].extend(isa_result.info)
+        flat = report.flat()
+        report_dict = report.to_dict()
+        report_dict["enabled_layers"] = list(engine.enabled_layers)
+        return flat, report_dict
 
-        # Validate data files
-        self.logger.info("  Validating data files...")
-        file_result, file_results = self.file_validator.validate_files(investigation_path)
+    @staticmethod
+    def _active_profile() -> Optional[Any]:
+        """Return the active :class:`ProfileLoader` (or ``None`` if it cannot
+        be resolved — the engine then degrades the profile-dependent layers
+        to ``skipped`` with an info note)."""
+        try:
+            from utils.config_loader import get_profile
 
-        if not file_result.is_valid:
-            results["passed"] = False
-            results["errors"].extend(file_result.errors)
+            return get_profile()
+        except Exception:  # noqa: BLE001 - profile resolution must never crash Stage 7
+            return None
 
-        results["warnings"].extend(file_result.warnings)
-        results["info"].extend(file_result.info)
+    @staticmethod
+    def _resolve_enabled_layers(
+        validation_layers: Optional[Any],
+        enable_ols: bool,
+        profile: Optional[Any],
+    ) -> List[str]:
+        """Compute the enabled layer set, honoring profile config defaults.
 
-        # Validate metadata
-        self.logger.info("  Validating metadata...")
-        metadata_result = self.metadata_validator.validate_metadata(investigation_path)
+        Args:
+            validation_layers: Optional explicit layer selection — a list of
+                names or a comma-separated string (e.g. from the GUI's
+                ``BatchConfig.validation_layers``); validated against
+                ``LAYER_NAMES``.
+            enable_ols: When true, the optional ``ols`` layer is added.
+            profile: Optional :class:`ProfileLoader` for the profile-level
+                default layer set.
 
-        if not metadata_result.is_valid:
-            results["passed"] = False
-            results["errors"].extend(metadata_result.errors)
+        Returns:
+            The enabled layer names in canonical order.
+        """
+        if validation_layers is None:
+            explicit = None  # unset → profile/code default below
+        else:
+            if isinstance(validation_layers, str):
+                validation_layers = validation_layers.split(",")
+            explicit = [name.strip() for name in (validation_layers or []) if str(name).strip()]
+        if explicit is not None:
+            # An explicit selection (possibly empty → no layers run).
+            enabled = [name for name in LAYER_NAMES if name in explicit]
+            unknown = [name for name in explicit if name not in LAYER_NAMES]
+            if unknown:
+                raise ValueError(
+                    f"unknown validation layer(s): {', '.join(unknown)}; "
+                    f"valid layers: {', '.join(LAYER_NAMES)}"
+                )
+            if enable_ols and "ols" not in enabled:
+                enabled = [name for name in LAYER_NAMES if name in enabled or name == "ols"]
+            return enabled
 
-        results["warnings"].extend(metadata_result.warnings)
-        results["info"].extend(metadata_result.info)
-
-        return results
+        if profile is not None:
+            try:
+                raw = profile.get_validation_config().get("layers")
+                if isinstance(raw, list) and raw:
+                    names = [str(name).strip() for name in raw if str(name).strip()]
+                    enabled = [name for name in LAYER_NAMES if name in names]
+                    if enable_ols and "ols" not in enabled:
+                        enabled = [name for name in LAYER_NAMES if name in enabled or name == "ols"]
+                    if enabled:
+                        return enabled
+            except Exception:  # noqa: BLE001 - malformed config → code defaults
+                pass
+        enabled = list(DEFAULT_LAYERS)
+        if enable_ols and "ols" not in enabled:
+            enabled = [name for name in LAYER_NAMES if name in enabled or name == "ols"]
+        return enabled
 
     def _save_processing_report(self, result: BatchProcessingResult, output_dir: str):
         """
@@ -449,6 +559,11 @@ class BatchProcessor:
             "warnings": result.warnings,
             "info": result.info,
         }
+
+        # Additive per-layer validation block (absent when validation was
+        # skipped — backward compatible with existing report consumers).
+        if result.validation_report is not None:
+            report["validation"] = result.validation_report
 
         report_path = Path(output_dir) / "processing_report.json"
         with open(report_path, "w", encoding="utf-8") as f:
@@ -541,6 +656,26 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the validation stage",
     )
+    parser.add_argument(
+        "--validation-layers",
+        default=None,
+        help=(
+            "Comma-separated subset of validation layers to run in stage 7 "
+            f"(valid: {', '.join(LAYER_NAMES)}). Default: all core layers "
+            f"({', '.join(DEFAULT_LAYERS)}); the optional network-dependent "
+            "'ols' layer is OFF unless listed here AND --enable-ols is given."
+        ),
+    )
+    parser.add_argument(
+        "--enable-ols",
+        action="store_true",
+        help=(
+            "Enable the OPTIONAL OLS (EBI Ontology Lookup Service) layer — "
+            "network-dependent, slower than local lookup; intended for users "
+            "who have not downloaded the reference ontologies. Skips "
+            "gracefully when the network/OLS is unavailable."
+        ),
+    )
     return parser
 
 
@@ -584,6 +719,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"Templates:          {templates_root}")
     print(f"Skip conversion:    {args.skip_conversion}")
     print(f"Skip validation:    {args.skip_validation}")
+    if args.validation_layers:
+        print(f"Validation layers:  {args.validation_layers}")
+    if args.enable_ols:
+        print("Enable OLS (opt):   True (optional, network-dependent)")
     if args.inv_inm_path:
         print(f"inv_inm path:       {args.inv_inm_path}")
     print("=" * 60)
@@ -595,11 +734,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         templates_root=templates_root,
     )
 
+    # Parse and validate the optional layer selection (argparse error on unknown names).
+    validation_layers: Optional[List[str]] = None
+    if args.validation_layers:
+        from utils.batch.validation_layers import parse_layer_names
+
+        validation_layers = parse_layer_names(args.validation_layers)
+
     result = processor.process_batch(
         data_root=args.data_root,
         output_dir=args.output_dir,
         skip_conversion=args.skip_conversion,
         skip_validation=args.skip_validation,
+        validation_layers=validation_layers,
+        enable_ols=args.enable_ols,
     )
 
     if result.validation_passed and result.failed_experiments == 0 and not result.errors:

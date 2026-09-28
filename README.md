@@ -66,6 +66,65 @@ isa-json-steward-batch --data-root ./data --output-dir ./output --profile ./path
 
 Without a profile, the built-in default `config/` directory is used. See the [Profile Documentation](docs/DIRECTORY_STRUCTURE.md) for the profile layout and [User Workflow Guide](docs/USER_WORKFLOW_GUIDE.md) for batch usage.
 
+## Validation
+
+Stage 7 of the batch pipeline validates the generated ISA-JSON against a set of
+**layers**, each with a defined severity. The result of every layer is recorded
+in the `processing_report.json` `validation` block (layer name,
+`passed`/`failed`/`skipped` status, `errors`, `warnings`, `info`, duration) and
+shown as per-layer status chips in the GUI. A blocking layer failure sets
+`validation_passed` to `false`; non-blocking layers only warn.
+
+| Layer | Implemented by | Severity | Notes |
+|-------|----------------|----------|-------|
+| `schema` | `SchemaLayer` (wraps `ISAJsonValidator`) | **Error** (blocks export) | ISA-JSON structure, required fields, data types, plus offline isatools spec validation where available. |
+| `semantic` | `SemanticValidator` | Warning (non-blocking) | Ontology-term verification via prefix/namespace resolution and offline `rdflib` lookup of the profile's cached ontologies. |
+| `data_file` | `DataFileLayer` (wraps `DataFileValidator`) | **Error** (blocks export) | Data-file presence, readability and FAIR checks. |
+| `template` | `TemplateValidator` | Warning (non-blocking) | Generated assay vs the profile assay template: parameter presence, type/unit accession match, required attachments. |
+| `shacl` | `ShaclValidator` (via `pyshacl`) | **Error** (blocks export) | SHACL shape validation of the profile ontology. Skipped gracefully when `pyshacl` or the shapes file is absent. |
+| `owl` | `OwlConsistencyValidator` | **Error** (blocks export) | `rdflib`-only OWL structural consistency (circular `subClassOf`, conflicting definitions). Deep reasoning remains the offline/CI HermiT gate. |
+| `ols` *(optional)* | `OlsValidator` | Warning (non-blocking) | **OFF by default, network-dependent.** Resolves terms that could not be verified locally against the EBI OLS web service. |
+
+### Choosing layers
+
+```bash
+# Run all core layers (the default — everything except the optional `ols`)
+isa-json-steward-batch --data-root ./data --output-dir ./output
+
+# Select a subset, or add the optional OLS layer
+isa-json-steward-batch --data-root ./data --output-dir ./output \
+    --validation-layers schema,semantic,template
+
+# Enable the optional OLS layer (network lookup)
+isa-json-steward-batch --data-root ./data --output-dir ./output \
+    --validation-layers schema,semantic,data_file,template,shacl,owl,ols \
+    --enable-ols
+
+# Skip all validation (Stage 7 is still reported as skipped)
+isa-json-steward-batch --data-root ./data --output-dir ./output --skip-validation
+```
+
+The same options are available in the GUI: the batch dialog offers a
+**Validation layers** section with one checkbox per core layer (all
+default-checked) and a separate, clearly-labelled optional
+**OLS lookup (network, slow)** checkbox (default **unchecked**).
+
+### The optional OLS layer
+
+`ols` is **optional and OFF by default**. It is a convenience for users who did
+not download the reference ontologies locally and would rather let the
+EBI **Ontology Lookup Service** (OLS) web service cross-check unresolved
+terms. Because it makes live HTTP calls it is slower, depends on network
+availability, and **skips gracefully** (status `skipped`, an info note) if OLS
+is unreachable — it never causes a hard failure. Prefer the offline `semantic`
+layer when the ontologies are cached; enable `ols` only when you want a
+web-service fallback.
+
+The profile can also declare a default layer set and the shapes/ontology
+paths under a `validation` section of its `profile.json`
+(e.g. `{"validation": {"layers": ["schema", "semantic", "data_file", "template", "shacl", "owl"], "enable_ols": false, "semantic": {"cache_dir": "ontologies/cached"}}}`);
+these settings are additive and fall back to the code defaults when absent.
+
 ## Development
 
 ```bash

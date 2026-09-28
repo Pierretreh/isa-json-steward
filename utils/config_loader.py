@@ -1036,6 +1036,44 @@ class ProfileLoader:
         """Return the raw ``settings.json`` dict."""
         return dict(self._get_section("settings"))
 
+    # ------------------------------------------------------------------
+    # Validation-layers config (additive, batch-pipeline Stage 7)
+    # ------------------------------------------------------------------
+
+    def get_validation_config(self) -> Dict[str, Any]:
+        """Return the profile's optional ``validation`` config section.
+
+        Read from ``profile.json`` (top-level key ``"validation"``).  The
+        section is fully optional — when absent an empty dict is returned
+        and the batch pipeline falls back to its code defaults (all core
+        layers except the optional ``ols`` layer).
+
+        Recognized keys (all optional):
+
+        * ``layers``: list of layer names to run by default, e.g.
+          ``["schema", "semantic", "data_file", "template", "shacl", "owl"]``.
+        * ``enable_ols``: bool — default for the optional OLS layer
+          (default ``False``).
+        * ``shacl``: ``{"shapes_file": str}``` — shapes-file override,
+          resolved against the profile root.
+        * ``semantic``: ``{"cache_dir": str, "max_parse_mb": int}`` —
+          cached-ontology directory (default ``ontologies/cached``) and the
+          per-file parse cap in MB (default ``50``).
+        """
+        raw = self.profile.get("validation")
+        result: Dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
+
+        semantic = result.get("semantic")
+        semantic = dict(semantic) if isinstance(semantic, dict) else {}
+        if "cache_dir" not in semantic:
+            semantic["cache_dir"] = "ontologies/cached"
+        if "max_parse_mb" not in semantic:
+            semantic["max_parse_mb"] = 50
+        result["semantic"] = semantic
+        if "enable_ols" not in result:
+            result["enable_ols"] = False
+        return result
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton for ProfileLoader
