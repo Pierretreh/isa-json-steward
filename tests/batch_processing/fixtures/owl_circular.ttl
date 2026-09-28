@@ -1,0 +1,9 @@
+@prefix ex: <http://example.org/test#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+# Violating OWL fixture: circular subclassOf chain
+# (ex:A -> ex:B -> ex:A).  The OWL structural check must flag this as an
+# Error (blocking).
+ex:A a owl:Class ; rdfs:label "A" ; rdfs:subClassOf ex:B .
+ex:B a owl:Class ; rdfs:label "B" ; rdfs:subClassOf ex:A .

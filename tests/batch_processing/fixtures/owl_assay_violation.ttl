@@ -1,0 +1,8 @@
+@prefix ex: <http://example.org/test#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+# Violating fixture: the class 'assay1' lacks a measurementType AND a
+# dataFile, so both SHACL properties (minCount 1) are violated.
+ex:Assay a owl:Class ; rdfs:label "Assay" .
+ex:assay1 a ex:Assay .

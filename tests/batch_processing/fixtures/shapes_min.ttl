@@ -1,0 +1,19 @@
+@prefix ex: <http://example.org/test#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+# Minimal SHACL shape for the test "Assay" class (see owl_assay_ok.ttl /
+# owl_assay_violation.ttl fixtures): every assay must declare a
+# measurementType and at least one dataFile.
+<http://example.org/test/shapes#AssayShape>
+    a sh:NodeShape ;
+    sh:targetClass ex:Assay ;
+    sh:property [
+        sh:path ex:measurementType ;
+        sh:minCount 1 ;
+        sh:message "Every assay must declare a measurementType"
+    ] ;
+    sh:property [
+        sh:path ex:dataFile ;
+        sh:minCount 1 ;
+        sh:message "Every assay must declare at least one dataFile"
+    ] .
