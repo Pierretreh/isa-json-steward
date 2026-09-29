@@ -902,7 +902,7 @@ class ISAJsonExporter:
         # Get protocols actually used in process sequences
         used_protocol_names = self._get_used_protocol_names()
 
-        # First, add protocols from study_data (set by process_partner_data.py or GUI)
+        # First, add protocols from study_data (set by the batch processor or GUI)
         for protocol in self.study_data.get("protocols", []):
             protocol_name = protocol.get("name", "")
             if not protocol_name:

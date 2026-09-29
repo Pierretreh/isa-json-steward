@@ -18,6 +18,7 @@ It includes:
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -594,6 +595,8 @@ class ProfileLoader:
         "investigation_defaults": "investigation_defaults.json",
         "settings": "settings.json",
         "factor_extraction_rules": "factor_extraction_rules.json",
+        "assay_types": "assay_types.json",
+        "cell_types": "cell_types.json",
     }
 
     # The project root is the parent of ``utils/`` – used for fallback
@@ -923,6 +926,67 @@ class ProfileLoader:
         data = self._get_section("factor_extraction_rules")
         result: Dict[str, Any] = dict(data) if data else {}
         return result
+
+    def get_cell_types(self) -> Dict[str, Any]:
+        """Return the cell-type registry from ``cell_types.json``.
+
+        The registry maps a cell-type key to ``{"term": {...}, "display": str}``.
+        Returns an empty dict when the file is absent.
+        """
+        data = self._get_section("cell_types")
+        result: Dict[str, Any] = dict(data) if data else {}
+        return result
+
+    def get_assay_types(self) -> Dict[str, Any]:
+        """Return the assay registry from ``assay_types.json``.
+
+        The registry is a dict with a ``default_assay`` key and an
+        ``assays`` mapping of assay key -> assay configuration (name,
+        measurement type, technology type, protocols, file extensions,
+        name keywords and an optional live/dead measurement-type
+        override).  Returns an empty dict when the file is absent.
+        """
+        data = self._get_section("assay_types")
+        result: Dict[str, Any] = dict(data) if data else {}
+        return result
+
+    def get_experiment_folder_pattern(self) -> "tuple[re.Pattern, int]":
+        """Return the compiled experiment-folder name pattern.
+
+        Reads the ``experiment_folder`` section of the active
+        ``factor_extraction_rules.json`` (``{"pattern": ..., "group": N}``).
+        The default, documented neutral convention is ``^E(\\d+)`` with
+        capture group 1 (folders named ``E1_...``, ``E10_...`` etc.);
+        a profile may override the pattern and group.
+
+        Returns:
+            A ``(compiled_pattern, group)`` tuple.  Falls back to the
+            neutral default when the section is missing, malformed or the
+            pattern fails to compile, so discovery always works.
+        """
+        default_pattern = r"^E(\d+)"
+        default_group = 1
+        try:
+            data = self._get_section("factor_extraction_rules")
+            section = data.get("experiment_folder") or {}
+            pattern = section.get("pattern")
+            group = section.get("group", 1)
+            if not pattern:
+                return (re.compile(default_pattern, re.IGNORECASE), default_group)
+            compiled = re.compile(pattern, re.IGNORECASE)
+            if not compiled.groups:
+                return (compiled, 0)
+            try:
+                group_num = int(group)
+            except (TypeError, ValueError):
+                group_num = 1
+            if group_num < 1 or group_num > compiled.groups:
+                group_num = 1
+            return (compiled, group_num)
+        except re.error:
+            return (re.compile(default_pattern, re.IGNORECASE), default_group)
+        except Exception:  # pragma: no cover - defensive
+            return (re.compile(default_pattern, re.IGNORECASE), default_group)
 
     # ------------------------------------------------------------------
     # Experiment patterns

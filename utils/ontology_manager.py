@@ -487,7 +487,7 @@ def create_sample_individuals() -> Graph:
             "type": PROJECT_NS.ClearColiCompetentCells,
             "label": "ClearColi competent E. coli batch A",
         },
-        "dna_plasmid_pVV021": {"type": PROJECT_NS.AssembledDNA, "label": "Plasmid pVV021"},
+        "dna_plasmid_A": {"type": PROJECT_NS.AssembledDNA, "label": "Plasmid A"},
     }
 
     # Create individuals

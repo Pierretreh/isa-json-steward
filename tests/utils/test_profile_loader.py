@@ -61,7 +61,7 @@ def profile_dir(tmp_path):
             "calcein": ["calcein"],
         },
         "type_file_indicators": {"facs": [".fcs", ".wsp"]},
-        "cell_type_map": {"Müller": "muller_cell", "HRMVEC": "hrmvec"},
+        "cell_type_map": {"Neuron": "neuron_cell", "Endothelial": "endothelial_cell"},
         "assay_type_map": {"microscopy": ["MicroscopyAssay"]},
     }
     (config_dir / "experiment_patterns.json").write_text(json.dumps(patterns), encoding="utf-8")
@@ -227,7 +227,7 @@ class TestExperimentPatterns:
 
     def test_get_cell_type_map(self, loader):
         result = loader.get_cell_type_map()
-        assert result["Müller"] == "muller_cell"
+        assert result["Neuron"] == "neuron_cell"
 
     def test_get_assay_type_map(self, loader):
         result = loader.get_assay_type_map()
@@ -369,7 +369,7 @@ class TestProfileJsonDiscovery:
     """
 
     def test_profile_json_at_profile_root_wins(self, tmp_path):
-        """profile.json at the profile root is found (E41 regression)."""
+        """profile.json at the profile root is found (root-layout regression)."""
         (tmp_path / "config").mkdir()
         (tmp_path / "profile.json").write_text(
             json.dumps(

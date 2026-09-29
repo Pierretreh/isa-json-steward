@@ -88,7 +88,7 @@ class DirectoryManager:
             },
             "assay_subdirs": {
                 "sds_page": ["gel_images", "band_analysis", "metadata"],
-                "microscopy": ["depot_images", "cell_images", "image_analysis", "metadata"],
+                "microscopy": ["sample_images", "cell_images", "image_analysis", "metadata"],
                 "toxicity": ["fluorescence_data", "viability_data", "metadata"],
             },
         }

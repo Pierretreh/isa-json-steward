@@ -193,7 +193,7 @@ class MaterialHandoverValidator:
             "protein solution": ["sample", "protein solution"],
             "lysate": ["sample", "lysate"],
             "protein mixture": ["sample", "protein mixture"],
-            "protein depot": ["sample", "protein depot"],
+            "protein assembly": ["sample", "protein assembly"],
             "buffer": ["otherMaterial", "buffer"],
             "medium": ["otherMaterial", "medium"],
             "DNA": ["otherMaterial", "DNA"],

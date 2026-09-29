@@ -448,7 +448,7 @@ COMPATIBLE_TYPE_PAIRS = [
     ("lysate", "lysate"),
     ("lysate", "sample"),
     ("protein mixture", "protein mixture"),
-    ("protein depot", "protein depot"),
+    ("protein assembly", "protein assembly"),
     ("buffer", "buffer"),
     ("medium", "medium"),
     ("chemical", "chemical"),

@@ -68,7 +68,7 @@ class GraphBuilder:
                 "supernatant",
                 "fraction",
                 "solution",
-                "depot",
+                "assembly",
                 "collagen",
                 "column",
                 "wash",
