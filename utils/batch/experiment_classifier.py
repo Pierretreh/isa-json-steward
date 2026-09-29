@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 from utils.batch.folder_scanner import (
     FileInventory,
@@ -50,7 +50,6 @@ class ExperimentType(Enum):
     FLUORESCENCE = "fluorescence"
     TOXICITY_IN_VITRO = "toxicity_in_vitro"
     TOXICITY_EX_VIVO = "toxicity_ex_vivo"
-    DEPOT_MICROSCOPY = "depot_microscopy"
     EXPLANT = "explant"
 
 
@@ -69,7 +68,7 @@ class ExperimentClassification:
 class ClassificationResult:
     """Result of classifying an experiment directory."""
 
-    experiment_type: ExperimentType
+    experiment_type: Union[ExperimentType, str]
     confidence: float
     template_match: Optional[str] = None
 
@@ -233,14 +232,20 @@ class ExperimentClassifier:
                 experiment_type=ExperimentType.UNKNOWN, confidence=0.0, template_match=None
             )
 
-        # Map to enum
-        experiment_type = self.TYPE_NAME_TO_ENUM.get(type_name, ExperimentType.UNKNOWN)
+        # Map to enum; profile-defined types not present in the core enum
+        # pass through as their string type name.
+        resolved_type: Union[ExperimentType, str]
+        resolved = self.TYPE_NAME_TO_ENUM.get(type_name)
+        if resolved is None:
+            resolved_type = type_name if type_name else ExperimentType.UNKNOWN
+        else:
+            resolved_type = resolved
 
         # Get template match
         template_match = self.TYPE_TO_TEMPLATE.get(type_name)
 
         return ClassificationResult(
-            experiment_type=experiment_type, confidence=confidence, template_match=template_match
+            experiment_type=resolved_type, confidence=confidence, template_match=template_match
         )
 
     def classify_from_name(self, folder_name: str) -> ExperimentClassification:
@@ -567,7 +572,12 @@ class ExperimentClassifier:
             self.logger.debug("Factor rules unavailable: %s", exc)
             return None
 
-    def extract_parameters_from_name(self, folder_name: str) -> Dict[str, Any]:
+    def extract_parameters_from_name(
+        self,
+        folder_name: str,
+        file_names: Optional[List[str]] = None,
+        subfolder_names: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """
         Extract experimental parameters from folder name.
 
@@ -580,6 +590,11 @@ class ExperimentClassifier:
 
         Args:
             folder_name: Name of the experiment folder
+            file_names: Optional real file names of the experiment folder,
+                passed to the rule engine so file-based factor rules can fire
+                (the folder name itself is always scanned as well).
+            subfolder_names: Optional subdirectory names, honoured by rules
+                with ``scan_subfolders`` enabled.
 
         Returns:
             Dictionary of extracted parameters
@@ -591,7 +606,11 @@ class ExperimentClassifier:
         extractor = self._get_factor_rules_extractor()
         if extractor is not None:
             try:
-                result = extractor.extract(folder_name, [folder_name])
+                names = [folder_name]
+                for name in file_names or []:
+                    if name and name not in names:
+                        names.append(name)
+                result = extractor.extract(folder_name, names, subfolder_names)
                 if result is not None:
                     factor_values, _combinations = result
                     if "treatment" in factor_values:
@@ -606,16 +625,28 @@ class ExperimentClassifier:
                                 pass
                         if conc_values:
                             parameters["concentrations_uM"] = conc_values
+                    for _factor in ("protein_variant", "protein_variants"):
+                        if _factor in factor_values:
+                            protein_names_map = get_profile().get_protein_name_map()
+                            for pv in sorted(factor_values[_factor]):
+                                label = protein_names_map.get(pv, pv)
+                                parameters.setdefault("protein_variants", [])
+                                if label not in parameters["protein_variants"]:
+                                    parameters["protein_variants"].append(label)
             except Exception as exc:
                 self.logger.debug("Factor rule extraction failed: %s", exc)
 
-        # Extract protein variants (pVV019, pVV021, etc.)
-        protein_variants = re.findall(r"pVV\d+", folder_name, re.IGNORECASE)
-        if protein_variants:
-            parameters["protein_variants"] = protein_variants
+        # Protein variants: profile ``protein_names`` keys matched against the
+        # folder name (config-driven; the rule-engine ``protein_variant``
+        # factor is handled above and takes precedence).
+        for protein_key in get_profile().get_protein_name_map():
+            if protein_key and protein_key.lower() in folder_name.lower():
+                parameters.setdefault("protein_variants", [])
+                if protein_key not in parameters["protein_variants"]:
+                    parameters["protein_variants"].append(protein_key)
 
-        # Extract concentrations (e.g., "0,5 zu 4uM", "50uM")
-        concentrations = re.findall(r"(\d+(?:,\d+)?)\s*(?:zu\s*)?uM", folder_name, re.IGNORECASE)
+        # Extract concentrations (e.g., "50uM", "0.5uM")
+        concentrations = re.findall(r"(\d+(?:[,.]\d+)?)\s*uM", folder_name, re.IGNORECASE)
         if concentrations:
             parameters["concentrations_uM"] = [c.replace(",", ".") for c in concentrations]
 
@@ -624,14 +655,12 @@ class ExperimentClassifier:
         if sample_counts:
             parameters["sample_count"] = [int(n) for n in sample_counts]
 
-        # Extract cell types
+        # Extract cell types (profile-driven keyword -> canonical cell type)
         cell_types = []
-        if "HRMVEC" in folder_name:
-            cell_types.append("HRMVEC")
-        if "Explant" in folder_name:
-            cell_types.append("Explant")
-        if "Müllerzellen" in folder_name or "Müller" in folder_name:
-            cell_types.append("Müllerzellen")
+        folder_name_lower = folder_name.lower()
+        for keyword, cell_key in get_profile().get_cell_type_map().items():
+            if keyword and keyword.lower() in folder_name_lower and cell_key not in cell_types:
+                cell_types.append(cell_key)
         if cell_types:
             parameters["cell_types"] = cell_types
 
@@ -667,7 +696,15 @@ class ExperimentClassifier:
 
         for exp in experiments:
             classification = self.classify_experiment(exp)
-            parameters = self.extract_parameters_from_name(exp.experiment_name)
+            file_names: List[str] = []
+            subfolder_names: List[str] = []
+            if exp.file_inventory is not None:
+                file_names = [Path(p).name for p in exp.file_inventory.get_all_files()]
+            if exp.subdirectory_hints is not None:
+                subfolder_names = list(exp.subdirectory_hints.immediate_subdirs)
+            parameters = self.extract_parameters_from_name(
+                exp.experiment_name, file_names, subfolder_names
+            )
 
             result = {
                 "experiment_id": exp.experiment_id,
@@ -706,15 +743,13 @@ def main():
     """Main function for testing the experiment classifier."""
     import json
 
-    # Test with sample folder names
+    # Test with sample folder names (neutral, project-agnostic)
     test_folders = [
-        "E1_Müller_Calceinassay und FACS Test",
-        "E10_Explant_Calcein_FACS",
-        "E100_Explant_FACS_pVV021 und cleav 0,5 zu 4uM_n=5",
-        "E113_WB_HRMVEC_NFkB",
-        "E19_TUNEL und H und E Staining",
-        "E74_HRMVEC_ELISA IL6",
-        "E70_Explant_GFAP_Bucher_1 zu 600 verdünnt",
+        "E1_cell_viability_calcein_facs",
+        "E10_explant_facs_treatment_donor",
+        "E19_tunel_staining",
+        "E74_western_blot",
+        "E11_explant_facs_static_dapi",
     ]
 
     classifier = ExperimentClassifier()

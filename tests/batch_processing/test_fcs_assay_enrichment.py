@@ -1,14 +1,18 @@
-"""Tests for FCS-derived study enrichment (C1-C3, D1-D2, E2).
+"""Tests for FCS-derived study enrichment.
 
 These verify that the per-experiment FCS acquisition summary (instrument,
 operator, date, channels, markers, is_live_dead) is correctly threaded into:
-  * C1 - per-sample process date/performer
-  * C2 - sample-collection process date
-  * C3 - instrument as an assay parameter + protocol parameter
-  * D1 - FACS measurementType specialized to "toxicity test" (-> "cell
+  * per-sample process date/performer
+  * sample-collection process date
+  * instrument as an assay parameter + protocol parameter
+  * FACS measurementType specialized to "toxicity test" (-> "cell
     viability" on export) when Calcein+PI are detected
-  * D2 - FACS protocol components populated with detected reagents
-  * E2 - study description mentioning Live/Dead nature and instrument
+  * FACS protocol components populated with detected reagents
+  * study description mentioning Live/Dead nature and instrument
+
+The data-dependent test exercises the committed synthetic fixture FCS files
+(``E10_explant_facs_treatment_donor``); all other tests use a synthetic
+summary mirroring those headers.
 """
 
 import sys
@@ -20,22 +24,15 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-try:
-    import scripts.process_partner_data  # noqa: F401
-except ImportError:
-    pytest.skip(
-        "scripts.process_partner_data not available (moved to private profile)",
-        allow_module_level=True,
-    )
-
-from scripts.process_partner_data import PartnerDataProcessor  # noqa: E402
+from utils.batch.experiment_processor import ExperimentProcessor  # noqa: E402
 from utils.batch.metadata_extractor import MetadataExtractor  # noqa: E402
 
-E100_FOLDER_NAME = "E100_Explant_FACS_pVV021 und cleav 0,5 zu 4uM_n=5"
+FIXTURES = Path(__file__).parent / "fixtures"
+E10_FOLDER_NAME = "E10_explant_facs_treatment_donor"
 
 
-def _e100_summary():
-    """A summary mirroring the real E100 FCS headers."""
+def _fcs_summary():
+    """A summary mirroring the synthetic fixture FCS headers."""
     return {
         "instrument": "LSRFortessa",
         "operator": "Boneva",
@@ -52,18 +49,18 @@ def _e100_summary():
 
 
 def _new_processor(summary=None):
-    p = PartnerDataProcessor.__new__(PartnerDataProcessor)
-    p.investigation_id = "inv_ukf"
-    p._fcs_summary = summary if summary is not None else _e100_summary()
+    p = ExperimentProcessor.__new__(ExperimentProcessor)
+    p.investigation_id = "inv_001"
+    p._fcs_summary = summary if summary is not None else _fcs_summary()
     return p
 
 
 def _empty_study_data():
-    return {"identifier": "study_E100", "assays": [], "protocols": [], "factors": []}
+    return {"identifier": "study_E10", "assays": [], "protocols": [], "factors": []}
 
 
 # ---------------------------------------------------------------------------
-# D1 + C3 + D2 - assay and protocol enrichment (_create_assays)
+# Assay and protocol enrichment (_create_assays)
 # ---------------------------------------------------------------------------
 
 
@@ -74,21 +71,21 @@ class TestCreateAssaysEnrichment:
 
     def test_live_dead_facets_measurement_type(self):
         study_data = _empty_study_data()
-        assay_types = {"facs": PartnerDataProcessor.ASSAY_TYPE_CONFIG["facs"]}
+        assay_types = {"facs": ExperimentProcessor.ASSAY_TYPE_CONFIG["facs"]}
         assays = self.processor._create_assays(
             study_data, assay_types, ["#sample_1"], SimpleNamespace()
         )
-        # D1: measurementType set to "toxicity test" which the exporter maps to
+        # measurementType set to "toxicity test" which the exporter maps to
         # the allowed "cell viability".
         assert assays[0]["measurementType"]["annotationValue"] == "toxicity test"
 
     def test_instrument_added_as_assay_parameter(self):
         study_data = _empty_study_data()
-        assay_types = {"facs": PartnerDataProcessor.ASSAY_TYPE_CONFIG["facs"]}
+        assay_types = {"facs": ExperimentProcessor.ASSAY_TYPE_CONFIG["facs"]}
         assays = self.processor._create_assays(
             study_data, assay_types, ["#sample_1"], SimpleNamespace()
         )
-        # C3: instrument exposed as an assay parameter (-> parameterValue).
+        # instrument exposed as an assay parameter (-> parameterValue).
         params = assays[0].get("parameters", [])
         assert any(
             p.get("name") == "instrument" and p.get("value") == "LSRFortessa" for p in params
@@ -96,7 +93,7 @@ class TestCreateAssaysEnrichment:
 
     def test_facets_protocol_gets_instrument_and_reagent_parameters(self):
         study_data = _empty_study_data()
-        assay_types = {"facs": PartnerDataProcessor.ASSAY_TYPE_CONFIG["facs"]}
+        assay_types = {"facs": ExperimentProcessor.ASSAY_TYPE_CONFIG["facs"]}
         self.processor._create_assays(study_data, assay_types, ["#sample_1"], SimpleNamespace())
         facs_protocol = next(
             p for p in study_data["protocols"] if p["name"].lower() == "assay facs assay"
@@ -106,25 +103,25 @@ class TestCreateAssaysEnrichment:
             (p.get("parameterName", {}) or {}).get("annotationValue", "")
             for p in facs_protocol.get("parameters", [])
         }
-        # C3: instrument declared as a protocol parameter.
+        # instrument declared as a protocol parameter.
         assert "instrument" in param_names
-        # D2: detected reagents declared as protocol parameters.
+        # detected reagents declared as protocol parameters.
         assert "Calcein-AM" in param_names
         assert "Propidium Iodide" in param_names
 
     def test_non_live_dead_facs_keeps_default_measurement_type(self):
-        summary = _e100_summary()
+        summary = _fcs_summary()
         summary["is_live_dead"] = False
         processor = _new_processor(summary)
         study_data = _empty_study_data()
-        assay_types = {"facs": PartnerDataProcessor.ASSAY_TYPE_CONFIG["facs"]}
+        assay_types = {"facs": ExperimentProcessor.ASSAY_TYPE_CONFIG["facs"]}
         assays = processor._create_assays(study_data, assay_types, ["#sample_1"], SimpleNamespace())
         # No override -> default "flow cytometry assay".
         assert assays[0]["measurementType"]["annotationValue"] == "flow cytometry assay"
 
 
 # ---------------------------------------------------------------------------
-# C1 - per-sample process date/performer (_build_per_sample_processes)
+# Per-sample process date/performer (_build_per_sample_processes)
 # ---------------------------------------------------------------------------
 
 
@@ -136,6 +133,7 @@ class TestPerSampleProcessDatePerformer:
         assay = {
             "@id": "#assay_facs",
             "name": "FACS assay",
+            "assay_type": "facs",
             "dataFiles": [
                 {
                     "@id": "df_1",
@@ -148,7 +146,7 @@ class TestPerSampleProcessDatePerformer:
         samples = [
             {
                 "@id": "#sample_Control",
-                "name": "Retinal explant - B Control",
+                "name": "Explant - B Control",
                 "factorValues": [
                     {"category": {"@id": "#factor/donor"}, "value": {"annotationValue": "B"}},
                     {
@@ -158,7 +156,7 @@ class TestPerSampleProcessDatePerformer:
                 ],
             }
         ]
-        processor._build_per_sample_processes(study_data, [assay], samples, "study_E100")
+        processor._build_per_sample_processes(study_data, [assay], samples, "study_E10")
 
         ps = assay["processSequence"]
         assert ps, "expected at least one per-sample process"
@@ -167,7 +165,7 @@ class TestPerSampleProcessDatePerformer:
 
 
 # ---------------------------------------------------------------------------
-# C2 - sample-collection process date (_create_study_process_sequence)
+# Sample-collection process date (_create_study_process_sequence)
 # ---------------------------------------------------------------------------
 
 
@@ -197,7 +195,7 @@ class TestSampleCollectionDate:
 
 
 # ---------------------------------------------------------------------------
-# E2 - study description (_update_study_description)
+# Study description (_update_study_description)
 # ---------------------------------------------------------------------------
 
 
@@ -206,7 +204,7 @@ class TestStudyDescriptionEnrichment:
     def test_description_mentions_live_dead_and_instrument(self):
         processor = _new_processor()
         study_data = {
-            "identifier": "study_E100",
+            "identifier": "study_E10",
             "factors": [
                 {"name": "donor"},
                 {"name": "treatment"},
@@ -215,8 +213,8 @@ class TestStudyDescriptionEnrichment:
         }
         processor._update_study_description(
             study_data,
-            SimpleNamespace(experiment_name="E100"),
-            "Retinal explant",
+            SimpleNamespace(experiment_name="E10"),
+            "Explant",
             {"annotationValue": "unknown"},
             ["#s1"],
         )
@@ -230,19 +228,15 @@ class TestStudyDescriptionEnrichment:
 
 
 # ---------------------------------------------------------------------------
-# Data-dependent: the real E100 summary drives the same enrichment
+# Fixture-driven: the real (synthetic) FCS summary drives the enrichment
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.requires_data
 @pytest.mark.batch_component
-class TestRealE100Enrichment:
-    def test_real_summary_enriches_assay(self, representative_data_path):
-        if not representative_data_path:
-            pytest.skip("Representative data not available")
-        folder = representative_data_path / E100_FOLDER_NAME
-        if not folder.exists():
-            pytest.skip("E100 folder not found")
+class TestFixtureFcsEnrichment:
+    def test_fixture_summary_enriches_assay(self):
+        folder = FIXTURES / E10_FOLDER_NAME
+        assert folder.exists(), f"fixture folder not found: {folder}"
 
         summary = MetadataExtractor().extract_fcs_acquisition_summary(str(folder))
         assert summary.get("is_live_dead") is True
@@ -250,6 +244,6 @@ class TestRealE100Enrichment:
 
         processor = _new_processor(summary)
         study_data = _empty_study_data()
-        assay_types = {"facs": PartnerDataProcessor.ASSAY_TYPE_CONFIG["facs"]}
+        assay_types = {"facs": ExperimentProcessor.ASSAY_TYPE_CONFIG["facs"]}
         assays = processor._create_assays(study_data, assay_types, ["#sample_1"], SimpleNamespace())
         assert assays[0]["measurementType"]["annotationValue"] == "toxicity test"

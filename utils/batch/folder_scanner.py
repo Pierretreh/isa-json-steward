@@ -1,8 +1,9 @@
 """
-Folder Scanner for discovering experiment folders in partner data.
+Folder Scanner for discovering experiment folders.
 
-This module scans the partner representative data directory to discover
-experiment folders and extract basic metadata.
+This module scans a data root directory to discover experiment folders
+(matching the configured ``experiment_folder`` pattern) and extract basic
+metadata.
 
 The subdirectory-structure analysis (timepoints, processing states, assay
 sub-plates) resolves its pattern sets from the active profile's
@@ -23,6 +24,21 @@ from utils.config_loader import get_profile
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _matches_profile_type_keywords(type_name: str, name_lower: str) -> bool:
+    """Whether *name_lower* contains any profile keyword for *type_name*.
+
+    The keyword list comes from the active profile's ``experiment_patterns``
+    (``type_keywords``), so domain-specific spellings are profile-driven
+    rather than hard-coded here.  Falls back to the type name itself when the
+    profile provides no keywords.
+    """
+    try:
+        keywords = get_profile().get_experiment_keywords(type_name)
+    except Exception:  # pragma: no cover - defensive
+        keywords = [type_name]
+    return any(keyword and keyword.lower() in name_lower for keyword in keywords)
 
 
 @dataclass
@@ -109,15 +125,28 @@ class FolderMetadata:
 class FolderScanner:
     """Scanner for discovering experiment folders."""
 
-    def __init__(self, data_root: str):
+    def __init__(self, data_root: str, experiment_pattern: Optional[str] = None):
         """
         Initialize the folder scanner.
 
         Args:
             data_root: Root directory containing experiment folders
+            experiment_pattern: Optional experiment-folder name pattern that
+                overrides the profile's ``experiment_folder.pattern`` (used by
+                tests to prove configurability).  When omitted, the pattern is
+                read from the active profile (neutral default ``^E(\\d+)``).
         """
         self.data_root = Path(data_root)
         self.logger = logging.getLogger(__name__)
+        if experiment_pattern:
+            try:
+                self._pattern = re.compile(experiment_pattern, re.IGNORECASE)
+                self._group = self._pattern.groups and 1 or 0
+            except re.error:
+                self._pattern = re.compile(r"^E(\d+)", re.IGNORECASE)
+                self._group = 1
+        else:
+            self._pattern, self._group = get_profile().get_experiment_folder_pattern()
 
     def scan_experiments(self) -> List[FolderMetadata]:
         """
@@ -132,11 +161,11 @@ class FolderScanner:
             self.logger.error(f"Data root does not exist: {self.data_root}")
             return experiments
 
-        # Scan for experiment folders (starting with E followed by number)
+        # Scan for experiment folders matching the configured pattern
         for item in self.data_root.iterdir():
             if item.is_dir():
-                # Check if folder name matches experiment pattern (E1, E10, E100, etc.)
-                if re.match(r"^E\d+", item.name):
+                # Check if folder name matches the configured experiment pattern.
+                if self._pattern.match(item.name):
                     metadata = self._extract_folder_metadata(item)
                     if metadata:
                         experiments.append(metadata)
@@ -199,10 +228,13 @@ class FolderScanner:
         Returns:
             Tuple of (experiment_id, experiment_name)
         """
-        # Extract experiment ID (E1, E10, E100, etc.)
-        match = re.match(r"^(E\d+)", folder_name)
+        # Extract experiment ID using the configured experiment-folder pattern.
+        # The *full* matched leading token (e.g. "E1", "EXP01") is kept as the
+        # human-readable experiment id; the capture group (e.g. "1") remains
+        # available to callers that want the bare number.
+        match = self._pattern.match(folder_name)
         if match:
-            experiment_id = match.group(1)
+            experiment_id = match.group(0)
             experiment_name = folder_name
         else:
             experiment_id = folder_name
@@ -440,7 +472,7 @@ class FolderScanner:
                 groups["he_staining"].append(exp)
             elif "gfap" in name_lower:
                 groups["gfap"].append(exp)
-            elif "fluoreszenzmessung" in name_lower or "fluorescence" in name_lower:
+            elif _matches_profile_type_keywords("fluorescence", name_lower):
                 groups["fluorescence"].append(exp)
             else:
                 groups["other"].append(exp)
@@ -513,8 +545,8 @@ def main():
     """Main function for testing the folder scanner."""
     import sys
 
-    # Default to partner representative data directory
-    data_root = "partner representative data"
+    # Default to a neutral data directory
+    data_root = "data"
     output_path = "scripts/scan_results.json"
 
     if len(sys.argv) > 1:

@@ -620,7 +620,7 @@ def main():
     import sys
 
     # Test parameters
-    investigation_path = "organized_output/inv_ukf/inv_ukf.json"
+    investigation_path = "organized_output/inv_001/inv_001.json"
 
     if len(sys.argv) > 1:
         investigation_path = sys.argv[1]

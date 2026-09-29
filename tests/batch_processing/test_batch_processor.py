@@ -45,7 +45,7 @@ class TestBatchProcessor:
     def test_process_batch_single_experiment(self, batch_processor, temp_dir):
         """Test processing batch with single experiment."""
         # Create experiment folder with E-prefix (project naming convention)
-        exp_dir = temp_dir / "E1_test_experiment"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "data.csv").write_text("col1,col2\nval1,val2\n")
 
@@ -66,7 +66,7 @@ class TestBatchProcessor:
         """Test processing batch with multiple experiments."""
         # Create multiple experiment folders with E-prefix
         for i in range(3):
-            exp_dir = temp_dir / f"E{i+1}_experiment_{i}"
+            exp_dir = temp_dir / f"E{i+1}_viability_{i}"
             exp_dir.mkdir()
             (exp_dir / f"data_{i}.csv").write_text(f"data{i}\n")
 
@@ -142,7 +142,7 @@ class TestBatchProcessor:
 
     def test_process_batch_creates_investigation_file(self, batch_processor, temp_dir):
         """Test that batch processing creates investigation file."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "data.csv").write_text("data\n")
 
@@ -163,7 +163,7 @@ class TestBatchProcessor:
 
     def test_process_batch_populates_classifications(self, batch_processor, temp_dir):
         """Test that per-experiment classifications are captured (D5)."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "data.csv").write_text("data\n")
 
@@ -185,7 +185,7 @@ class TestBatchProcessor:
 
     def test_process_batch_cancel_event_short_circuits(self, batch_processor, temp_dir):
         """Test that a pre-set cancel_event stops the run before Step 2 (D5)."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "data.csv").write_text("data\n")
 

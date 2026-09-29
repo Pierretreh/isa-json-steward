@@ -336,7 +336,7 @@ class TestParameterPopulation:
             "experiment_id": "E1",
             "cell_types": ["muller_cell"],
             "assay_types": ["calcein"],
-            "protein_variants": ["pVV019"],
+            "protein_variants": ["protA"],
             "drugs": [],
             "concentrations": [50.0],
             "concentrations_raw": ["50"],
@@ -457,7 +457,7 @@ class TestParameterPopulation:
             "experiment_id": "E1",
             "cell_types": ["muller_cell"],
             "assay_types": ["calcein"],
-            "protein_variants": ["pVV019"],
+            "protein_variants": ["protA"],
             "drugs": [],
             "concentrations": [50.0],
             "concentrations_raw": ["50"],
@@ -532,20 +532,20 @@ class TestParameterPopulation:
         """End-to-end: generate_study should produce assays with non-empty parameterValues."""
         from utils.batch.folder_scanner import FileInventory, FolderMetadata
 
-        exp_path = temp_dir / "E1_Müller_calcein_50uM_48h"
+        exp_path = temp_dir / "E1_calcein_50uM_48h"
         exp_path.mkdir(parents=True, exist_ok=True)
         (exp_path / "image.czi").write_bytes(b"\x00")
 
         FolderMetadata(
             experiment_id="E1",
-            experiment_name="E1_Müller_calcein_50uM_48h",
+            experiment_name="E1_calcein_50uM_48h",
             folder_path=str(exp_path),
             file_inventory=FileInventory(czi_files=[str(exp_path / "image.czi")]),
         )
 
         # Patch generate_study to use our metadata directly
         # We'll test via _create_assay_from_experiment instead
-        exp_meta = isa_json_generator._extract_experiment_metadata("E1_Müller_calcein_50uM_48h")
+        exp_meta = isa_json_generator._extract_experiment_metadata("E1_calcein_50uM_48h")
         assay_type_key = "calcein"
         template_name = isa_json_generator.classifier.TYPE_TO_TEMPLATE.get(
             assay_type_key, "microscopy_assay.json"

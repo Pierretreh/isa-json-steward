@@ -28,7 +28,7 @@ class TestFolderScanner:
     def test_scan_single_experiment(self, temp_dir):
         """Test scanning a directory with one experiment."""
         # Create experiment folder with E-prefix (project naming convention)
-        exp_dir = temp_dir / "E1_test_experiment"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "data.csv").write_text("col1,col2\nval1,val2\n")
 
@@ -36,14 +36,14 @@ class TestFolderScanner:
         experiments = scanner.scan_experiments()
 
         assert len(experiments) == 1
-        assert experiments[0].experiment_name == "E1_test_experiment"
+        assert experiments[0].experiment_name == "E1_viability"
         assert experiments[0].folder_path == str(exp_dir)
 
     def test_scan_multiple_experiments(self, temp_dir):
         """Test scanning a directory with multiple experiments."""
         # Create multiple experiment folders with E-prefix
         for i in range(3):
-            exp_dir = temp_dir / f"E{i+1}_experiment_{i}"
+            exp_dir = temp_dir / f"E{i+1}_viability_{i}"
             exp_dir.mkdir()
             (exp_dir / f"data_{i}.csv").write_text(f"data{i}\n")
 
@@ -52,13 +52,13 @@ class TestFolderScanner:
 
         assert len(experiments) == 3
         exp_names = [exp.experiment_name for exp in experiments]
-        assert "E1_experiment_0" in exp_names
-        assert "E2_experiment_1" in exp_names
-        assert "E3_experiment_2" in exp_names
+        assert "E1_viability_0" in exp_names
+        assert "E2_viability_1" in exp_names
+        assert "E3_viability_2" in exp_names
 
     def test_create_file_inventory(self, temp_dir):
         """Test file inventory creation."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
 
         # Create various files
@@ -78,7 +78,7 @@ class TestFolderScanner:
 
     def test_file_inventory_file_types(self, temp_dir):
         """Test file type detection in inventory."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
 
         # Create files with different extensions
@@ -100,7 +100,7 @@ class TestFolderScanner:
 
     def test_folder_metadata_creation(self, temp_dir):
         """Test FolderMetadata creation."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "data.csv").write_text("data\n")
 
@@ -111,13 +111,13 @@ class TestFolderScanner:
         metadata = experiments[0]
 
         assert isinstance(metadata, FolderMetadata)
-        assert metadata.experiment_name == "E1_test_exp"
+        assert metadata.experiment_name == "E1_viability"
         assert metadata.folder_path == str(exp_dir)
         assert metadata.file_count == 1
 
     def test_nested_directory_handling(self, temp_dir):
         """Test handling of nested directories."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
 
         # Create nested structure
@@ -140,7 +140,7 @@ class TestFolderScanner:
 
     def test_hidden_files_handling(self, temp_dir):
         """Test handling of hidden files."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
 
         # Create hidden file
@@ -167,13 +167,13 @@ class TestFolderMetadata:
         """Test FolderMetadata properties."""
         metadata = FolderMetadata(
             experiment_id="E1",
-            experiment_name="E1_test_exp",
+            experiment_name="E1_viability",
             folder_path="/test/path",
             file_count=5,
         )
 
         assert metadata.experiment_id == "E1"
-        assert metadata.experiment_name == "E1_test_exp"
+        assert metadata.experiment_name == "E1_viability"
         assert metadata.folder_path == "/test/path"
         assert metadata.file_count == 5
 
@@ -181,7 +181,7 @@ class TestFolderMetadata:
         """Test FolderMetadata field access."""
         metadata = FolderMetadata(
             experiment_id="E1",
-            experiment_name="E1_test_exp",
+            experiment_name="E1_viability",
             folder_path="/test/path",
             file_count=5,
         )
@@ -199,7 +199,7 @@ class TestFileInventory:
 
     def test_file_inventory_creation(self, temp_dir):
         """Test FileInventory creation."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "file1.txt").write_text("data1\n")
         (exp_dir / "file2.txt").write_text("data2\n")
@@ -212,7 +212,7 @@ class TestFileInventory:
 
     def test_file_inventory_by_type(self, temp_dir):
         """Test filtering files by type."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "data.csv").write_text("csv\n")
         (exp_dir / "image.tiff").write_bytes(b"img")
@@ -228,7 +228,7 @@ class TestFileInventory:
 
     def test_file_inventory_summary(self, temp_dir):
         """Test file inventory summary."""
-        exp_dir = temp_dir / "E1_test_exp"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "file1.csv").write_text("data1\n")
         (exp_dir / "file2.tiff").write_bytes(b"img")
@@ -270,7 +270,7 @@ class TestSubdirectoryHints:
 
     def test_timepoint_dirs_detected(self, temp_dir):
         """D0/D1 subdirectories → timepoint_dirs populated."""
-        exp_dir = temp_dir / "E15_test"
+        exp_dir = temp_dir / "E15_viability"
         exp_dir.mkdir()
         d0 = exp_dir / "D0"
         d1 = exp_dir / "D1"
@@ -292,7 +292,7 @@ class TestSubdirectoryHints:
 
     def test_timepoint_day_prefix(self, temp_dir):
         """Day0/Day1 subdirectories → timepoint_dirs with 'Day' prefix."""
-        exp_dir = temp_dir / "E1_test"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "Day0").mkdir()
         (exp_dir / "Day1").mkdir()
@@ -305,7 +305,7 @@ class TestSubdirectoryHints:
 
     def test_timepoint_week_prefix(self, temp_dir):
         """Week1 subdirectory → timepoint_dirs with 'Week' prefix."""
-        exp_dir = temp_dir / "E1_test"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "Week1").mkdir()
 
@@ -316,7 +316,7 @@ class TestSubdirectoryHints:
 
     def test_processing_dirs_detected(self, temp_dir):
         """filtriert/unfiltriert → processing_dirs populated."""
-        exp_dir = temp_dir / "E15_test"
+        exp_dir = temp_dir / "E15_viability"
         exp_dir.mkdir()
         (exp_dir / "filtriert").mkdir()
         (exp_dir / "unfiltriert").mkdir()
@@ -330,7 +330,7 @@ class TestSubdirectoryHints:
 
     def test_processing_vorher_detected(self, temp_dir):
         """'Filtriert vorher' → 'pre-filtered'."""
-        exp_dir = temp_dir / "E15_test"
+        exp_dir = temp_dir / "E15_viability"
         exp_dir.mkdir()
         (exp_dir / "Filtriert vorher").mkdir()
 
@@ -341,7 +341,7 @@ class TestSubdirectoryHints:
 
     def test_assay_dirs_detected(self, temp_dir):
         """FACS/ subdirectory → assay_dirs populated."""
-        exp_dir = temp_dir / "E1_test"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "FACS").mkdir()
         (exp_dir / "Calcein").mkdir()
@@ -380,7 +380,7 @@ class TestSubdirectoryHints:
 
     def test_files_by_subdir_populated(self, temp_dir):
         """files_by_subdir should contain files grouped by subdirectory."""
-        exp_dir = temp_dir / "E1_test"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         d0 = exp_dir / "D0"
         d0.mkdir()
@@ -395,7 +395,7 @@ class TestSubdirectoryHints:
 
     def test_subdirectory_hints_in_metadata(self, temp_dir):
         """FolderMetadata should include subdirectory_hints after scan."""
-        exp_dir = temp_dir / "E15_test"
+        exp_dir = temp_dir / "E15_viability"
         exp_dir.mkdir()
         (exp_dir / "D0").mkdir()
         (exp_dir / "data.fcs").write_bytes(b"fcs")
@@ -411,7 +411,7 @@ class TestSubdirectoryHints:
 
     def test_non_meaningful_subdirs_no_structure(self, temp_dir):
         """Subdirs that don't match any pattern → has_structure = False."""
-        exp_dir = temp_dir / "E1_test"
+        exp_dir = temp_dir / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "temp").mkdir()
         (exp_dir / "backup").mkdir()
@@ -422,3 +422,56 @@ class TestSubdirectoryHints:
 
         assert hints.has_structure is False
         assert len(hints.immediate_subdirs) == 3
+
+
+@pytest.mark.unit
+@pytest.mark.batch_component
+class TestCustomExperimentPattern:
+    """The experiment-folder pattern is configurable (not hard-coded E#).
+
+    Passing ``experiment_pattern`` to the scanner overrides the profile's
+    ``experiment_folder.pattern``: folders following the custom convention
+    are discovered (and their id extracted), while E#-named folders are
+    *not* — proving the pattern is genuinely honoured.
+    """
+
+    def test_custom_pattern_discovers_matching_folders(self, temp_dir):
+        """Folders matching '^EXP\\d+' are discovered with their custom pattern."""
+        for name in ("EXP01_viability", "EXP02_facs"):
+            (temp_dir / name).mkdir()
+            (temp_dir / name / "data.csv").write_text("data\n")
+
+        # A folder following the *default* convention must NOT be picked up.
+        (temp_dir / "E9_default_style").mkdir()
+        (temp_dir / "E9_default_style" / "data.csv").write_text("data\n")
+
+        scanner = FolderScanner(str(temp_dir), experiment_pattern=r"^EXP\d+")
+        experiments = scanner.scan_experiments()
+
+        names = sorted(e.experiment_name for e in experiments)
+        assert names == ["EXP01_viability", "EXP02_facs"]
+
+    def test_custom_pattern_extracts_id(self, temp_dir):
+        """The experiment id is the full matched leading token."""
+        (temp_dir / "EXP42_viability").mkdir()
+        (temp_dir / "EXP42_viability" / "data.csv").write_text("data\n")
+
+        scanner = FolderScanner(str(temp_dir), experiment_pattern=r"^EXP\d+")
+        experiments = scanner.scan_experiments()
+
+        assert len(experiments) == 1
+        assert experiments[0].experiment_id == "EXP42"
+        assert experiments[0].experiment_name == "EXP42_viability"
+
+    def test_default_pattern_still_works(self, temp_dir):
+        """Without an override, the neutral default E# convention applies."""
+        (temp_dir / "E7_viability").mkdir()
+        (temp_dir / "E7_viability" / "data.csv").write_text("data\n")
+        (temp_dir / "EXP42_viability").mkdir()
+        (temp_dir / "EXP42_viability" / "data.csv").write_text("data\n")
+
+        scanner = FolderScanner(str(temp_dir))
+        experiments = scanner.scan_experiments()
+
+        names = [e.experiment_name for e in experiments]
+        assert names == ["E7_viability"]

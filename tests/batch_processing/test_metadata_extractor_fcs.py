@@ -2,10 +2,10 @@
 
 Covers:
   * A1 - the fixed FCS header / TEXT-segment parser (instrument, operator,
-    date, channels) against the real E100 .fcs files.
+    date, channels) against the committed synthetic fixture .fcs files.
   * A2 - the folder-level FCS acquisition aggregator and Live/Dead detection.
   * Pure-unit helpers (_parse_fcs_date, _infer_fcs_markers) that do not require
-    the representative dataset, so they run in every environment.
+    any dataset, so they run in every environment.
 """
 
 import sys
@@ -19,7 +19,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from utils.batch.metadata_extractor import MetadataExtractor  # noqa: E402
 
-E100_FOLDER_NAME = "E100_Explant_FACS_pVV021 und cleav 0,5 zu 4uM_n=5"
+FIXTURES = Path(__file__).parent / "fixtures"
+E10_FOLDER_NAME = "E10_explant_facs_treatment_donor"
 
 
 @pytest.fixture
@@ -81,34 +82,30 @@ class TestFcsMarkerInference:
 
 
 # ---------------------------------------------------------------------------
-# Data-dependent tests against the real E100 .fcs files
+# Data-dependent tests against the synthetic fixture FCS files
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.requires_data
 @pytest.mark.batch_component
-class TestFcsMetadataOnE100:
-    """Validate the corrected parser against the real E100 dataset.
+class TestFcsMetadataAcquisitionSummary:
+    """Validate the corrected parser against the committed synthetic FCS fixture.
 
-    Expected header facts (extracted manually from the FCS TEXT segment):
+    Expected header facts (synthetic, project-agnostic):
       $CYT  = LSRFortessa      (BD instrument)
       $OP   = Boneva           (operator)
       $DATE = 16-DEC-2025      (-> ISO 2025-12-16)
       channels include FITC-A and PI-A  (Live/Dead viability assay)
     """
 
-    def _e100_folder(self, representative_data_path):
-        if not representative_data_path:
-            pytest.skip("Representative data not available")
-        folder = representative_data_path / E100_FOLDER_NAME
-        if not folder.exists():
-            pytest.skip(f"E100 folder not found: {folder}")
+    def _fixture_folder(self):
+        folder = FIXTURES / E10_FOLDER_NAME
+        assert folder.exists(), f"fixture folder not found: {folder}"
         return folder
 
-    def test_single_file_header_fields(self, extractor, representative_data_path):
-        folder = self._e100_folder(representative_data_path)
+    def test_single_file_header_fields(self, extractor):
+        folder = self._fixture_folder()
         fcs_files = sorted(folder.rglob("*.fcs"))
-        assert fcs_files, "E100 should contain .fcs files"
+        assert fcs_files, "fixture should contain .fcs files"
 
         md = extractor.extract_fcs_metadata(str(fcs_files[0]))
 
@@ -127,8 +124,8 @@ class TestFcsMetadataOnE100:
         assert "$PAR" in md  # parameter count keyword echoed
         assert "$TOT" in md  # total events keyword echoed
 
-    def test_per_file_markers_and_live_dead(self, extractor, representative_data_path):
-        folder = self._e100_folder(representative_data_path)
+    def test_per_file_markers_and_live_dead(self, extractor):
+        folder = self._fixture_folder()
         fcs_files = sorted(folder.rglob("*.fcs"))
 
         for fp in fcs_files:
@@ -137,8 +134,8 @@ class TestFcsMetadataOnE100:
             assert "Calcein-AM" in dyes, f"Calcein-AM missing in {fp.name}"
             assert "Propidium Iodide" in dyes, f"PI missing in {fp.name}"
 
-    def test_acquisition_summary_consensus(self, extractor, representative_data_path):
-        folder = self._e100_folder(representative_data_path)
+    def test_acquisition_summary_consensus(self, extractor):
+        folder = self._fixture_folder()
         fcs_files = sorted(folder.rglob("*.fcs"))
 
         summary = extractor.extract_fcs_acquisition_summary(str(folder))

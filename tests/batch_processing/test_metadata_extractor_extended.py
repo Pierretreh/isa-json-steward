@@ -468,7 +468,7 @@ class TestExtractAllMetadata:
 
     def test_extract_from_folder(self, extractor, tmp_path):
         # Create a folder with some files
-        exp_dir = tmp_path / "E1_test"
+        exp_dir = tmp_path / "E1_viability"
         exp_dir.mkdir()
         (exp_dir / "data.csv").write_text("a,b\n1,2\n", encoding="utf-8")
         (exp_dir / "image.tiff").write_bytes(b"II\x2a\x00" + b"\x00" * 50)

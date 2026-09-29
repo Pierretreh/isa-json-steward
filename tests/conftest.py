@@ -39,6 +39,45 @@ def _discover_profile_dir() -> Optional[Path]:
 
 
 # ----------------------------------------------------------------------
+# Synthetic test profile (neutral factor rules + core fallback)
+# ----------------------------------------------------------------------
+
+
+def _synthetic_profile_dir() -> Path:
+    """Return the committed synthetic test profile directory."""
+    return Path(__file__).parent / "batch_processing" / "fixtures" / "synthetic_profile"
+
+
+@pytest.fixture
+def synthetic_profile():
+    """Activate the synthetic test profile for the duration of the test.
+
+    The synthetic profile ships a neutral donor/treatment/concentration
+    rule (``factor_extraction_rules.json``) while every other config
+    section falls back to the core defaults.  This lets the
+    rule-dependent batch tests run against committed, project-agnostic
+    data instead of a real (private) dataset.
+    """
+    from utils.config_loader import set_profile
+
+    set_profile(str(_synthetic_profile_dir()))
+    return _synthetic_profile_dir()
+
+
+@pytest.fixture(autouse=True)
+def _restore_default_profile():
+    """Reset the profile singleton to the default (core) after each test.
+
+    Prevents a test that activates the synthetic profile from leaking that
+    state into subsequent tests.
+    """
+    yield
+    import utils.config_loader as _config_loader
+
+    _config_loader._profile = None
+
+
+# ----------------------------------------------------------------------
 # Fixtures for temporary directories
 # ----------------------------------------------------------------------
 
@@ -257,9 +296,23 @@ def sample_json_file(temp_dir):
 
 @pytest.fixture
 def representative_data_path():
-    """Path to representative dataset."""
-    path = Path("references/partner representative data")
+    """Path to the committed synthetic fixture dataset.
+
+    Points to ``tests/batch_processing/fixtures`` (synthetic, project-
+    agnostic experiment folders).  An optional real dataset can be supplied
+    via the ``ISA_STEWARD_DATA`` environment variable.
+    """
+    env = os.environ.get("ISA_STEWARD_DATA")
+    if env and Path(env).is_dir():
+        return Path(env)
+    path = Path(__file__).parent / "batch_processing" / "fixtures"
     return path if path.exists() else None
+
+
+@pytest.fixture
+def synthetic_fixture_root():
+    """Path to the committed synthetic fixture tree (explicit name)."""
+    return Path(__file__).parent / "batch_processing" / "fixtures"
 
 
 @pytest.fixture

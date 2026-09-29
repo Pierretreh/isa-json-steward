@@ -1,26 +1,33 @@
 """
-Tests for the Partner Data Processor.
+Tests for the Experiment folder processor (utils.batch.experiment_processor).
 
-These tests verify that the automated partner data processing pipeline
-produces GUI-compatible, ISA-JSON compliant output.
+These tests verify that the batch conversion pipeline produces
+GUI-compatible, ISA-JSON compliant output from the committed synthetic
+fixtures in ``tests/batch_processing/fixtures/``.
+
+The test classes exercise the neutralised experiment-folder processor
+(``ExperimentProcessor``) against the committed synthetic fixture tree
+(E1 / E10 / E11 convention).
 """
 
 import json
+import os
+import re
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-try:
-    import scripts.process_partner_data  # noqa: F401
-except ImportError:
-    pytest.skip(
-        "scripts.process_partner_data not available (moved to private profile)",
-        allow_module_level=True,
-    )
-
-from scripts.process_partner_data import BatchResult, PartnerDataProcessor
 from utils.batch.experiment_classifier import ExperimentClassification
+from utils.batch.experiment_processor import BatchResult, ExperimentProcessor
 from utils.batch.folder_scanner import FileInventory, FolderMetadata
+
+# Committed synthetic fixtures (E1 / E10 / E11 convention).
+FIXTURES = Path(__file__).parent / "fixtures"
+E1_FOLDER_NAME = "E1_viability_calcein_facs"
+E10_FOLDER_NAME = "E10_explant_facs_treatment_donor"
+E11_FOLDER_NAME = "E11_explant_facs_static_dapi"
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -29,28 +36,15 @@ from utils.batch.folder_scanner import FileInventory, FolderMetadata
 
 @pytest.fixture
 def temp_investigations(tmp_path, monkeypatch):
-    """Create a temporary investigations directory and monkeypatch DirectoryManager."""
+    """Point the processor at the committed fixture data root."""
     inv_root = tmp_path / "investigations"
     inv_root.mkdir()
 
-    # Create minimal partner data structure
-    data_root = tmp_path / "partner_data"
-    data_root.mkdir()
+    data_root = FIXTURES
 
-    # Create a mock E1 experiment folder
-    e1_folder = data_root / "E1_Müller_Calceinassay und FACS Test"
-    e1_folder.mkdir()
-    (e1_folder / "sample.czi").write_bytes(b"fake czi data")
-    (e1_folder / "sample.fcs").write_bytes(b"fake fcs data")
-    (e1_folder / "data.xlsx").write_bytes(b"fake xlsx data")
-    (e1_folder / "image.tiff").write_bytes(b"fake tiff data")
-    (e1_folder / "image.png").write_bytes(b"fake png data")
-
-    # Create a mock E10 experiment folder
-    e10_folder = data_root / "E10_Explant_Calcein_FACS"
-    e10_folder.mkdir()
-    (e10_folder / "explant_1.czi").write_bytes(b"fake czi data")
-    (e10_folder / "explant_control.fcs").write_bytes(b"fake fcs data")
+    # Sanity: the required fixture folders must be committed.
+    for name in (E1_FOLDER_NAME, E10_FOLDER_NAME, E11_FOLDER_NAME):
+        assert (data_root / name).is_dir(), f"missing fixture folder: {name}"
 
     monkeypatch.chdir(tmp_path)
 
@@ -64,10 +58,10 @@ def temp_investigations(tmp_path, monkeypatch):
 
 @pytest.fixture
 def processor(temp_investigations):
-    """Create a PartnerDataProcessor with temporary directories."""
-    return PartnerDataProcessor(
+    """Create an ExperimentProcessor backed by the committed fixtures."""
+    return ExperimentProcessor(
         data_root=str(temp_investigations["data_root"]),
-        investigation_id="inv_test",
+        investigation_id="inv_fixture_01",
         base_path=str(temp_investigations["base_path"]),
         skip_conversion=True,
         validate=False,
@@ -80,7 +74,7 @@ def sample_experiment():
     """Create a sample FolderMetadata for testing."""
     return FolderMetadata(
         experiment_id="E1",
-        experiment_name="E1_Müller_Calceinassay und FACS Test",
+        experiment_name=E1_FOLDER_NAME,
         folder_path="/fake/path",
         file_inventory=FileInventory(
             czi_files=["sample.czi"],
@@ -103,33 +97,66 @@ def sample_experiment_type():
     )
 
 
+@pytest.fixture
+def e11_style_folder(tmp_path, monkeypatch):
+    """Point the processor at the committed E11-style fixture folder."""
+    inv_root = tmp_path / "investigations"
+    inv_root.mkdir()
+
+    data_root = FIXTURES
+    e11 = data_root / E11_FOLDER_NAME
+    assert e11.is_dir(), f"missing fixture folder: {E11_FOLDER_NAME}"
+
+    monkeypatch.chdir(tmp_path)
+
+    return {
+        "tmp_path": tmp_path,
+        "data_root": data_root,
+        "inv_root": inv_root,
+        "base_path": str(tmp_path),
+    }
+
+
+@pytest.fixture
+def e11_processor(e11_style_folder):
+    """Create a processor with E11-style fixture data."""
+    return ExperimentProcessor(
+        data_root=str(e11_style_folder["data_root"]),
+        investigation_id="inv_fixture_02",
+        skip_conversion=True,
+        validate=False,
+        verbose=True,
+        base_path=str(e11_style_folder["base_path"]),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Initialization tests
 # ---------------------------------------------------------------------------
 
 
-class TestPartnerDataProcessorInit:
-    """Tests for PartnerDataProcessor initialization."""
+class TestExperimentProcessorInit:
+    """Tests for ExperimentProcessor initialization."""
 
     def test_init_creates_processor(self, temp_investigations):
         """Test that processor initializes correctly."""
-        processor = PartnerDataProcessor(
+        processor = ExperimentProcessor(
             data_root=str(temp_investigations["data_root"]),
-            investigation_id="inv_test",
+            investigation_id="inv_fixture_01",
             base_path=str(temp_investigations["base_path"]),
         )
-        assert processor.investigation_id == "inv_test"
+        assert processor.investigation_id == "inv_fixture_01"
         assert processor.data_root == Path(temp_investigations["data_root"])
 
     def test_init_creates_investigation_directory(self, temp_investigations):
         """Test that processor creates the investigation directory."""
-        processor = PartnerDataProcessor(
+        processor = ExperimentProcessor(
             data_root=str(temp_investigations["data_root"]),
-            investigation_id="inv_test",
+            investigation_id="inv_fixture_01",
             base_path=str(temp_investigations["base_path"]),
         )
         # DirectoryManager uses its own base_path / investigations / inv_id
-        inv_path = processor.dm.get_investigation_path("inv_test")
+        inv_path = processor.dm.get_investigation_path("inv_fixture_01")
         assert inv_path.exists()
 
 
@@ -142,7 +169,7 @@ class TestStudyIdGeneration:
     """Tests for study ID generation."""
 
     def test_generate_study_id_from_e1(self, processor, sample_experiment):
-        """Test study ID generation for E1 experiment."""
+        """Test study ID generation for the E1 experiment."""
         study_id = processor._generate_study_id(sample_experiment)
         assert study_id.startswith("study_E1_")
         # Should be a safe identifier
@@ -161,22 +188,36 @@ class TestStudyIdGeneration:
 
 
 class TestCellTypeDetection:
-    """Tests for cell/tissue type detection from folder names."""
+    """Tests for cell/tissue type detection from folder names.
 
-    def test_detect_muller_cells(self, processor, sample_experiment):
-        """Test detection of Müller cells."""
-        cell_type = processor._determine_cell_type(sample_experiment)
-        assert "Müller" in cell_type
+    The core cell-type registry maps the keywords ``endothelial_cell`` and
+    ``cell_explant`` to themselves; any other name falls back to ``Unknown``.
+    """
+
+    def test_detect_endothelial_cell(self, processor):
+        """Test detection of the ``endothelial_cell`` keyword."""
+        exp = FolderMetadata(
+            experiment_id="E12",
+            experiment_name="E12_endothelial_cell_facs",
+            folder_path="/fake",
+        )
+        cell_type = processor._determine_cell_type(exp)
+        assert cell_type == "endothelial_cell"
 
     def test_detect_explant(self, processor):
-        """Test detection of retinal explant."""
+        """Test detection of the ``cell_explant`` keyword."""
         exp = FolderMetadata(
             experiment_id="E10",
-            experiment_name="E10_Explant_Calcein_FACS",
+            experiment_name="E10_cell_explant_facs",
             folder_path="/fake",
         )
         cell_type = processor._determine_cell_type(exp)
         assert "explant" in cell_type.lower()
+
+    def test_unknown_cell_type(self, processor, sample_experiment):
+        """Test that an unmatched folder name falls back to ``Unknown``."""
+        cell_type = processor._determine_cell_type(sample_experiment)
+        assert cell_type == "Unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -188,11 +229,11 @@ class TestConditionExtraction:
     """Tests for experimental condition extraction from file names."""
 
     def test_extract_conditions_from_e1(self, processor, temp_investigations):
-        """Test condition extraction from E1 experiment."""
-        e1_folder = temp_investigations["data_root"] / "E1_Müller_Calceinassay und FACS Test"
+        """Test condition extraction from the E1 experiment."""
+        e1_folder = temp_investigations["data_root"] / E1_FOLDER_NAME
         exp = FolderMetadata(
             experiment_id="E1",
-            experiment_name="E1_Müller_Calceinassay und FACS Test",
+            experiment_name=E1_FOLDER_NAME,
             folder_path=str(e1_folder),
         )
         conditions = processor._determine_conditions(exp)
@@ -209,13 +250,13 @@ class TestAssayTypeDetermination:
     """Tests for assay type determination from experiment metadata."""
 
     def test_calcein_and_facs_for_e1(self, processor, sample_experiment, sample_experiment_type):
-        """Test that E1 experiment gets calcein and FACS assay types."""
+        """Test that the E1 experiment gets calcein and FACS assay types."""
         assay_types = processor._determine_assay_types(sample_experiment, sample_experiment_type)
         assert "calcein" in assay_types
         assert "facs" in assay_types
 
     def test_facs_for_e10(self, processor):
-        """Test that E10 experiment gets correct assay types."""
+        """Test that an explant FACS experiment gets both assay types."""
         exp = FolderMetadata(
             experiment_id="E10",
             experiment_name="E10_Explant_Calcein_FACS",
@@ -231,7 +272,8 @@ class TestAssayTypeDetermination:
         )
         assay_types = processor._determine_assay_types(exp, exp_type)
         assert "facs" in assay_types
-        assert "calcein" in assay_types  # Has "Calcein" in folder name
+        # calcein is matched via the folder name keyword
+        assert "calcein" in assay_types
 
 
 # ---------------------------------------------------------------------------
@@ -295,10 +337,10 @@ class TestMaterialCreation:
 
     def test_create_materials_produces_source(self, processor, temp_investigations):
         """Test that material creation produces a source material."""
-        e1_folder = temp_investigations["data_root"] / "E1_Müller_Calceinassay und FACS Test"
+        e1_folder = temp_investigations["data_root"] / E1_FOLDER_NAME
         exp = FolderMetadata(
             experiment_id="E1",
-            experiment_name="E1_Müller_Calceinassay und FACS Test",
+            experiment_name=E1_FOLDER_NAME,
             folder_path=str(e1_folder),
         )
         exp_type = ExperimentClassification(
@@ -308,7 +350,7 @@ class TestMaterialCreation:
             detected_keywords=["calcein"],
             detected_files=[],
         )
-        study_id = "study_E1_test"
+        study_id = "study_001"
         study_data = processor._create_study(exp, study_id, exp_type)
 
         from utils.material_manager import MaterialManager
@@ -505,8 +547,8 @@ class TestFullPipeline:
         """Test processing all experiment folders."""
         result = processor.process_all()
 
-        assert result.total_experiments >= 2  # E1 and E10
-        assert result.successful >= 2
+        assert result.total_experiments >= 3  # E1, E10 and E11
+        assert result.successful >= 3
         assert result.failed == 0
 
     def test_process_all_creates_study_jsons(self, processor, temp_investigations):
@@ -555,10 +597,10 @@ class TestFullPipeline:
 
     def test_process_single_experiment(self, processor, temp_investigations):
         """Test processing a single experiment."""
-        e1_folder = temp_investigations["data_root"] / "E1_Müller_Calceinassay und FACS Test"
+        e1_folder = temp_investigations["data_root"] / E1_FOLDER_NAME
         exp = FolderMetadata(
             experiment_id="E1",
-            experiment_name="E1_Müller_Calceinassay und FACS Test",
+            experiment_name=E1_FOLDER_NAME,
             folder_path=str(e1_folder),
         )
 
@@ -602,9 +644,9 @@ class TestValidation:
 
     def test_internal_validation_runs(self, temp_investigations):
         """Test that internal validation runs without errors."""
-        processor = PartnerDataProcessor(
+        processor = ExperimentProcessor(
             data_root=str(temp_investigations["data_root"]),
-            investigation_id="inv_val_test",
+            investigation_id="inv_fixture_03",
             skip_conversion=True,
             validate=True,
             base_path=str(temp_investigations["base_path"]),
@@ -615,75 +657,19 @@ class TestValidation:
 
 
 # ---------------------------------------------------------------------------
-# Data fidelity fix tests
+# File-to-assay assignment tests (E11-style fixture)
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def e11_style_folder(tmp_path, monkeypatch):
-    """Create an E11-like folder with FACS/ and *_files/ subdirectories."""
-    inv_root = tmp_path / "investigations"
-    inv_root.mkdir()
-
-    data_root = tmp_path / "partner_data"
-    data_root.mkdir()
-    e11 = data_root / "E11_Explant_FACS_Static_DAPI"
-    e11.mkdir()
-
-    # FACS subdirectory with .fcs, .wsp, and .png plot images
-    facs_dir = e11 / "FACS"
-    facs_dir.mkdir()
-    (facs_dir / "poriceRetina_LiveDead_Control.fcs").write_bytes(b"fake fcs")
-    (facs_dir / "Explant_2mm_Control_1.png").write_bytes(b"fake facs png")
-    (facs_dir / "analysis.wsp").write_bytes(b"fake wsp")
-
-    # Pyramidal image subdirectories (*_files/)
-    img_dir = e11 / "Explant_DAPI_Calcein_6.png_files"
-    img_dir.mkdir()
-    (img_dir / "Explant_DAPI_Calcein_Ethidiumbromid_6.czi").write_bytes(b"fake czi")
-    (img_dir / "Explant_DAPI_6.png").write_bytes(b"fake dapi png")
-    (img_dir / "Explant_Calcein_6.png").write_bytes(b"fake calcein png")
-    (img_dir / "Explant_DAPI_6.tif").write_bytes(b"fake tif")
-    (img_dir / "Explant_DAPI_6.png_metadata.xml").write_bytes(b"fake xml")
-
-    # Second pyramidal directory
-    img_dir2 = e11 / "Explant_DAPI_Calcein_7.png_files"
-    img_dir2.mkdir()
-    (img_dir2 / "Explant_DAPI_Calcein_Ethidiumbromid_7.czi").write_bytes(b"fake czi")
-    (img_dir2 / "Explant_DAPI_7.png").write_bytes(b"fake png")
-
-    monkeypatch.chdir(tmp_path)
-
-    return {
-        "tmp_path": tmp_path,
-        "data_root": data_root,
-        "inv_root": inv_root,
-        "base_path": str(tmp_path),
-    }
-
-
-@pytest.fixture
-def e11_processor(e11_style_folder):
-    """Create a processor with E11-style data."""
-    return PartnerDataProcessor(
-        data_root=str(e11_style_folder["data_root"]),
-        investigation_id="inv_e11_test",
-        skip_conversion=True,
-        validate=False,
-        verbose=True,
-        base_path=str(e11_style_folder["base_path"]),
-    )
-
-
 class TestFileToAssayAssignment:
-    """Tests for Phase 1: context-aware file-to-assay assignment."""
+    """Tests for context-aware file-to-assay assignment."""
 
     def test_dapi_assay_receives_pyramidal_dir_files(self, e11_processor, e11_style_folder):
         """Files in *_files/ pyramidal subdirectories should be assigned to DAPI assay."""
-        e11_folder = e11_style_folder["data_root"] / "E11_Explant_FACS_Static_DAPI"
+        e11_folder = e11_style_folder["data_root"] / E11_FOLDER_NAME
         exp = FolderMetadata(
             experiment_id="E11",
-            experiment_name="E11_Explant_FACS_Static_DAPI",
+            experiment_name=E11_FOLDER_NAME,
             folder_path=str(e11_folder),
         )
         result = e11_processor._process_experiment(exp)
@@ -702,10 +688,10 @@ class TestFileToAssayAssignment:
         dapi_assay = None
         for assay in study.get("assays", []):
             name = assay.get("measurementType", {}).get("annotationValue", "").lower()
-            if "histology" in name:
-                # Histology-type assay could be DAPI
+            if "staining" in name:
+                # Staining-type assay is the DAPI assay
                 dapi_assay = assay
-            elif "cell counting" in name:
+            elif "flow cytometry" in name:
                 pass  # facs assay found
 
         # DAPI assay should have files from *_files/ directories
@@ -721,10 +707,10 @@ class TestFileToAssayAssignment:
 
     def test_facs_assay_receives_png_plots(self, e11_processor, e11_style_folder):
         """PNG files in FACS/ subdirectory should be assigned to FACS assay."""
-        e11_folder = e11_style_folder["data_root"] / "E11_Explant_FACS_Static_DAPI"
+        e11_folder = e11_style_folder["data_root"] / E11_FOLDER_NAME
         exp = FolderMetadata(
             experiment_id="E11",
-            experiment_name="E11_Explant_FACS_Static_DAPI",
+            experiment_name=E11_FOLDER_NAME,
             folder_path=str(e11_folder),
         )
         result = e11_processor._process_experiment(exp)
@@ -739,7 +725,7 @@ class TestFileToAssayAssignment:
         study = data["studies"][0]
         for assay in study.get("assays", []):
             name = assay.get("measurementType", {}).get("annotationValue", "").lower()
-            if "cell counting" in name:
+            if "flow cytometry" in name:
                 facs_files = assay.get("dataFiles", [])
                 facs_names = [f["name"] for f in facs_files]
                 # FACS assay should have .fcs, .wsp, AND .png plot images
@@ -751,11 +737,11 @@ class TestFileToAssayAssignment:
                 ), f"FACS assay missing .png plot images. Got: {facs_names}"
 
     def test_xlsx_linked_to_calcein_assay(self, temp_investigations):
-        """xlsx files should be linked to Calcein assay when present."""
+        """xlsx files should be linked to the calcein assay when present."""
         # E1 has calcein + FACS assays; xlsx should go to calcein
-        processor = PartnerDataProcessor(
+        processor = ExperimentProcessor(
             data_root=str(temp_investigations["data_root"]),
-            investigation_id="inv_xlsx_test",
+            investigation_id="inv_fixture_04",
             skip_conversion=True,
             validate=False,
             base_path=str(temp_investigations["base_path"]),
@@ -766,15 +752,15 @@ class TestFileToAssayAssignment:
 
     def test_e11_total_coverage_improved(self, e11_processor, e11_style_folder):
         """E11-style folder should have significantly more files linked."""
-        e11_folder = e11_style_folder["data_root"] / "E11_Explant_FACS_Static_DAPI"
+        e11_folder = e11_style_folder["data_root"] / E11_FOLDER_NAME
         exp = FolderMetadata(
             experiment_id="E11",
-            experiment_name="E11_Explant_FACS_Static_DAPI",
+            experiment_name=E11_FOLDER_NAME,
             folder_path=str(e11_folder),
         )
         result = e11_processor._process_experiment(exp)
         assert result.success
-        # We have 10 files total in the test fixture:
+        # We have 10 files total in the committed fixture:
         # FACS: 1 .fcs, 1 .png, 1 .wsp = 3
         # *_files/: 2 .czi, 3 .png, 1 .tif, 1 .xml = 7
         # Total = 10
@@ -784,68 +770,65 @@ class TestFileToAssayAssignment:
 
 
 class TestRecursiveConditionScan:
-    """Tests for Phase 2: recursive _determine_conditions()."""
+    """Tests for recursive _determine_conditions()."""
 
     def test_conditions_from_facs_subdirectory(self, e11_processor, e11_style_folder):
         """Conditions should be detected from files in FACS/ subdirectory."""
-        e11_folder = e11_style_folder["data_root"] / "E11_Explant_FACS_Static_DAPI"
+        e11_folder = e11_style_folder["data_root"] / E11_FOLDER_NAME
         exp = FolderMetadata(
             experiment_id="E11",
-            experiment_name="E11_Explant_FACS_Static_DAPI",
+            experiment_name=E11_FOLDER_NAME,
             folder_path=str(e11_folder),
         )
         conditions = e11_processor._determine_conditions(exp)
-        # "Control" should be detected from "poriceRetina_LiveDead_Control.fcs" in FACS/
+        # "Control" should be detected from "Sample_LiveDead_Control.fcs" in FACS/
         assert "Control" in conditions, f"Expected 'Control' in conditions, got: {conditions}"
 
-    def test_conditions_from_nested_subdirectories(self, temp_investigations):
+    def test_conditions_from_nested_subdirectories(self, tmp_path):
         """Conditions should be detected from files in nested subdirectories."""
-        # Add a nested file with a condition pattern
-        e1_folder = temp_investigations["data_root"] / "E1_Müller_Calceinassay und FACS Test"
+        # Build a temporary data root with a nested file carrying a condition.
+        data_root = tmp_path / "data"
+        e1_folder = data_root / E1_FOLDER_NAME
+        e1_folder.mkdir(parents=True)
+        (e1_folder / "sample.czi").write_bytes(b"fake")
         nested_dir = e1_folder / "subdir"
-        nested_dir.mkdir(exist_ok=True)
-        (nested_dir / "sample_eylea_test.czi").write_bytes(b"fake")
+        nested_dir.mkdir()
+        (nested_dir / "sample_compoundA_test.czi").write_bytes(b"fake")
 
         exp = FolderMetadata(
             experiment_id="E1",
-            experiment_name="E1_Müller_Calceinassay und FACS Test",
+            experiment_name=E1_FOLDER_NAME,
             folder_path=str(e1_folder),
         )
-        processor = PartnerDataProcessor(
-            data_root=str(temp_investigations["data_root"]),
-            investigation_id="inv_cond_test",
+        processor = ExperimentProcessor(
+            data_root=str(data_root),
+            investigation_id="inv_fixture_05",
             skip_conversion=True,
             validate=False,
-            base_path=str(temp_investigations["base_path"]),
+            base_path=str(tmp_path),
         )
         conditions = processor._determine_conditions(exp)
-        assert "Eylea" in conditions, f"Expected 'Eylea' from nested file, got: {conditions}"
+        # The stem token "compoundA" is capitalised to "Compounda"
+        assert "Compounda" in conditions, f"Expected 'Compounda', got: {conditions}"
 
 
 class TestStudyFactors:
-    """Tests for Phase 3: study factors from treatment conditions."""
+    """Tests for study factors derived from the factor-extraction rule engine."""
 
-    def test_e100_study_has_treatment_factor(self, temp_investigations):
-        """E100-like study should have a 'treatment' factor."""
-        # Create E100-like folder
-        data_root = temp_investigations["data_root"]
-        e100 = data_root / "E100_Explant_FACS_test"
-        e100.mkdir(exist_ok=True)
-        (e100 / "L D_161225_A_Amfenac.fcs").write_bytes(b"fake")
-        (e100 / "L D_161225_A_Control.fcs").write_bytes(b"fake")
-        (e100 / "L D_161225_B_Vabysmo.fcs").write_bytes(b"fake")
-
-        processor = PartnerDataProcessor(
-            data_root=str(data_root),
-            investigation_id="inv_factor_test",
+    def test_treatment_donor_study_has_treatment_factor(self, temp_investigations):
+        """The E10 treatment/donor study should have the rule-derived factors."""
+        e10_folder = temp_investigations["data_root"] / E10_FOLDER_NAME
+        processor = ExperimentProcessor(
+            data_root=str(temp_investigations["data_root"]),
+            investigation_id="inv_fixture_06",
             skip_conversion=True,
             validate=False,
             base_path=str(temp_investigations["base_path"]),
         )
         exp = FolderMetadata(
-            experiment_id="E100",
-            experiment_name="E100_Explant_FACS_test",
-            folder_path=str(e100),
+            experiment_id="E10",
+            experiment_name=E10_FOLDER_NAME,
+            folder_path=str(e10_folder),
         )
         result = processor._process_experiment(exp)
         assert result.success
@@ -863,24 +846,19 @@ class TestStudyFactors:
         assert "treatment" in factor_names, f"Expected 'treatment' factor, got: {factor_names}"
 
     def test_samples_have_factor_values(self, temp_investigations):
-        """Samples should have factorValues populated."""
-        data_root = temp_investigations["data_root"]
-        e100 = data_root / "E100_Explant_FACS_test2"
-        e100.mkdir(exist_ok=True)
-        (e100 / "L D_161225_A_Amfenac.fcs").write_bytes(b"fake")
-        (e100 / "L D_161225_A_Control.fcs").write_bytes(b"fake")
-
-        processor = PartnerDataProcessor(
-            data_root=str(data_root),
-            investigation_id="inv_fv_test",
+        """Samples in the E10 study should have factorValues populated."""
+        e10_folder = temp_investigations["data_root"] / E10_FOLDER_NAME
+        processor = ExperimentProcessor(
+            data_root=str(temp_investigations["data_root"]),
+            investigation_id="inv_fixture_07",
             skip_conversion=True,
             validate=False,
             base_path=str(temp_investigations["base_path"]),
         )
         exp = FolderMetadata(
-            experiment_id="E100",
-            experiment_name="E100_Explant_FACS_test2",
-            folder_path=str(e100),
+            experiment_id="E10",
+            experiment_name=E10_FOLDER_NAME,
+            folder_path=str(e10_folder),
         )
         result = processor._process_experiment(exp)
         assert result.success
@@ -903,13 +881,13 @@ class TestStudyFactors:
 
 
 class TestFileSizeMetadata:
-    """Tests for Phase 6: file size metadata in data file entries."""
+    """Tests for file size metadata in data file entries."""
 
     def test_linked_files_have_file_size_comment(self, temp_investigations):
         """Linked data files should include a fileSize comment."""
-        processor = PartnerDataProcessor(
+        processor = ExperimentProcessor(
             data_root=str(temp_investigations["data_root"]),
-            investigation_id="inv_size_test",
+            investigation_id="inv_fixture_08",
             skip_conversion=True,
             validate=False,
             base_path=str(temp_investigations["base_path"]),
@@ -945,7 +923,7 @@ class TestFileSizeMetadata:
 
 
 # ---------------------------------------------------------------------------
-# Tests for file modification date retrieval (Fix 4)
+# Tests for file modification date retrieval
 # ---------------------------------------------------------------------------
 
 
@@ -956,46 +934,39 @@ class TestFileModificationDateRetrieval:
 
     def test_get_latest_modification_date_returns_iso_format(self, temp_investigations):
         """_get_latest_modification_date returns an ISO-8601 datetime string."""
-        processor = PartnerDataProcessor(
+        processor = ExperimentProcessor(
             investigation_id="test_inv", base_path=str(temp_investigations["base_path"])
         )
         data_root = temp_investigations["data_root"]
-        e1_folder = data_root / "E1_Müller_Calceinassay und FACS Test"
+        e1_folder = data_root / E1_FOLDER_NAME
 
         date_str = processor._get_latest_modification_date(str(e1_folder))
 
         # Should match ISO-8601 pattern YYYY-MM-DDTHH:MM:SSZ
-        import re
-
         assert re.match(
             r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", date_str
         ), f"Date '{date_str}' is not in ISO-8601 format"
 
     def test_get_latest_modification_date_nonexistent_folder(self, tmp_path):
         """Falls back to current datetime for non-existent folder."""
-        processor = PartnerDataProcessor(investigation_id="test_inv", base_path=str(tmp_path))
+        processor = ExperimentProcessor(investigation_id="test_inv", base_path=str(tmp_path))
 
         date_str = processor._get_latest_modification_date("/nonexistent/path")
 
         # Should still return a valid ISO date
-        import re
-
         assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", date_str)
 
-    def test_study_submission_date_from_file_mtime(self, temp_investigations, monkeypatch):
+    def test_study_submission_date_from_file_mtime(self, temp_investigations):
         """Study submission_date should be derived from file modification times."""
-        import os
-        from datetime import datetime
-
-        processor = PartnerDataProcessor(
+        processor = ExperimentProcessor(
             investigation_id="test_inv", base_path=str(temp_investigations["base_path"])
         )
         data_root = temp_investigations["data_root"]
-        e1_folder = data_root / "E1_Müller_Calceinassay und FACS Test"
+        e1_folder = data_root / E1_FOLDER_NAME
 
         # Set a specific mtime on ALL files in the experiment folder
         known_time = datetime(2025, 6, 15, 10, 30, 0)
-        for f in e1_folder.iterdir():
+        for f in e1_folder.rglob("*"):
             if f.is_file():
                 os.utime(str(f), (known_time.timestamp(), known_time.timestamp()))
 
@@ -1021,20 +992,17 @@ class TestFileModificationDateRetrieval:
             "2025-06-15"
         ), f"Expected date from file mtime (2025-06-15), got: {submission_date}"
 
-    def test_study_submission_date_not_current_timestamp(self, temp_investigations, monkeypatch):
+    def test_study_submission_date_not_current_timestamp(self, temp_investigations):
         """Study date should differ from 'now' when files have older mtimes."""
-        import os
-        from datetime import datetime
-
-        processor = PartnerDataProcessor(
+        processor = ExperimentProcessor(
             investigation_id="test_inv", base_path=str(temp_investigations["base_path"])
         )
         data_root = temp_investigations["data_root"]
-        e1_folder = data_root / "E1_Müller_Calceinassay und FACS Test"
+        e1_folder = data_root / E1_FOLDER_NAME
 
         # Set ALL files' mtime to 1 year ago
         old_time = datetime(2024, 1, 15, 12, 0, 0)
-        for f in e1_folder.iterdir():
+        for f in e1_folder.rglob("*"):
             if f.is_file():
                 os.utime(str(f), (old_time.timestamp(), old_time.timestamp()))
 

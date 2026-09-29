@@ -49,21 +49,6 @@ ONTOLOGY = {
         "termSource": "CL",
         "termAccession": "http://purl.obolibrary.org/obo/CL_0000000",
     },
-    "muller_cell": {
-        "annotationValue": "Muller cell",
-        "termSource": "CL",
-        "termAccession": "http://purl.obolibrary.org/obo/CL_0000636",
-    },
-    "retinal_explant": {
-        "annotationValue": "retinal explant",
-        "termSource": "UBERON",
-        "termAccession": "http://purl.obolibrary.org/obo/UBERON_0000966",
-    },
-    "hrmvec": {
-        "annotationValue": "human retinal microvascular endothelial cell",
-        "termSource": "CL",
-        "termAccession": "http://purl.obolibrary.org/obo/CL_0002542",
-    },
     "organism_part": {
         "annotationValue": "organism part",
         "termSource": "OBI",
@@ -398,48 +383,45 @@ class ISAJsonGenerator:
 
         name_lower = folder_name.lower()
 
-        # Extract experiment ID (E1, E10, E101, etc.)
-        exp_id_match = re.match(r"^E(\d+)", folder_name)
+        # Extract experiment ID using the configured experiment-folder pattern.
+        exp_pattern, _exp_group = get_profile().get_experiment_folder_pattern()
+        exp_id_match = exp_pattern.match(folder_name)
         if exp_id_match:
-            meta["experiment_id"] = f"E{exp_id_match.group(1)}"
+            if _exp_group:
+                try:
+                    meta["experiment_id"] = exp_id_match.group(_exp_group)
+                except (IndexError, re.error):
+                    meta["experiment_id"] = exp_id_match.group(0)
+            else:
+                meta["experiment_id"] = exp_id_match.group(0)
 
-        # Extract cell/tissue types
+        # Extract cell/tissue types (profile-driven keywords)
         for keyword, cell_key in _get_cell_type_map().items():
             if keyword in folder_name:
                 meta["cell_types"].append(cell_key)
 
-        # Extract assay types from folder name keywords
-        for keyword in [
-            "calceinassay",
-            "calcein",
-            "facs",
-            "slidescanner",
-            "fluoreszenzmessung",
-            "dapi",
-            "tunel",
-            "gfap",
-            "elisa",
-            "wb",
-            "western",
-        ]:
-            if keyword in name_lower:
-                if keyword == "calceinassay":
-                    meta["assay_types"].append("calcein")
-                elif keyword == "western":
-                    meta["assay_types"].append("wb")
-                elif keyword not in meta["assay_types"]:
-                    meta["assay_types"].append(keyword)
-
-        # Extract protein variants (pVV019, pVV021, pVV048, etc.)
-        protein_variants = re.findall(r"pVV\d+", folder_name, re.IGNORECASE)
-        if protein_variants:
-            meta["protein_variants"] = list(set(protein_variants))
+        # Extract assay types from folder name keywords (profile-driven).
+        assay_keywords: List[str] = []
+        for _type, keywords in get_profile().get_type_keywords().items():
+            assay_keywords.extend(keywords)
+        for keyword in assay_keywords:
+            if keyword and keyword.lower() in name_lower:
+                key = (
+                    "calcein"
+                    if keyword == "calceinassay"
+                    else ("wb" if keyword == "western" else keyword)
+                )
+                if key not in meta["assay_types"]:
+                    meta["assay_types"].append(key)
 
         # ── Declarative factor rules (factor_extraction_rules.json) ──
-        # Rule-derived values take precedence per factor; the heuristics
-        # below stay as fallbacks for factors a rule did not produce.
+        # The rule engine is consulted unconditionally on every conversion;
+        # rule-derived values take precedence per factor and the generic
+        # heuristics below stay as fallbacks for factors a rule did not
+        # produce.  With no active rules the pipeline proceeds with an
+        # empty-factor path.
         extractor = self._get_factor_rules_extractor()
-        if extractor is not None and file_names:
+        if extractor is not None:
             try:
                 result = extractor.extract(folder_name, file_names, subfolder_names)
                 if result is not None:
@@ -465,21 +447,32 @@ class ISAJsonGenerator:
                             if fval not in meta["concentrations"]:
                                 meta["concentrations"].append(fval)
                                 meta["concentrations_raw"].append(c)
+
+                    variants = factor_values.get("protein_variant") or factor_values.get(
+                        "protein_variants"
+                    )
+                    if variants:
+                        for pv in sorted(variants):
+                            label = _get_protein_names().get(pv, pv)
+                            if label not in meta["protein_variants"]:
+                                meta["protein_variants"].append(label)
             except Exception as exc:  # pragma: no cover - defensive
                 self.logger.debug("Factor rule extraction failed: %s", exc)
 
-        # Extract known drug/treatment names
+        # Extract known drug/treatment names (profile name maps)
         for drug_key in _get_drug_names():
             if drug_key.lower() in name_lower:
                 meta["drugs"].append(drug_key)
 
-        # Check for "cleav" / "gecleaved" keywords
-        if "cleav" in name_lower or "gecleav" in name_lower:
-            if "cleaved protein" not in meta["protein_variants"]:
-                meta["protein_variants"].append("cleaved protein")
+        # Protein variants: profile protein-name keys matched against the
+        # folder name (same generic mechanism as the drug matching above).
+        for protein_key in _get_protein_names():
+            if protein_key.lower() in name_lower:
+                if protein_key not in meta["protein_variants"]:
+                    meta["protein_variants"].append(protein_key)
 
-        # Extract concentrations (e.g., "0,5 zu 4uM", "50uM", "50,100,150uM")
-        conc_patterns = re.findall(r"(\d+(?:[,.]\d+)?)\s*(?:zu\s*)?uM", folder_name, re.IGNORECASE)
+        # Extract concentrations (e.g., "50uM", "0.5uM", "50,100,150uM")
+        conc_patterns = re.findall(r"(\d+(?:[,.]\d+)?)\s*uM", folder_name, re.IGNORECASE)
         if conc_patterns:
             meta["concentrations_raw"] = conc_patterns
             meta["concentrations"] = [float(c.replace(",", ".")) for c in conc_patterns]
@@ -523,12 +516,10 @@ class ISAJsonGenerator:
         """
         parts = []
 
-        # Cell type
+        # Cell type (display labels from the cell-type registry config)
+        cell_registry = get_profile().get_cell_types().get("cell_types", {})
         cell_names = {
-            "muller_cell": "Müller glial cells",
-            "retinal_explant": "retinal explant cultures",
-            "hrmvec": "human retinal microvascular endothelial cells (HRMVEC)",
-            "unknown": "biological samples",
+            k: (v.get("display", k) if isinstance(v, dict) else v) for k, v in cell_registry.items()
         }
         cell_str = " and ".join(cell_names.get(ct, ct) for ct in meta["cell_types"])
         parts.append(cell_str)
@@ -538,7 +529,6 @@ class ISAJsonGenerator:
             "calcein": "Calcein AM viability assay",
             "facs": "fluorescence-activated cell sorting (FACS) analysis",
             "slidescanner": "whole-slide scanning microscopy",
-            "fluoreszenzmessung": "fluorescence measurement",
             "dapi": "DAPI staining and flow cytometry",
             "tunel": "TUNEL staining for apoptosis detection",
             "gfap": "GFAP immunohistochemistry staining",
@@ -824,7 +814,7 @@ class ISAJsonGenerator:
         """
         Create one study per experiment.
 
-        Each experiment folder (E1, E2, E10, etc.) becomes its own ISA study,
+        Each experiment folder becomes its own ISA study,
         keeping all data and files for that experiment self-contained.
 
         Args:
@@ -1076,12 +1066,20 @@ class ISAJsonGenerator:
             if isinstance(files, list):
                 all_files.extend(files)
 
-        # File type relevance mapping
+        # File type relevance mapping.  Domain-specific assay keys (non-
+        # canonical spellings used by some profiles) are normalised to the
+        # canonical "fluorescence" key via the profile's type-name aliases,
+        # so no domain spelling is hard-coded here.
+        try:
+            _alias = get_profile().get_type_name_aliases().get(assay_type_key, assay_type_key)
+        except Exception:  # pragma: no cover - defensive
+            _alias = assay_type_key
+        _key = str(_alias).lower()
         primary_extensions = {
             "facs": {".fcs", ".wsp"},
             "calcein": {".czi", ".tiff", ".tif", ".xlsx"},
             "slidescanner": {".ndpi", ".tiff", ".tif"},
-            "fluoreszenzmessung": {".xlsx", ".czi"},
+            "fluorescence": {".xlsx", ".czi"},
             "dapi": {".fcs", ".wsp", ".czi"},
             "microscopy": {".czi", ".tiff", ".tif", ".ndpi"},
         }
@@ -1089,13 +1087,13 @@ class ISAJsonGenerator:
             "facs": {".czi", ".tiff", ".tif", ".xlsx", ".xml"},
             "calcein": {".fcs", ".xml"},
             "slidescanner": {".xlsx", ".xml"},
-            "fluoreszenzmessung": {".czi", ".tiff", ".tif"},
+            "fluorescence": {".czi", ".tiff", ".tif"},
             "dapi": {".czi", ".tiff", ".tif"},
             "microscopy": {".xlsx", ".fcs", ".xml"},
         }
 
-        relevant_exts = primary_extensions.get(assay_type_key, set())
-        secondary_exts = secondary_extensions.get(assay_type_key, set())
+        relevant_exts = primary_extensions.get(_key, set())
+        secondary_exts = secondary_extensions.get(_key, set())
 
         # If there are files matching primary extensions, only include those + secondary
         has_primary = False
@@ -1180,8 +1178,12 @@ class ISAJsonGenerator:
         organism_key = f"organism_{exp_meta.get('organism', 'human')}"
         organism_term = ONTOLOGY.get(organism_key, ONTOLOGY["organism_human"])
 
+        # Cell-type → ontology term lookup via the cell-type registry config
+        # (profile-overridable), falling back to the generic ``cell_type`` entry.
+        cell_registry = get_profile().get_cell_types().get("cell_types", {})
         for idx, cell_type in enumerate(exp_meta.get("cell_types", []), start=1):
-            cell_term = ONTOLOGY.get(cell_type, ONTOLOGY["cell_type"])
+            cell_entry = cell_registry.get(cell_type)
+            cell_term = (cell_entry or {}).get("term") or ONTOLOGY["cell_type"]
             source: Dict[str, Any] = {
                 "@id": f"#source/{idx}",
                 "name": f"Source_{cell_type}",
@@ -1953,8 +1955,8 @@ def main():
 
     from utils.batch.folder_scanner import FolderScanner
 
-    # Test with representative data folder
-    test_folder = "partner representative data"
+    # Test with a data folder of experiment subfolders
+    test_folder = "data"
     output_dir = "isa_json_output"
 
     if len(sys.argv) > 1:
@@ -1972,9 +1974,9 @@ def main():
     investigation = generator.generate_investigation(
         experiments=experiments,
         investigation_id=defaults.get("investigation_id", "inv_001"),
-        investigation_title=defaults.get("investigation_title", "Partner Data Investigation"),
+        investigation_title=defaults.get("investigation_title", "Investigation 001"),
         investigation_description=defaults.get(
-            "investigation_description", "Investigation of partner data."
+            "investigation_description", "Batch-processed investigation."
         ),
     )
 

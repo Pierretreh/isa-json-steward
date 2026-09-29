@@ -7,15 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # noqa: E402
 
-try:
-    import scripts.process_partner_data  # noqa: F401
-except ImportError:
-    pytest.skip(
-        "scripts.process_partner_data not available (moved to private profile)",
-        allow_module_level=True,
-    )
-
-from scripts.process_partner_data import PartnerDataProcessor  # noqa: E402
+from utils.batch.experiment_processor import ExperimentProcessor  # noqa: E402
 
 
 class TestMapFileToSample:
@@ -23,7 +15,7 @@ class TestMapFileToSample:
 
     def setup_method(self):
         """Set up processor and sample fixtures."""
-        self.processor = PartnerDataProcessor.__new__(PartnerDataProcessor)
+        self.processor = ExperimentProcessor.__new__(ExperimentProcessor)
         self.samples = [
             {
                 "@id": "#sample_Control_2mm",
@@ -131,15 +123,15 @@ class TestMapFileToSample:
         )
         assert result == "#sample_Static10_6mm_10min"
 
-    def test_controlle_matches_control_via_alias(self):
-        """Alias expansion: 'Controlle' in filename matches 'Control' factor via alias."""
+    def test_control_variant_matches_control_via_alias(self):
+        """Alias expansion: a control-variant token matches the 'Control' factor via alias."""
         factor_aliases = {
             "treatment": {
-                "control": ["ctrl", "control", "controlle", "contr"],
+                "control": ["ctrl", "control", "live control"],
             }
         }
         result = self.processor._map_file_to_sample(
-            "Explant 2mm_Controlle Living_1.png",
+            "Explant 2mm_Live Control_1.png",
             self.samples,
             factor_aliases,
         )
@@ -166,7 +158,7 @@ class TestBuildPerSampleProcesses:
     """Test the _build_per_sample_processes method."""
 
     def setup_method(self):
-        self.processor = PartnerDataProcessor.__new__(PartnerDataProcessor)
+        self.processor = ExperimentProcessor.__new__(ExperimentProcessor)
 
     def test_empty_assays_no_op(self):
         """Empty assays list is handled gracefully."""
@@ -345,7 +337,7 @@ class TestLoadFactorAliases:
     """Test loading factor aliases from config."""
 
     def setup_method(self):
-        self.processor = PartnerDataProcessor.__new__(PartnerDataProcessor)
+        self.processor = ExperimentProcessor.__new__(ExperimentProcessor)
 
     def test_loads_aliases_from_config(self):
         """Factor aliases are loaded from factor_extraction_rules.json."""
@@ -354,14 +346,13 @@ class TestLoadFactorAliases:
         # Should have treatment aliases
         if "treatment" in aliases:
             assert "control" in aliases["treatment"]
-            assert "controlle" in aliases["treatment"]["control"]
 
 
 class TestGetSampleFactorStrings:
     """Test extraction of factor strings from sample dicts."""
 
     def setup_method(self):
-        self.processor = PartnerDataProcessor.__new__(PartnerDataProcessor)
+        self.processor = ExperimentProcessor.__new__(ExperimentProcessor)
 
     def test_extracts_factor_values(self):
         """Factor values are extracted as lowercase strings."""
@@ -388,9 +379,9 @@ class TestDAPIAssayMeasurementType:
 
     def test_dapi_measurement_type_is_live_dead_staining(self):
         """DAPI assay config should have 'live/dead staining' as measurement type."""
-        from scripts.process_partner_data import PartnerDataProcessor
-
-        config = PartnerDataProcessor.ASSAY_TYPE_CONFIG["dapi"]
+        # The assay registry is read from the active profile's config
+        # (assay_types.json) via the class-level descriptor.
+        config = ExperimentProcessor.ASSAY_TYPE_CONFIG["dapi"]
         assert config["measurement_type"]["annotationValue"] == "live/dead staining"
         # Should no longer be "cell counting"
         assert config["measurement_type"]["annotationValue"] != "cell counting"

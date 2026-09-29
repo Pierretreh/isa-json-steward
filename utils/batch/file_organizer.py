@@ -338,12 +338,12 @@ class FileOrganizer:
         # Extract material references from inv_inm
         material_refs = self._extract_material_references(inv_inm_data)
 
-        # Add material references to inv_ukf studies
+        # Add material references to the investigation studies
         studies = investigation_json.get("studies", [])
         for study in studies:
             study["materialReferences"] = material_refs
 
-        self.logger.info(f"Added {len(material_refs)} material references to inv_ukf")
+        self.logger.info(f"Added {len(material_refs)} material references to the investigation")
         return investigation_json
 
     def _extract_material_references(self, inv_inm_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -541,7 +541,7 @@ def main():
     from utils.batch.isa_json_generator import ISAJsonGenerator
 
     # Test parameters
-    test_folder = "partner representative data"
+    test_folder = "data"
     output_dir = "organized_output"
     inv_inm_path = "investigations/inv_1"
 
@@ -571,8 +571,8 @@ def main():
 
     defaults = get_profile().get_investigation_defaults()
     inv_id = defaults.get("investigation_id", "inv_default")
-    inv_title = defaults.get("default_investigation_title", "Partner Data Investigation")
-    inv_desc = defaults.get("default_investigation_description", "Investigation of partner data")
+    inv_title = defaults.get("default_investigation_title", "Investigation 001")
+    inv_desc = defaults.get("default_investigation_description", "Batch-processed investigation.")
     print("\nStep 3: Generating ISA-JSON...")
     generator = ISAJsonGenerator()
     investigation = generator.generate_investigation(

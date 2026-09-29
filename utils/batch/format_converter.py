@@ -1230,8 +1230,8 @@ def main():
     """Main function for testing the format converter."""
     import sys
 
-    # Test with representative data folder
-    test_folder = "partner representative data/E1_Müller_Calceinassay und FACS Test"
+    # Test with a representative experiment folder
+    test_folder = "data/E1_viability_calcein_facs"
     output_dir = "test_conversion_output"
 
     if len(sys.argv) > 1:

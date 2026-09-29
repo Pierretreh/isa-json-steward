@@ -31,13 +31,13 @@ tests/
 │   ├── test_isa_json_generator.py
 │   ├── test_metadata_extractor_fcs.py
 │   ├── test_metadata_extractor_extended.py
-│   ├── test_process_partner_data.py
-│   ├── test_e100_factor_parsing.py
-│   ├── test_e100_fcs_enrichment.py
+│   ├── test_experiment_processor.py
+│   ├── test_treatment_donor_factor_parsing.py
+│   ├── test_fcs_assay_enrichment.py
 │   └── test_validator.py
 ├── e2e/                                 # End-to-end pipeline tests
 │   ├── __init__.py
-│   └── test_full_pipeline_with_representative_data.py
+│   └── test_full_pipeline_with_fixture_data.py
 ├── gui/                                 # GUI tests
 │   ├── __init__.py
 │   └── test_steward_app.py

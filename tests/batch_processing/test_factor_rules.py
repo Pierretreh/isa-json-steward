@@ -6,6 +6,13 @@ Covers rule gating (contains_all / contains_any), min_factors_to_match,
 value_map, suffix, default_if_absent, scan_subfolders, no-match behaviour,
 both rule schemas (full ``factors`` and legacy ``pattern``/``extract``),
 and the delimited-token file-to-sample mapper.
+
+The domain-specific rules that used to live in the core config are now
+**test data**: they come from the synthetic fixture
+``tests/batch_processing/fixtures/rules_treatment_donor.json`` (neutral
+donor/treatment/concentration shape) or from inline rule dicts, and a
+dedicated integration test verifies that rules load from the *active*
+profile via the ``synthetic_profile`` fixture.
 """
 
 import json
@@ -19,11 +26,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # noqa: E402
 from utils.batch.factor_rules import FactorRulesExtractor  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+FIXTURE_RULES_PATH = Path(__file__).resolve().parent / "fixtures" / "rules_treatment_donor.json"
 
 
-def _load_core_rules() -> dict:
-    path = PROJECT_ROOT / "config" / "factor_extraction_rules.json"
-    with open(path, "r", encoding="utf-8") as f:
+def _load_fixture_rules() -> dict:
+    with open(FIXTURE_RULES_PATH, "r", encoding="utf-8") as f:
         data: dict = json.load(f)
     return data
 
@@ -34,7 +41,7 @@ def _extractor(rules: dict, aliases=None) -> FactorRulesExtractor:
 
 @pytest.fixture
 def core_rules() -> dict:
-    return _load_core_rules()
+    return _load_fixture_rules()
 
 
 # ---------------------------------------------------------------------------
@@ -46,15 +53,16 @@ class TestRuleGating:
     @pytest.mark.unit
     def test_contains_all_requires_every_token(self, core_rules):
         ex = _extractor(core_rules)
-        # E11 rule requires "explant" AND "static"; name has only "calcein".
+        # The static rule requires "static"; this name has only "calcein".
         result = ex.extract("X1_Calcein_Control 5uM", ["Calcein_Control_1.czi"])
         assert result is None
 
     @pytest.mark.unit
     def test_contains_any_requires_one_token(self, core_rules):
         ex = _extractor(core_rules)
-        # E100 rule fires on pvv021 or cleav.
-        result = ex.extract("E100_Explant_FACS_pVV021_n=2", ["L D_161225_A_pVV021.fcs"])
+        # The donor/treatment rule fires on names mentioning the design
+        # (e.g. 'Explant_FACS' or 'treatment/donor').
+        result = ex.extract("EXP100_Explant_FACS_CompoundB_n=2", ["L D_161225_A_CompoundB.fcs"])
         assert result is not None
 
     @pytest.mark.unit
@@ -83,19 +91,17 @@ class TestMinFactorsToMatch:
     @pytest.mark.unit
     def test_rule_below_threshold_does_not_fire(self, core_rules):
         ex = _extractor(core_rules)
-        # E100 rule (gated on pvv021/cleav) needs >= 2 factors; only the
-        # donor matches here (the name ends right after "_A_", so no
-        # treatment tail exists). Name avoids "E#" so the legacy rule
-        # does not fire either.
-        result = ex.extract("Explant_FACS_pVV021", ["L D_161225_A_"])
+        # Donor rule (min_factors_to_match=2): only the donor matches here
+        # (the name ends right after "_A_", so no treatment tail exists).
+        result = ex.extract("Explant_FACS_CompoundB", ["L D_161225_A_"])
         assert result is None
 
     @pytest.mark.unit
     def test_rule_at_threshold_fires(self, core_rules):
         ex = _extractor(core_rules)
         result = ex.extract(
-            "E100_Explant_FACS_pVV021",
-            ["L D_161225_A_pVV021 5uM (21).fcs"],
+            "EXP100_Explant_FACS_CompoundB",
+            ["L D_161225_A_CompoundB 5uM (21).fcs"],
         )
         assert result is not None
         factor_values, _ = result
@@ -112,10 +118,10 @@ class TestValueMapAndSuffix:
     @pytest.mark.unit
     def test_value_map_applied(self, core_rules):
         ex = _extractor(core_rules)
-        # E11 rule: treatment "Controlle" -> "Control".
+        # Static rule: treatment "Ctrl" -> "Control" (value_map).
         result = ex.extract(
             "E11_Explant_Static_DAPI",
-            ["Explant 2mm_Controlle Living_1.png"],
+            ["Explant 2mm_Ctrl Living_1.png"],
         )
         assert result is not None
         factor_values, _ = result
@@ -124,7 +130,7 @@ class TestValueMapAndSuffix:
     @pytest.mark.unit
     def test_suffix_appended(self, core_rules):
         ex = _extractor(core_rules)
-        # E11 rule: concentration group "0,1" + suffix "uM".
+        # Static rule: concentration group "0,1" + suffix "uM".
         result = ex.extract(
             "E11_Explant_Static",
             ["Explant 6mm_Static 0,1uM_1 Tag.png"],
@@ -254,7 +260,7 @@ class TestScanSubfolders:
             "rules": [
                 {
                     "name": "r1",
-                    "match_experiment_name": {"contains_all": ["hrmvec"]},
+                    "match_experiment_name": {"contains_all": ["cell_line"]},
                     "min_factors_to_match": 2,
                     "scan_subfolders": True,
                     "factors": [
@@ -267,7 +273,7 @@ class TestScanSubfolders:
         ex = _extractor(rules)
         # File names alone don't match; subfolder names do.
         result = ex.extract(
-            "E41_HRMVEC_MBP",
+            "EXP41_cell_line_MBP",
             ["img_001.czi"],
             subfolder_names=["MBP 10uM"],
         )
@@ -304,10 +310,10 @@ class TestCombinations:
     def test_one_combo_per_matched_name(self, core_rules):
         ex = _extractor(core_rules)
         result = ex.extract(
-            "E100_Explant_FACS_pVV021",
+            "EXP100_Explant_FACS_CompoundB",
             [
-                "L D_161225_A_pVV021 5uM.fcs",
-                "L D_161225_B_pVV021 5uM.fcs",
+                "L D_161225_A_CompoundB 5uM.fcs",
+                "L D_161225_B_CompoundB 5uM.fcs",
             ],
         )
         assert result is not None
@@ -322,17 +328,17 @@ class TestCombinations:
         # Two files, same donor+treatment, only the replicate number (n)
         # differs -> one unique combination after (n)-stripping.
         result = ex.extract(
-            "E100_Explant_FACS_pVV021",
+            "EXP100_Explant_FACS_CompoundB",
             [
-                "L D_161225_A_pVV021 5uM (1).fcs",
-                "L D_161225_A_pVV021 5uM (2).fcs",
+                "L D_161225_A_CompoundB 5uM (1).fcs",
+                "L D_161225_A_CompoundB 5uM (2).fcs",
             ],
         )
         assert result is not None
         factor_values, combos = result
         assert len(combos) == 1
         assert combos[0]["donor"] == "A"
-        assert "pVV021 5uM" in factor_values.get("treatment", set())
+        assert "CompoundB 5uM" in factor_values.get("treatment", set())
 
 
 # ---------------------------------------------------------------------------
@@ -376,8 +382,8 @@ class TestLegacySchema:
         assert factor_values["num"] == {"123"}
 
     @pytest.mark.unit
-    def test_legacy_rule_in_core_config(self, core_rules):
-        # The core config ships the legacy E# rule; the engine must still
+    def test_legacy_rule_in_fixture_rules(self, core_rules):
+        # The fixture ships a neutral legacy E# rule; the engine must still
         # honour it (for names that do not match any full-schema rule).
         ex = _extractor(core_rules)
         result = ex.extract("E7_unknown_type", ["file_1.txt"])
@@ -403,7 +409,7 @@ class TestAliases:
         ex = _extractor(core_rules)
         assert "treatment" in ex.aliases
         assert "control" in ex.aliases["treatment"]
-        assert "controlle" in ex.aliases["treatment"]["control"]
+        assert "ctrl" in ex.aliases["treatment"]["control"]
 
     @pytest.mark.unit
     def test_explicit_aliases_override(self, core_rules):
@@ -429,13 +435,13 @@ class TestAliases:
                 "factorValues": [
                     {
                         "category": {"@id": "#factor/treatment"},
-                        "value": {"annotationValue": "Sorafenib"},
+                        "value": {"annotationValue": "CompoundB"},
                     },
                 ],
             },
         ]
-        # "Controlle" is an alias of "control" in the core config.
-        result = ex.map_file_to_sample("sample_Controlle_1.fcs", samples)
+        # "Ctrl" is an alias of "control" in the fixture rules.
+        result = ex.map_file_to_sample("sample_Ctrl_1.fcs", samples)
         assert result == "#s1"
 
 
@@ -480,21 +486,21 @@ class TestMapper:
     def test_single_letter_token_never_inside_word(self, core_rules):
         ex = _extractor(core_rules)
         samples = [
-            _sample("#s_A", {"donor": "A", "treatment": "cleav"}),
-            _sample("#s_B", {"donor": "B", "treatment": "cleav"}),
+            _sample("#s_A", {"donor": "A", "treatment": "ambrosia"}),
+            _sample("#s_B", {"donor": "B", "treatment": "ambrosia"}),
         ]
-        # 'b' must not match inside 'cleav'
-        assert ex.map_file_to_sample("L D_B_cleav.fcs", samples, {}) == "#s_B"
-        assert ex.map_file_to_sample("L D_A_cleav.fcs", samples, {}) == "#s_A"
+        # 'a'/'b' must not match inside 'ambrosia'
+        assert ex.map_file_to_sample("L D_B_ambrosia.fcs", samples, {}) == "#s_B"
+        assert ex.map_file_to_sample("L D_A_ambrosia.fcs", samples, {}) == "#s_A"
 
     @pytest.mark.unit
     def test_substring_match(self, core_rules):
         ex = _extractor(core_rules)
         samples = [
             _sample("#iso", {"treatment": "Isopropanol"}),
-            _sample("#sora", {"treatment": "Sorafenib"}),
+            _sample("#sora", {"treatment": "CompoundA"}),
         ]
-        # "isoprop" is a substring of "isopropanol" (not of "sorafenib").
+        # "isoprop" is a substring of "isopropanol" (not of "compounda").
         assert ex.map_file_to_sample("dead Isoprop.fcs", samples, {}) == "#iso"
 
     @pytest.mark.unit
@@ -502,7 +508,7 @@ class TestMapper:
         ex = _extractor(core_rules)
         samples = [
             _sample("#a", {"treatment": "Control"}),
-            _sample("#b", {"treatment": "Sorafenib"}),
+            _sample("#b", {"treatment": "CompoundA"}),
         ]
         assert ex.map_file_to_sample("zzz_unknown_xyz.fcs", samples, {}) is None
 
@@ -511,7 +517,7 @@ class TestMapper:
         ex = _extractor(core_rules)
         samples = [
             _sample("#a", {"treatment": "Control"}),
-            _sample("#b", {"treatment": "Sorafenib"}),
+            _sample("#b", {"treatment": "CompoundA"}),
         ]
         assert ex.map_file_to_sample("", samples, {}) is None
 
@@ -523,15 +529,18 @@ class TestMapper:
 
 class TestConfigIntegration:
     @pytest.mark.unit
-    def test_core_config_parses(self, core_rules):
+    def test_fixture_rules_parse(self, core_rules):
         assert isinstance(core_rules["rules"], list)
-        assert len(core_rules["rules"]) >= 9
+        assert len(core_rules["rules"]) >= 3
         assert "factor_aliases" in core_rules
 
     @pytest.mark.unit
-    def test_profile_loader_getter(self, core_rules):
+    def test_rules_loaded_from_active_profile(self, synthetic_profile):
+        """The engine's rules must come from the active profile."""
         from utils.config_loader import get_profile
 
         rules = get_profile().get_factor_extraction_rules()
         assert "rules" in rules
-        assert len(rules["rules"]) >= 9
+        # The synthetic profile ships the neutral donor/treatment rule.
+        names = {r.get("name") for r in rules["rules"]}
+        assert "explant_facs_treatment_donor" in names

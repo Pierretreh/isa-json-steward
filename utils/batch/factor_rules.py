@@ -1,5 +1,5 @@
 """
-Declarative factor-extraction engine for partner data experiments.
+Declarative factor-extraction engine for experiment folders.
 
 This module implements the rule schema defined in
 ``config/factor_extraction_rules.json`` (overridable by a profile's
@@ -24,15 +24,15 @@ Two rule schemas are supported:
                 ]
             }
         ],
-        "factor_aliases": {"treatment": {"control": ["controlle", ...]}, ...}
+        "factor_aliases": {"treatment": {"control": ["control", ...]}, ...}
     }
 
-* **Legacy schema** (used by the minimal core default)::
+* **Legacy schema** (minimal core default)::
 
     {
         "rules": [
-            {"pattern": "E(?P<experiment_number>\\d+)",
-             "extract": {"experiment_number": "int"}}
+            {"pattern": "^(?P<experiment_id>[A-Z]+)\\d+",
+             "extract": {"experiment_id": "str"}}
         ]
     }
 
@@ -55,7 +55,7 @@ _TOKEN_RE = re.compile(r"[^0-9A-Za-z,]+")
 def _name_variants(name: str) -> List[str]:
     """Return the extension-less stem first, then the raw name.
 
-    The stem is preferred so that ``$``-anchored patterns (e.g. the E100
+    The stem is preferred so that ``$``-anchored patterns (e.g. a
     treatment rule) are not contaminated by the file extension; the raw
     name is kept as a fallback for patterns that depend on it.
     """

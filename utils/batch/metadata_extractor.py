@@ -789,7 +789,7 @@ class MetadataExtractor:
 
             # Fallback: infer operator from filename patterns using an
             # explicit allowlist to avoid false positives.
-            # e.g. "HRMVEC271124JP" → operator "JP"
+            # e.g. "Sample271124JP" → operator "JP"
             known_operators = set(get_profile().get_known_operators())
             if not operator:
                 fname_stem = Path(file_path).stem
@@ -1175,7 +1175,7 @@ class MetadataExtractor:
         return file_metadata
 
     # ------------------------------------------------------------------
-    # New format-specific extractors for partner data
+    # New format-specific extractors
     # ------------------------------------------------------------------
 
     def _extract_ndpi_metadata(self, file_path: str) -> Dict[str, Any]:
@@ -1372,8 +1372,8 @@ def main():
     """Main function for testing the metadata extractor."""
     import sys
 
-    # Test with representative data folder
-    test_folder = "partner representative data/E1_Müller_Calceinassay und FACS Test"
+    # Test with a representative experiment folder
+    test_folder = "data/E1_viability_calcein_facs"
 
     if len(sys.argv) > 1:
         test_folder = sys.argv[1]
