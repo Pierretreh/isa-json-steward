@@ -1,0 +1,53 @@
+{
+  "_metadata": {
+    "description": "Synthetic rule fixture: a neutral donor (A/B) / treatment / concentration rule for 'explant FACS treatment & donor' experiments. Used by the batch-processing tests in place of any real project's rules.",
+    "version": "1.0"
+  },
+  "experiment_folder": {
+    "pattern": "^E(\\d+)",
+    "group": 1
+  },
+  "rules": [
+    {
+      "name": "explant_facs_treatment_donor",
+      "description": "Explant FACS with donor (A/B) and treatment/dose conditions. File names look like 'L D_{date}_{donor}_{treatment}'.",
+      "match_experiment_name": {
+        "contains_any": [
+          "treatment",
+          "donor"
+        ]
+      },
+      "min_factors_to_match": 2,
+      "factors": [
+        {
+          "name": "donor",
+          "regex": "_([AB])_",
+          "group": 1
+        },
+        {
+          "name": "treatment",
+          "regex": "_[AB]_(.+?)\\s*(?:\\(\\d+\\))?$",
+          "group": 1
+        },
+        {
+          "name": "concentration",
+          "regex": "(\\d+(?:[.,]\\d+)?\\s*(?:uM|mM))",
+          "group": 1
+        }
+      ]
+    }
+  ],
+  "factor_aliases": {
+    "treatment": {
+      "control": [
+        "ctrl",
+        "control",
+        "live control"
+      ],
+      "dead control": [
+        "dead",
+        "dead control"
+      ]
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "_metadata": {
+    "description": "Synthetic rule fixture: a neutral donor (A/B) / treatment / concentration rule for 'explant FACS treatment & donor' experiments plus small neutral rules exercising the value_map, suffix, legacy-schema and alias features of the rule engine. Used by the batch-processing tests in place of any real project's rules.",
+    "version": "2.0"
+  },
+  "experiment_folder": {
+    "pattern": "^E(\\d+)",
+    "group": 1
+  },
+  "rules": [
+    {
+      "name": "explant_facs_treatment_donor",
+      "description": "Explant FACS with donor (A/B) and treatment/dose conditions. File names look like 'L D_{date}_{donor}_{treatment}'.",
+      "match_experiment_name": {
+        "contains_any": [
+          "treatment",
+          "donor",
+          "explant",
+          "facs"
+        ]
+      },
+      "min_factors_to_match": 2,
+      "factors": [
+        {
+          "name": "donor",
+          "regex": "_([AB])_",
+          "group": 1
+        },
+        {
+          "name": "treatment",
+          "regex": "_[AB]_(.+?)\\s*(?:\\(\\d+\\))?$",
+          "group": 1
+        },
+        {
+          "name": "concentration",
+          "regex": "(\\d+(?:[.,]\\d+)?\\s*(?:uM|mM))",
+          "group": 1
+        }
+      ]
+    },
+    {
+      "name": "static_stain_treatment",
+      "description": "Neutral example: static staining experiments whose file names carry a treatment condition (e.g. 'Ctrl Living') and a concentration with a 'uM' suffix.",
+      "match_experiment_name": {
+        "contains_all": [
+          "static"
+        ]
+      },
+      "min_factors_to_match": 1,
+      "factors": [
+        {
+          "name": "treatment",
+          "regex": "(Ctrl|Static)",
+          "group": 1,
+          "value_map": {
+            "Ctrl": "Control"
+          }
+        },
+        {
+          "name": "concentration",
+          "regex": "(\\d+(?:[.,]\\d+)?)\\s*uM",
+          "group": 1,
+          "suffix": "uM"
+        }
+      ]
+    },
+    {
+      "name": "neutral_experiment_id_example",
+      "description": "Neutral legacy-schema example: capture the leading experiment id token (e.g. the number after the letter prefix) from folder names like 'E42_...'.",
+      "pattern": "^E(?P<experiment_number>\\d+)",
+      "extract": {
+        "experiment_number": "int"
+      }
+    }
+  ],
+  "factor_aliases": {
+    "treatment": {
+      "control": [
+        "ctrl",
+        "control",
+        "live control"
+      ],
+      "dead control": [
+        "dead",
+        "dead control"
+      ]
+    }
+  }
+}

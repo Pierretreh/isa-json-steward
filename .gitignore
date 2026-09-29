@@ -122,3 +122,7 @@ ontologies/cached/
 
 # Folders containing "Data" anywhere in the name
 *Data*/
+
+# Stray test-artifact temp dirs (regenerable stubs/caches)
+_tmp_cache/
+_tmp_t/
