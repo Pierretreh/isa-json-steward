@@ -1044,7 +1044,7 @@ class AssayDialog(QDialog):
         """Get protocol ID based on assay type."""
         protocol_mapping = {
             "SDS-PAGE": "https://example.org/investigations/inv_1#prot_sds_page",
-            "Microscopy": "https://example.org/investigations/inv_1#prot_depot_microscopy",
+            "Microscopy": "https://example.org/investigations/inv_1#prot_microscopy",
             "Toxicity Test": "https://example.org/investigations/inv_1#prot_toxicity_test",
             "Assembly Fragment Gel": "https://example.org/investigations/inv_1#prot_assembly_fragment_gel",  # noqa: E501
             "Digestion Assay": "https://example.org/investigations/inv_1#prot_digestion",

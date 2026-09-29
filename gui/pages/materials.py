@@ -252,7 +252,7 @@ class MaterialsPage(ScrollablePage):
     def _collect_assay_materials(self, study_data: dict) -> list:
         """
         Collect materials from assay-level references when study-level materials are empty.
-        This handles cases like E100 where samples only exist as @id references in assays.
+        This handles assays whose samples exist only as @id references.
         """
         materials = []
         seen_ids = set()

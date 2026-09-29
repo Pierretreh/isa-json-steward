@@ -482,7 +482,7 @@ class OntologyBrowserPage(ScrollablePage):
             "lysate",
             "supernatant",
             "solution",
-            "depot",
+            "assembly",
             "collagen",
             "buffer",
             "medium",
