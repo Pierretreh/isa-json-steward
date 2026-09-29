@@ -51,7 +51,12 @@ dev = [
 ]
 ontology = [
     "owlready2>=0.40",
-    "pyshacl>=0.40",
+    # Keep pyshacl <0.40: the core dep isatools 0.14.3 pins rdflib~=7.2.1
+    # (i.e. >=7.2.1,<7.3.0), while pyshacl>=0.40 requires rdflib>=7.3.0 —
+    # the two are mutually unresolvable. 0.31.0 is the newest pyshacl that
+    # works with rdflib 7.2.x (it only needs rdflib>=7.1.1,<8.0) and exposes
+    # the same stable pyshacl.validate() API the SHACL layer relies on.
+    "pyshacl>=0.31.0,<0.40",
 ]
 conversion = [
     "czifile>=2019.7.2",
