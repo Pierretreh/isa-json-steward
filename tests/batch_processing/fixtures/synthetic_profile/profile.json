@@ -1,0 +1,16 @@
+{
+  "name": "synthetic",
+  "version": "1.0.0",
+  "description": "Committed synthetic test profile (neutral, project-agnostic). Ships neutral assay/protocol templates plus the donor/treatment/concentration factor rules so template-dependent batch tests run in a hermetic CI checkout without any external profile directory.",
+  "project": "Synthetic Test Profile",
+  "institution": "Test Fixture",
+  "namespace": "https://example.org/synthetic/onto#",
+  "namespace_prefix": "synthetic",
+  "ontology_main_file": "synthetic_onto.owl",
+  "ontology_main_ttl": "synthetic_onto.ttl",
+  "ontology_shapes": "synthetic_shapes.ttl",
+  "templates_dir": "templates",
+  "config_dir": "config",
+  "min_core_version": "1.0.0",
+  "app_name": "Synthetic Test Profile"
+}

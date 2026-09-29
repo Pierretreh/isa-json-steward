@@ -116,7 +116,8 @@ class BatchProcessingDialog(QDialog):
 
         self.data_root_edit = QLineEdit()
         self.data_root_edit.setPlaceholderText(
-            "Root directory containing experiment folders (e.g. E1_, E2_ - pattern configurable in the profile)"
+            "Root directory containing experiment folders (e.g. E1_, E2_ - pattern "
+            "configurable in the profile)"
         )
         browse_data_btn = QPushButton("Browse...")
         browse_data_btn.setFixedWidth(80)

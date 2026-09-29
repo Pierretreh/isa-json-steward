@@ -372,13 +372,19 @@ def format_converter():
 
 @pytest.fixture
 def isa_json_generator():
-    """ISA-JSON generator fixture with template access."""
+    """ISA-JSON generator fixture with template access.
+
+    Resolution order: active profile templates → local ``templates/`` →
+    the **committed synthetic test profile** (which always exists in any
+    checkout, so template-dependent tests run hermetically in CI without
+    an external profile directory).
+    """
     from utils.batch.isa_json_generator import ISAJsonGenerator
 
-    profile_dir = _discover_profile_dir()
     templates_root = None
 
     # Try profile directory first
+    profile_dir = _discover_profile_dir()
     if profile_dir:
         candidate = profile_dir / "templates" / "assay_templates"
         if candidate.is_dir():
@@ -390,15 +396,31 @@ def isa_json_generator():
         if local.is_dir():
             templates_root = str(local)
 
+    # Fall back to the committed synthetic test profile (always present)
     if templates_root is None:
-        pytest.skip("No templates directory found (no profile or local templates)")
+        synthetic = (
+            (Path(__file__).parent / "batch_processing" / "fixtures" / "synthetic_profile")
+            / "templates"
+            / "assay_templates"
+        )
+        if synthetic.is_dir():
+            templates_root = str(synthetic)
+
+    if templates_root is None:
+        pytest.skip(
+            "No templates directory found (no profile, local templates, or synthetic profile)"
+        )
 
     return ISAJsonGenerator(templates_root=templates_root)
 
 
 @pytest.fixture
 def templates_dir():
-    """Return the path to templates directory, checking profile first."""
+    """Return the path to templates directory, checking profile first.
+
+    Falls back to the committed synthetic test profile so the test is
+    hermetic (no external profile directory required in CI).
+    """
     profile_dir = _discover_profile_dir()
 
     # Check profile templates/ first
@@ -412,7 +434,14 @@ def templates_dir():
     if local.is_dir():
         return str(local)
 
-    pytest.skip("No templates directory found")
+    # Fall back to the committed synthetic test profile (always present)
+    synthetic = (
+        Path(__file__).parent / "batch_processing" / "fixtures" / "synthetic_profile"
+    ) / "templates"
+    if synthetic.is_dir():
+        return str(synthetic)
+
+    pytest.skip("No templates directory found (no profile, local templates, or synthetic profile)")
 
 
 @pytest.fixture

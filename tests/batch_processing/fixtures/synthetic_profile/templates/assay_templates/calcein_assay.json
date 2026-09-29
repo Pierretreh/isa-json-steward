@@ -1,0 +1,182 @@
+{
+  "@id": "https://example.org/assays/calcein_assay",
+  "@type": "synthetic:CalceinAssay",
+  "name": "Calcein assay",
+  "description": "Fluorescence-based viability assay using calcein to assess cell viability",
+  "measurementType": {
+    "annotationValue": "cell viability assay",
+    "termSource": "OBI",
+    "termAccession": "http://purl.obolibrary.org/obo/OBI_0003583"
+  },
+  "technologyType": {
+    "annotationValue": "widefield microscopy assay",
+    "termSource": "OBI",
+    "termAccession": "http://purl.obolibrary.org/obo/OBI_0002437"
+  },
+  "technologyPlatform": "fluorescence microscope",
+  "parameters": [
+    {
+      "name": "cell type",
+      "description": "Type of cells being assayed",
+      "defaultValue": ""
+    },
+    {
+      "name": "cell density",
+      "description": "Initial cell seeding density",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "cells per milliliter",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000196"
+      }
+    },
+    {
+      "name": "calcein concentration",
+      "description": "Concentration of calcein stain",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "micromolar",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000069"
+      }
+    },
+    {
+      "name": "incubation time",
+      "description": "Duration of calcein incubation",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "minute",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000031"
+      }
+    },
+    {
+      "name": "incubation temperature",
+      "description": "Temperature during incubation",
+      "defaultValue": 37,
+      "unit": {
+        "annotationValue": "degree Celsius",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000027"
+      }
+    },
+    {
+      "name": "sample incubation time",
+      "description": "Duration of sample incubation with cells",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "hour",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000032"
+      }
+    },
+    {
+      "name": "excitation wavelength",
+      "description": "Excitation wavelength for calcein",
+      "defaultValue": 495,
+      "unit": {
+        "annotationValue": "nanometer",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000178"
+      }
+    },
+    {
+      "name": "emission wavelength",
+      "description": "Emission wavelength for calcein",
+      "defaultValue": 515,
+      "unit": {
+        "annotationValue": "nanometer",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000178"
+      }
+    },
+    {
+      "name": "microscope objective",
+      "description": "Microscope objective used",
+      "defaultValue": ""
+    },
+    {
+      "name": "magnification",
+      "description": "Microscope magnification",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "times",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000289"
+      }
+    },
+    {
+      "name": "exposure time",
+      "description": "Camera exposure time",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "millisecond",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000028"
+      }
+    },
+    {
+      "name": "image channels",
+      "description": "Number of image channels captured",
+      "defaultValue": ""
+    }
+  ],
+  "inputs": [
+    {
+      "name": "cell culture",
+      "description": "Cell culture for viability testing",
+      "materialType": "cell culture"
+    },
+    {
+      "name": "test sample",
+      "description": "Sample to test (e.g., a compound solution)",
+      "materialType": "solution"
+    },
+    {
+      "name": "calcein solution",
+      "description": "Calcein stain solution",
+      "materialType": "other material"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "fluorescence images",
+      "description": "Fluorescence microscopy images",
+      "fileType": "image"
+    },
+    {
+      "name": "fluorescence measurements",
+      "description": "Quantitative fluorescence measurements",
+      "fileType": "data"
+    },
+    {
+      "name": "viability data",
+      "description": "Cell viability calculations",
+      "fileType": "data"
+    }
+  ],
+  "expectedAttachments": [
+    {
+      "name": "fluorescence images",
+      "description": "Fluorescence microscopy images (.czi, .tiff)",
+      "fileType": "image",
+      "required": true,
+      "allowedExtensions": [
+        ".czi",
+        ".tiff",
+        ".tif",
+        ".png",
+        ".jpg",
+        ".jpeg"
+      ],
+      "targetFormat": "tiff",
+      "multiple": true
+    }
+  ],
+  "dataFiles": [],
+  "subdirectories": {
+    "raw_images": "Raw fluorescence images",
+    "measurements": "Quantitative measurements",
+    "metadata": "Instrument settings and parameters"
+  }
+}

@@ -1127,6 +1127,15 @@ class ProfileLoader:
         raw = self.profile.get("validation")
         result: Dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
 
+        # The default layer set is the six core layers (the optional ``ols``
+        # layer is never on by default).  Imported lazily to avoid an import
+        # cycle (utils.batch.validation_layers must not be imported at module
+        # level here).
+        if "layers" not in result:
+            from utils.batch.validation_layers import DEFAULT_LAYERS
+
+            result["layers"] = list(DEFAULT_LAYERS)
+
         semantic = result.get("semantic")
         semantic = dict(semantic) if isinstance(semantic, dict) else {}
         if "cache_dir" not in semantic:

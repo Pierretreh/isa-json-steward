@@ -1,0 +1,166 @@
+{
+  "@id": "https://example.org/assays/facs_assay",
+  "@type": "synthetic:FacsAssay",
+  "name": "FACS assay",
+  "description": "Flow cytometry analysis of stained cell samples",
+  "measurementType": {
+    "annotationValue": "flow cytometry assay",
+    "termSource": "OBI",
+    "termAccession": "http://purl.obolibrary.org/obo/OBI_0000916"
+  },
+  "technologyType": {
+    "annotationValue": "flow cytometry",
+    "termSource": "OBI"
+  },
+  "technologyPlatform": "flow cytometer",
+  "parameters": [
+    {
+      "name": "cell type",
+      "description": "Type of cells being analyzed",
+      "defaultValue": ""
+    },
+    {
+      "name": "sample concentration",
+      "description": "Concentration of cells in sample",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "cells per milliliter",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000196"
+      }
+    },
+    {
+      "name": "stain concentration",
+      "description": "Concentration of fluorescent stain",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "micromolar",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000069"
+      }
+    },
+    {
+      "name": "incubation time",
+      "description": "Duration of stain incubation",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "minute",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000031"
+      }
+    },
+    {
+      "name": "incubation temperature",
+      "description": "Temperature during incubation",
+      "defaultValue": 37,
+      "unit": {
+        "annotationValue": "degree Celsius",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000027"
+      }
+    },
+    {
+      "name": "flow rate",
+      "description": "Flow cytometer flow rate",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "microliter per minute",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000165"
+      }
+    },
+    {
+      "name": "number of events",
+      "description": "Total number of events collected",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "count",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000189"
+      }
+    },
+    {
+      "name": "gating strategy",
+      "description": "Gating strategy used for analysis",
+      "defaultValue": ""
+    },
+    {
+      "name": "fluorophore",
+      "description": "Fluorescent dye used",
+      "defaultValue": ""
+    },
+    {
+      "name": "excitation wavelength",
+      "description": "Excitation wavelength for fluorophore",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "nanometer",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000178"
+      }
+    },
+    {
+      "name": "emission wavelength",
+      "description": "Emission wavelength for fluorophore",
+      "defaultValue": "",
+      "unit": {
+        "annotationValue": "nanometer",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000178"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "name": "cell sample",
+      "description": "Cell suspension for analysis",
+      "materialType": "cell culture"
+    },
+    {
+      "name": "stain solution",
+      "description": "Fluorescent stain solution",
+      "materialType": "other material"
+    },
+    {
+      "name": "test sample",
+      "description": "Sample being tested (e.g., a compound solution)",
+      "materialType": "solution"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "fcs data",
+      "description": "Flow cytometry data files",
+      "fileType": "data"
+    },
+    {
+      "name": "gating data",
+      "description": "Gating analysis results",
+      "fileType": "data"
+    },
+    {
+      "name": "compensation data",
+      "description": "Fluorescence compensation matrix",
+      "fileType": "data"
+    }
+  ],
+  "expectedAttachments": [
+    {
+      "name": "fcs data",
+      "description": "Flow cytometry data files (.fcs)",
+      "fileType": "data",
+      "required": true,
+      "allowedExtensions": [
+        ".fcs"
+      ],
+      "targetFormat": "csv",
+      "multiple": true
+    }
+  ],
+  "dataFiles": [],
+  "subdirectories": {
+    "fcs_data": "Raw FACS data files",
+    "gating_data": "Gating analysis and compensation data",
+    "metadata": "Flow cytometer settings and parameters"
+  }
+}

@@ -47,7 +47,10 @@ from utils.batch.validation_layers import (
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TEMPLATES_ROOT = REPO_ROOT / "domain-profile" / "templates" / "assay_templates"
+# Committed, project-agnostic assay templates (part of the synthetic test
+# profile) so the template layer runs identically in any checkout — including
+# a CI clone without an external profile directory.
+TEMPLATES_ROOT = FIXTURES / "synthetic_profile" / "templates" / "assay_templates"
 
 
 # ----------------------------------------------------------------------
@@ -548,6 +551,9 @@ class TestTemplateLayer:
 
 class TestShaclLayer:
     def test_valid_ontology_passes(self, inv_path):
+        pytest.importorskip(
+            "pyshacl", exc_type=ImportError, reason="pyshacl (the 'ontology' extra) required to run"
+        )
         validator = ShaclValidator(
             shapes_file=str(FIXTURES / "shapes_min.ttl"),
             ontology_file=str(FIXTURES / "owl_assay_ok.ttl"),
@@ -558,6 +564,9 @@ class TestShaclLayer:
         assert result.details["conforms"] is True
 
     def test_violating_ontology_fails_blocking(self, inv_path):
+        pytest.importorskip(
+            "pyshacl", exc_type=ImportError, reason="pyshacl (the 'ontology' extra) required to run"
+        )
         validator = ShaclValidator(
             shapes_file=str(FIXTURES / "shapes_min.ttl"),
             ontology_file=str(FIXTURES / "owl_assay_violation.ttl"),
@@ -815,9 +824,12 @@ class TestEngineIntegration:
 
 class TestProfileConfig:
     def test_get_validation_config_defaults(self):
+        """A profile without a ``validation`` section gets the safe code
+        defaults — verified against the committed synthetic test profile so
+        the test is hermetic (no external profile directory required)."""
         from utils.config_loader import ProfileLoader
 
-        loader = ProfileLoader(str(REPO_ROOT / "domain-profile"))
+        loader = ProfileLoader(str(FIXTURES / "synthetic_profile"))
         config = loader.get_validation_config()
         assert config["layers"] == ["schema", "semantic", "data_file", "template", "shacl", "owl"]
         assert config["enable_ols"] is False

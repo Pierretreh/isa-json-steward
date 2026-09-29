@@ -1,0 +1,89 @@
+{
+  "@id": "https://example.org/protocols/sample_dilution_protocol",
+  "@type": "synthetic:SampleDilutionProtocol",
+  "name": "Sample dilution protocol",
+  "description": "Dilution of a sample solution with diluent to a target concentration",
+  "protocolType": {
+    "annotationValue": "creating a mixture in solution",
+    "termSource": "OBI",
+    "termAccession": "http://purl.obolibrary.org/obo/OBI_0000685"
+  },
+  "technologyPlatform": "pipette",
+  "parameters": [
+    {
+      "@id": "param_dilutant_type",
+      "name": "dilutant type",
+      "description": "Type of dilutant used (e.g., buffer)",
+      "defaultValue": "buffer"
+    },
+    {
+      "@id": "param_dilutant_volume",
+      "name": "dilutant volume added",
+      "description": "Volume of dilutant added",
+      "defaultValue": 10,
+      "unit": {
+        "annotationValue": "microliter",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000105"
+      }
+    },
+    {
+      "@id": "param_sample_volume",
+      "name": "sample volume",
+      "description": "Volume of sample before dilution",
+      "defaultValue": 10,
+      "unit": {
+        "annotationValue": "microliter",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000105"
+      }
+    },
+    {
+      "@id": "param_dilution_ratio",
+      "name": "dilution ratio",
+      "description": "Ratio of sample to dilutant (e.g., 1:1, 1:10)",
+      "defaultValue": "1:1"
+    },
+    {
+      "@id": "param_target_concentration",
+      "name": "target concentration",
+      "description": "Target concentration after dilution",
+      "defaultValue": 0,
+      "unit": {
+        "annotationValue": "micromolar",
+        "termSource": "UO",
+        "termAccession": "http://purl.obolibrary.org/obo/UO_0000069"
+      }
+    },
+    {
+      "@id": "param_mixing_method",
+      "name": "mixing method",
+      "description": "Method for mixing sample with dilutant",
+      "defaultValue": "Pipette mixing"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "sample solution",
+      "description": "Sample solution to be diluted",
+      "materialType": "solution"
+    },
+    {
+      "name": "dilutant",
+      "description": "Buffer or solution used for dilution",
+      "materialType": "buffer"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "diluted sample",
+      "description": "Sample diluted to the target concentration",
+      "materialType": "solution"
+    }
+  ],
+  "subdirectories": {
+    "protocol_description": "Detailed protocol documentation",
+    "parameters": "Parameter values and settings",
+    "logs": "Execution logs and notes"
+  }
+}
