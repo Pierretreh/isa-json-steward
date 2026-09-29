@@ -1,0 +1,56 @@
+{
+  "_metadata": {
+    "description": "Neutral default assay registry. Each entry maps an assay key to its ISA-JSON measurement/technology types, the protocol it executes, the file extensions that indicate it, folder-name keywords that hint at it, and an optional live/dead measurement-type override used when a live/dead staining is detected. A profile may override or extend any entry. The 'default_assay' key is the catch-all used when no other assay is detected.",
+    "version": "1.0"
+  },
+  "default_assay": "calcein",
+  "assays": {
+    "facs": {
+      "name": "FACS assay",
+      "measurement_type": {
+        "annotationValue": "flow cytometry assay",
+        "termSource": "OBI"
+      },
+      "technology_type": {
+        "annotationValue": "flow cytometry",
+        "termSource": "OBI"
+      },
+      "protocols": ["assay facs assay"],
+      "file_extensions": [".fcs", ".wsp", ".png", ".jpg"],
+      "name_keywords": ["facs", "flow"],
+      "fcs_enrichment": true,
+      "live_dead_measurement_type": {
+        "annotationValue": "toxicity test",
+        "termSource": "OBI"
+      }
+    },
+    "calcein": {
+      "name": "Calcein assay",
+      "measurement_type": {
+        "annotationValue": "viability assay",
+        "termSource": "OBI"
+      },
+      "technology_type": {
+        "annotationValue": "fluorescence microscopy",
+        "termSource": "OBI"
+      },
+      "protocols": ["assay calcein assay"],
+      "file_extensions": [".xlsx", ".csv"],
+      "name_keywords": ["calcein"]
+    },
+    "dapi": {
+      "name": "DAPI staining assay",
+      "measurement_type": {
+        "annotationValue": "live/dead staining",
+        "termSource": "OBI"
+      },
+      "technology_type": {
+        "annotationValue": "fluorescence microscopy",
+        "termSource": "OBI"
+      },
+      "protocols": ["assay dapi staining assay"],
+      "file_extensions": [".czi", ".tif", ".tiff", ".png", ".jpg", ".xml"],
+      "name_keywords": ["dapi", "tunel", "gfap"]
+    }
+  }
+}

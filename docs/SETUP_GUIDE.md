@@ -67,7 +67,7 @@ cat ontologies/validation_report.json
 
 ## Batch Data Processing
 
-To process partner experimental data into ISA-JSON, run the 7-stage batch pipeline (scan → classify → extract → convert → generate → organize → validate). Both `--data-root` and `--output-dir` are **required**:
+To process experimental data into ISA-JSON, run the 7-stage batch pipeline (scan → classify → extract → convert → generate → organize → validate). Both `--data-root` and `--output-dir` are **required**:
 
 ```bash
 # Process all experiment folders found in the data directory
@@ -124,7 +124,7 @@ pytest tests/e2e/                  # End-to-end tests (requires representative d
 - Check PyQt6 is installed: `pip show PyQt6`
 
 **Issue: Tests skip with "Representative data not available"**
-- The E2E tests require the partner representative dataset in the expected location
+- The E2E tests require the representative dataset in `tests/batch_processing/fixtures/` (or set the `ISA_STEWARD_DATA` environment variable to a local data directory)
 - Run unit and integration tests instead: `pytest -m "not requires_data"`
 
 ## References

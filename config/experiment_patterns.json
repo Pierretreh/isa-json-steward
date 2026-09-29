@@ -11,8 +11,7 @@
     "gfap": "gfap_staining_assay.json",
     "fluorescence": "fluorescence_assay.json",
     "toxicity_in_vitro": "toxicity_test_in_vitro.json",
-    "toxicity_ex_vivo": "toxicity_test_ex_vivo.json",
-    "depot_microscopy": "depot_microscopy_assay.json"
+    "toxicity_ex_vivo": "toxicity_test_ex_vivo.json"
   },
   "type_name_aliases": {
     "facs": "facs",
@@ -30,7 +29,6 @@
     "toxicity_in_vitro": "toxicity_in_vitro",
     "toxicity_ex_vivo": "toxicity_ex_vivo",
     "toxicity": "toxicity_in_vitro",
-    "depot_microscopy": "depot_microscopy",
     "explant": "explant"
   },
   "type_keywords": {
@@ -45,8 +43,7 @@
     "gfap": ["gfap", "glial fibrillary acidic protein"],
     "fluorescence": ["fluorescence", "fluorescence measurement", "ethidium bromide"],
     "toxicity_in_vitro": ["toxicity", "viability", "cell viability"],
-    "toxicity_ex_vivo": ["explant", "tissue", "ex vivo"],
-    "depot_microscopy": ["depot", "microscopy depot"]
+    "toxicity_ex_vivo": ["explant", "tissue", "ex vivo"]
   },
   "type_file_indicators": {
     "facs": [".fcs", ".wsp"],

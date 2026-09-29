@@ -40,7 +40,7 @@ python -m utils.batch --data-root ./data --output-dir ./output
 # Useful options
 isa-json-steward-batch --data-root ./data --output-dir ./output \
     --profile ./domain-profile \
-    --investigation-id inv_ukf \
+    --investigation-id inv_001 \
     --inv-inm-path path/to/existing/investigation \
     --skip-conversion \
     --skip-validation
@@ -51,7 +51,7 @@ python scripts/isa_json_validation.py path/to/file.json
 
 ### Using Profiles
 
-The application supports domain-specific profiles that customize templates, ontology references, classification patterns, and configuration. A profile directory contains its own `config/` folder (e.g. `profile.json`, `experiment_patterns.json`, `fcs_markers.json`, …). Files missing from a profile are served from the built-in `config/` directory, and each such fallback is logged as a warning so incomplete profiles are easy to spot.
+The application supports domain-specific profiles that customize templates, ontology references, classification patterns, and configuration. A profile directory contains its own `config/` folder (e.g. `profile.json`, `experiment_patterns.json`, `fcs_markers.json`, …). Files missing from a profile are served from the built-in `config/` directory, and each such fallback is logged as a warning so incomplete profiles are easy to spot. Domain-specific knowledge (factor rules, assay templates, ontology) ships in swappable profile directories; the core is domain-agnostic.
 
 ```bash
 # GUI — load a profile

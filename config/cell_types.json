@@ -1,0 +1,32 @@
+{
+  "_metadata": {
+    "description": "Neutral default cell-type registry. Maps a cell-type key to its ontology term (used for source/source-characteristic terms) and a human display label. A profile may add domain-specific entries (e.g. specific cell lines or tissue types). When a cell type is not found here, the generator falls back to the generic 'cell_type' ontology entry.",
+    "version": "1.0"
+  },
+  "cell_types": {
+    "cell_type": {
+      "term": {
+        "annotationValue": "cell type",
+        "termSource": "CL",
+        "termAccession": "http://purl.obolibrary.org/obo/CL_0000000"
+      },
+      "display": "cell type"
+    },
+    "tissue": {
+      "term": {
+        "annotationValue": "anatomical entity",
+        "termSource": "UBERON",
+        "termAccession": "http://purl.obolibrary.org/obo/UBERON_0001062"
+      },
+      "display": "tissue"
+    },
+    "unknown": {
+      "term": {
+        "annotationValue": "cell type",
+        "termSource": "CL",
+        "termAccession": "http://purl.obolibrary.org/obo/CL_0000000"
+      },
+      "display": "biological samples"
+    }
+  }
+}

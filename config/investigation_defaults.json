@@ -10,7 +10,7 @@
   "generator_name": "ISA-JSON Generator",
   "processor_name": "ISA-JSON Bulk Data Transfer Processor",
   "project_name": "ISA-JSON Data Steward",
-  "project_partner": "",
+  "project_collaborator": "",
   "default_investigation_id": "inv_default",
   "default_investigation_title": "Default Investigation",
   "default_investigation_description": "Default investigation for ISA-JSON Data Steward project"

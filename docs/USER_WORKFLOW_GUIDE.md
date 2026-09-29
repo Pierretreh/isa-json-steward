@@ -9,7 +9,7 @@ This guide provides step-by-step instructions for scientists to enter experiment
 The ISA-JSON Data Steward uses ISA-JSON format for FAIR data management. There are two ways to create ISA-JSON studies:
 
 1. **GUI** — Interactive desktop application for manual data entry
-2. **Batch pipeline** — Automated conversion of partner experiment folders
+2. **Batch pipeline** — Automated conversion of experiment folders
 
 ## GUI Workflow
 
@@ -38,14 +38,14 @@ python -m gui.main
 
 ## Batch Pipeline Workflow
 
-For converting partner experiment folders (CZI, FCS, XLSX files) into ISA-JSON studies:
+For converting experiment folders (CZI, FCS, XLSX files) into ISA-JSON studies:
 
 ```bash
 # Process all experiments (both --data-root and --output-dir are required)
-isa-json-steward-batch --data-root "path/to/data" --output-dir ./output --investigation-id inv_ukf
+isa-json-steward-batch --data-root "path/to/data" --output-dir ./output --investigation-id inv_001
 
 # Or using the module invocation
-python -m utils.batch --data-root "path/to/data" --output-dir ./output --investigation-id inv_ukf
+python -m utils.batch --data-root "path/to/data" --output-dir ./output --investigation-id inv_001
 
 # Process with a domain profile
 isa-json-steward-batch --data-root "path/to/data" --output-dir ./output --profile ./domain-profile
@@ -72,7 +72,7 @@ Classification combines three signals, all configurable through the active profi
 
 ## Tips for Scientists
 
-- **Material naming**: Use descriptive names that include key identifiers (e.g., "pVV021_4uM", not "sample_1")
+- **Material naming**: Use descriptive names that include key identifiers (e.g., "compound_A_4uM", not "sample_1")
 - **Ontology terms**: Always prefer ontology-linked values over free text when possible
 - **Templates**: Start from templates rather than building from scratch — they include correct ontology references
 - **Validation**: Check the validation output after export to catch missing metadata early
