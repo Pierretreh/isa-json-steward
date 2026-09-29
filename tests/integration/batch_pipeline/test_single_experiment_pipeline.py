@@ -3,10 +3,16 @@ Integration tests for single experiment batch processing pipeline.
 """
 
 import json
+import shutil
 
 import pytest
 
 from utils.batch.batch_processor import BatchProcessor
+
+#: Pinned fixture experiment folder (the committed synthetic donor/treatment
+#: fixture) so the pipeline always runs on a known-good dataset instead of
+#: whichever folder happens to sort first at the data root.
+FIXTURE_EXP_FOLDER = "E10_explant_facs_treatment_donor"
 
 
 @pytest.mark.integration
@@ -17,19 +23,12 @@ class TestSingleExperimentPipeline:
 
     def test_full_pipeline_single_experiment(self, temp_dir, representative_data_path):
         """Test complete pipeline with single experiment."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
+        # Copy the pinned fixture experiment to a temp directory.
+        src_folder = representative_data_path / FIXTURE_EXP_FOLDER
+        assert src_folder.exists(), f"fixture folder not found: {src_folder}"
 
-        # Find first experiment folder
-        exp_folders = [f for f in representative_data_path.iterdir() if f.is_dir()]
-        if not exp_folders:
-            pytest.skip("No experiment folders found")
-
-        # Copy experiment to temp directory
-        import shutil
-
-        test_exp = temp_dir / exp_folders[0].name
-        shutil.copytree(exp_folders[0], test_exp)
+        test_exp = temp_dir / src_folder.name
+        shutil.copytree(src_folder, test_exp)
 
         output_dir = temp_dir / "output"
         output_dir.mkdir()
@@ -53,17 +52,11 @@ class TestSingleExperimentPipeline:
 
     def test_pipeline_generates_valid_isa_json(self, temp_dir, representative_data_path):
         """Test that pipeline generates valid ISA-JSON."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
+        src_folder = representative_data_path / FIXTURE_EXP_FOLDER
+        assert src_folder.exists(), f"fixture folder not found: {src_folder}"
 
-        exp_folders = [f for f in representative_data_path.iterdir() if f.is_dir()]
-        if not exp_folders:
-            pytest.skip("No experiment folders found")
-
-        import shutil
-
-        test_exp = temp_dir / exp_folders[0].name
-        shutil.copytree(exp_folders[0], test_exp)
+        test_exp = temp_dir / src_folder.name
+        shutil.copytree(src_folder, test_exp)
 
         output_dir = temp_dir / "output"
         output_dir.mkdir()
@@ -91,17 +84,11 @@ class TestSingleExperimentPipeline:
 
     def test_pipeline_with_validation(self, temp_dir, representative_data_path):
         """Test pipeline with validation enabled."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
+        src_folder = representative_data_path / FIXTURE_EXP_FOLDER
+        assert src_folder.exists(), f"fixture folder not found: {src_folder}"
 
-        exp_folders = [f for f in representative_data_path.iterdir() if f.is_dir()]
-        if not exp_folders:
-            pytest.skip("No experiment folders found")
-
-        import shutil
-
-        test_exp = temp_dir / exp_folders[0].name
-        shutil.copytree(exp_folders[0], test_exp)
+        test_exp = temp_dir / src_folder.name
+        shutil.copytree(src_folder, test_exp)
 
         output_dir = temp_dir / "output"
         output_dir.mkdir()
@@ -119,17 +106,11 @@ class TestSingleExperimentPipeline:
 
     def test_pipeline_creates_directory_structure(self, temp_dir, representative_data_path):
         """Test that pipeline creates proper directory structure."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
+        src_folder = representative_data_path / FIXTURE_EXP_FOLDER
+        assert src_folder.exists(), f"fixture folder not found: {src_folder}"
 
-        exp_folders = [f for f in representative_data_path.iterdir() if f.is_dir()]
-        if not exp_folders:
-            pytest.skip("No experiment folders found")
-
-        import shutil
-
-        test_exp = temp_dir / exp_folders[0].name
-        shutil.copytree(exp_folders[0], test_exp)
+        test_exp = temp_dir / src_folder.name
+        shutil.copytree(src_folder, test_exp)
 
         output_dir = temp_dir / "output"
         output_dir.mkdir()

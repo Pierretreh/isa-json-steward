@@ -1,10 +1,11 @@
 """
-End-to-end tests for full pipeline with representative dataset.
+End-to-end tests for the full pipeline with the committed fixture dataset.
 """
 
 import json
 import os
 import platform
+import re
 import shutil
 
 import pytest
@@ -12,13 +13,19 @@ import pytest
 from utils.batch.batch_processor import BatchProcessor
 from utils.batch.validator import ISAJsonValidator
 
+#: Experiment folders are the directories whose names match the scanner's
+#: default experiment pattern (``^E\\d+``); everything else at the data root
+#: (e.g. the ``synthetic_profile/`` directory) is not a discoverable
+#: experiment and must not be counted as one.
+EXPERIMENT_FOLDER_RE = re.compile(r"^E\d+")
+
 
 def _extended_path(path):
     """Convert path to Windows extended-length path to bypass MAX_PATH limit.
 
     On Windows, paths longer than 260 characters require the '\\\\?\\' prefix.
-    This is needed for deeply nested pyramidal image directories in partner
-    representative data (e.g., E11 *_files/ within *_files/).
+    This is needed for deeply nested pyramidal image directories in the
+    fixture data (e.g., E11 *_files/ within *_files/).
 
     Args:
         path: A Path object or string.
@@ -44,22 +51,30 @@ def _copy_tree_safe(src, dst):
     shutil.copytree(_extended_path(src), _extended_path(dst))
 
 
+def _experiment_folders(data_root):
+    """Return only the scanner-discoverable experiment folders at *data_root*.
+
+    Non-``E#`` directories (e.g. ``synthetic_profile/``) are excluded so the
+    count matches what :class:`~utils.batch.folder_scanner.FolderScanner`
+    discovers with the default ``^E\\d+`` experiment pattern.
+    """
+    return [f for f in data_root.iterdir() if f.is_dir() and EXPERIMENT_FOLDER_RE.match(f.name)]
+
+
 @pytest.mark.e2e
 @pytest.mark.requires_data
 @pytest.mark.slow
-class TestFullPipelineWithRepresentativeData:
-    """End-to-end tests using representative dataset."""
+class TestFullPipelineWithFixtureData:
+    """End-to-end tests using the committed fixture dataset."""
 
     def test_full_pipeline_all_experiments(self, temp_dir, representative_data_path):
-        """Test complete pipeline with all representative experiments."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
-
-        # Copy all experiments to temp directory
+        """Test complete pipeline with all fixture experiments."""
+        # Copy all scanner-discoverable experiments to a temp directory.
         test_data = temp_dir / "test_data"
         test_data.mkdir()
 
-        exp_folders = [f for f in representative_data_path.iterdir() if f.is_dir()]
+        exp_folders = _experiment_folders(representative_data_path)
+        assert exp_folders, "no scanner-discoverable experiment folders in fixtures"
         for exp_folder in exp_folders:
             _copy_tree_safe(exp_folder, test_data / exp_folder.name)
 
@@ -75,21 +90,17 @@ class TestFullPipelineWithRepresentativeData:
             skip_validation=False,
         )
 
-        # Verify results
+        # Verify results: the scanner finds exactly the E# folders we copied.
         assert result.total_experiments == len(exp_folders)
         assert result.successful_experiments >= 0
         assert result.validation_passed is not None
 
     def test_isa_json_validation_all_outputs(self, temp_dir, representative_data_path):
         """Test that all generated ISA-JSON files are valid."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
-
         test_data = temp_dir / "test_data"
         test_data.mkdir()
 
-        exp_folders = [f for f in representative_data_path.iterdir() if f.is_dir()]
-        for exp_folder in exp_folders:
+        for exp_folder in _experiment_folders(representative_data_path):
             _copy_tree_safe(exp_folder, test_data / exp_folder.name)
 
         output_dir = temp_dir / "output"
@@ -132,14 +143,10 @@ class TestFullPipelineWithRepresentativeData:
 
     def test_pipeline_creates_proper_structure(self, temp_dir, representative_data_path):
         """Test that pipeline creates proper directory structure."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
-
         test_data = temp_dir / "test_data"
         test_data.mkdir()
 
-        exp_folders = [f for f in representative_data_path.iterdir() if f.is_dir()]
-        for exp_folder in exp_folders:
+        for exp_folder in _experiment_folders(representative_data_path):
             _copy_tree_safe(exp_folder, test_data / exp_folder.name)
 
         output_dir = temp_dir / "output"
@@ -164,14 +171,10 @@ class TestFullPipelineWithRepresentativeData:
 
     def test_pipeline_preserves_data_integrity(self, temp_dir, representative_data_path):
         """Test that pipeline preserves data integrity."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
-
         test_data = temp_dir / "test_data"
         test_data.mkdir()
 
-        exp_folders = [f for f in representative_data_path.iterdir() if f.is_dir()]
-        for exp_folder in exp_folders:
+        for exp_folder in _experiment_folders(representative_data_path):
             _copy_tree_safe(exp_folder, test_data / exp_folder.name)
 
         # Count original files
@@ -194,13 +197,9 @@ class TestFullPipelineWithRepresentativeData:
         assert result.total_files >= original_file_count
 
     def test_pipeline_with_e1_experiment(self, temp_dir, representative_data_path):
-        """Test pipeline with E1_Müller_Calceinassay experiment."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
-
-        e1_folder = representative_data_path / "E1_Müller_Calceinassay und FACS Test"
-        if not e1_folder.exists():
-            pytest.skip("E1 experiment not found")
+        """Test pipeline with the E1 viability/Calcein FACS fixture experiment."""
+        e1_folder = representative_data_path / "E1_viability_calcein_facs"
+        assert e1_folder.exists(), f"fixture folder not found: {e1_folder}"
 
         test_data = temp_dir / "test_data"
         test_data.mkdir()
@@ -220,13 +219,9 @@ class TestFullPipelineWithRepresentativeData:
         assert result.total_experiments == 1
 
     def test_pipeline_with_e10_experiment(self, temp_dir, representative_data_path):
-        """Test pipeline with E10_Explant_Calcein_FACS experiment."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
-
-        e10_folder = representative_data_path / "E10_Explant_Calcein_FACS"
-        if not e10_folder.exists():
-            pytest.skip("E10 experiment not found")
+        """Test pipeline with the E10 explant FACS treatment/donor fixture."""
+        e10_folder = representative_data_path / "E10_explant_facs_treatment_donor"
+        assert e10_folder.exists(), f"fixture folder not found: {e10_folder}"
 
         test_data = temp_dir / "test_data"
         test_data.mkdir()
@@ -246,13 +241,9 @@ class TestFullPipelineWithRepresentativeData:
         assert result.total_experiments == 1
 
     def test_pipeline_with_e11_experiment(self, temp_dir, representative_data_path):
-        """Test pipeline with E11_Explant_FACS_Static_DAPI experiment."""
-        if not representative_data_path or not representative_data_path.exists():
-            pytest.skip("Representative data not available")
-
-        e11_folder = representative_data_path / "E11_Explant_FACS_Static_DAPI"
-        if not e11_folder.exists():
-            pytest.skip("E11 experiment not found")
+        """Test pipeline with the E11 explant FACS static DAPI fixture."""
+        e11_folder = representative_data_path / "E11_explant_facs_static_dapi"
+        assert e11_folder.exists(), f"fixture folder not found: {e11_folder}"
 
         test_data = temp_dir / "test_data"
         test_data.mkdir()

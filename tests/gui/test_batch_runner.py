@@ -34,8 +34,8 @@ except (ImportError, OSError):
 
 
 def _make_experiment_root(temp_dir: Path) -> Path:
-    """Create a minimal ``E1_test_experiment/data.csv`` data root."""
-    exp_dir = temp_dir / "E1_test_experiment"
+    """Create a minimal ``E1_viability/data.csv`` data root."""
+    exp_dir = temp_dir / "E1_viability"
     exp_dir.mkdir(parents=True, exist_ok=True)
     (exp_dir / "data.csv").write_text("col1,col2\nval1,val2\n", encoding="utf-8")
     return temp_dir
