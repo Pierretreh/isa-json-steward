@@ -70,7 +70,7 @@ jobs:
 
       - name: Assert zero skipped tests (batch_processing/e2e/integration)
         run: |
-          python -m pytest tests/batch_processing tests/e2e tests/integration -rs -q --junitxml=no-skip.xml
+          python -m pytest tests/batch_processing tests/e2e tests/integration -rs -q --junitxml=no-skip.xml --no-cov
           python - <<'PY'
           import xml.etree.ElementTree as ET
 
