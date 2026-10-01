@@ -211,6 +211,11 @@ class ISAProcess:
     outputs: List[Dict[str, Any]] = field(default_factory=list)
     parameter_values: List[Dict[str, Any]] = field(default_factory=list)
     comments: List[Dict[str, str]] = field(default_factory=list)
+    # FCS acquisition metadata (feature 1, merge plan Phase 1/2).  Additive and
+    # default-empty so existing construction and serialization stay compatible;
+    # Phase 2 populates these per sample process from the FCS summary.
+    date: str = ""
+    performer: str = ""
 
 
 @dataclass
@@ -221,6 +226,10 @@ class ISAAssay:
     assay_name: str
     measurement_type: Dict[str, str]
     technology_type: Dict[str, str]
+    # Registry key that drove this assay (e.g. 'facs', 'calcein').  Used to
+    # resolve the profile's assay-registry entry for FCS enrichment (feature 1,
+    # merge plan Phase 1) and for registry-driven selection (Phase 3).
+    assay_type_key: str = ""
     technology_platform: str = ""
     data_files: List[Dict[str, Any]] = field(default_factory=list)
     materials: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
@@ -228,6 +237,9 @@ class ISAAssay:
     characteristic_categories: List[Dict[str, Any]] = field(default_factory=list)
     unit_categories: List[Dict[str, Any]] = field(default_factory=list)
     comments: List[Dict[str, str]] = field(default_factory=list)
+    # Assay-level parameters (feature 1, merge plan Phase 1): FCS-derived
+    # instrument exposure, e.g. ``{"name": "instrument", "value": "LSRFortessa"}``.
+    parameters: List[Dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -284,6 +296,12 @@ class ISAJsonGenerator:
         self.classifier = ExperimentClassifier(templates_root)
         self.logger = logging.getLogger(__name__)
 
+        # FCS acquisition summaries cached per experiment folder (feature 1,
+        # Phase 1 of the merge plan).  Populated by :meth:`_extract_fcs_summary`
+        # and consumed by the FCS enrichment helpers so repeated assays in the
+        # same study do not re-read the FCS headers.
+        self._fcs_summaries: Dict[str, Dict[str, Any]] = {}
+
         # Standard ontology sources
         self.ontology_sources = {
             "OBI": "http://purl.obolibrary.org/obo/obi.owl",
@@ -334,6 +352,149 @@ class ISAJsonGenerator:
         except Exception as exc:  # pragma: no cover - defensive
             self.logger.debug("Factor rules unavailable: %s", exc)
             return None
+
+    # ── FCS enrichment (feature 1, merge plan Phase 1) ────────────────────
+
+    def _assay_registry(self) -> Dict[str, Any]:
+        """Return the assay registry (``assay_key -> config``) from the profile."""
+        try:
+            return get_profile().get_assay_types().get("assays") or {}
+        except Exception:  # pragma: no cover - defensive
+            return {}
+
+    def _extract_fcs_summary(self, folder_path: Optional[str]) -> Dict[str, Any]:
+        """Build the FCS acquisition summary for *folder_path* (best effort).
+
+        Thin wrapper over
+        :meth:`utils.batch.metadata_extractor.MetadataExtractor.extract_fcs_acquisition_summary`.
+        Returns ``{}`` when the folder is missing or contains no ``.fcs`` files.
+        Results are cached per folder so repeated assays in the same study do
+        not re-read the FCS headers.
+        """
+        if not folder_path:
+            return {}
+        key = str(Path(folder_path).resolve())
+        if key in self._fcs_summaries:
+            return self._fcs_summaries[key]
+        root = Path(folder_path)
+        if not root.is_dir():
+            return {}
+        fcs_files = [p for p in root.rglob("*") if p.is_file() and p.suffix.lower() == ".fcs"]
+        if not fcs_files:
+            return {}
+        summary: Dict[str, Any] = {}
+        try:
+            from utils.batch.metadata_extractor import MetadataExtractor
+
+            summary = MetadataExtractor().extract_fcs_acquisition_summary(str(root)) or {}
+        except Exception:  # pragma: no cover - defensive
+            self.logger.debug("FCS summary extraction failed", exc_info=True)
+            summary = {}
+        self._fcs_summaries[key] = summary
+        return summary
+
+    @staticmethod
+    def _fcs_reagents(summary: Dict[str, Any]) -> List[str]:
+        """Detected reagent names from the FCS acquisition summary markers.
+
+        Falls back to the profile's ``fcs_markers`` channel-to-dye mapping
+        when the summary carries no markers (mirrors
+        ``ExperimentProcessor._reagents_from_fcs``).
+        """
+        reagents: List[str] = []
+        for marker in summary.get("markers", []):
+            dye = (marker.get("dye") or "").strip()
+            if dye and dye not in reagents:
+                reagents.append(dye)
+        if not reagents:
+            try:
+                for _channel, marker in sorted(get_profile().get_fcs_markers().items()):
+                    dye = (marker.get("dye") or "").strip()
+                    if dye and dye not in reagents:
+                        reagents.append(dye)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        return reagents
+
+    def _fcs_enrich_assay(
+        self,
+        assay: ISAAssay,
+        protocol: Optional[Dict[str, Any]],
+        summary: Dict[str, Any],
+        registry_entry: Optional[Dict[str, Any]],
+    ) -> None:
+        """Apply FCS-derived enrichment to *assay* and its *protocol* in place.
+
+        Port of ``ExperimentProcessor._create_assays`` enrichment (merge plan
+        feature 1): live/dead ``measurementType`` override, the instrument as
+        an assay parameter, and the instrument + detected reagents as protocol
+        parameters.  All behaviour is config-gated via the registry entry's
+        ``fcs_enrichment`` / ``live_dead_measurement_type`` flags; a missing
+        summary or registry entry is a no-op, so non-FCS assays are untouched.
+        """
+        summary = summary or {}
+        entry = registry_entry or {}
+        if not entry.get("fcs_enrichment"):
+            return
+
+        # Live/dead measurement-type override (config-driven).
+        live_dead = entry.get("live_dead_measurement_type")
+        if live_dead and summary.get("is_live_dead"):
+            assay.measurement_type = dict(live_dead)
+
+        instrument = summary.get("instrument") or ""
+        if instrument and not any(p.get("name") == "instrument" for p in assay.parameters):
+            assay.parameters.append({"name": "instrument", "value": instrument})
+
+        if protocol is None:
+            return
+        protocol_id = protocol.get("@id", "")
+        param_names = {
+            (p.get("parameterName") or {}).get("annotationValue", "")
+            for p in protocol.get("parameters", [])
+        }
+        if instrument and "instrument" not in param_names:
+            protocol["parameters"].append(
+                {
+                    "@id": f"{protocol_id}#parameter/instrument",
+                    "parameterName": {"annotationValue": "instrument"},
+                }
+            )
+        for reagent in self._fcs_reagents(summary):
+            if reagent not in param_names:
+                protocol["parameters"].append(
+                    {
+                        "@id": f"{protocol_id}#parameter/{reagent}",
+                        "parameterName": {"annotationValue": reagent},
+                    }
+                )
+
+    @staticmethod
+    def _fcs_enrich_description(
+        description: str, summary: Dict[str, Any], factor_names: List[str]
+    ) -> str:
+        """Append FCS-derived details to a study description.
+
+        Port of ``ExperimentProcessor._update_study_description`` (merge plan
+        feature 1): Live/Dead note, instrument, acquisition date, and the
+        detected factor names.  A ``{}`` summary leaves the description
+        unchanged.
+        """
+        summary = summary or {}
+        parts: List[str] = []
+        if summary.get("is_live_dead"):
+            parts.append("This experiment includes Live/Dead analysis.")
+        instrument = summary.get("instrument") or ""
+        if instrument:
+            parts.append(f"FACS acquisition performed on {instrument}.")
+        date = summary.get("acquisition_date_iso") or summary.get("acquisition_date") or ""
+        if date:
+            parts.append(f"Acquisition date: {date}.")
+        if factor_names:
+            parts.append(f"Factors: {', '.join(factor_names)}.")
+        if not parts:
+            return description
+        return (description + " " + " ".join(parts)).strip()
 
     def _extract_experiment_metadata(
         self,
@@ -506,10 +667,23 @@ class ISAJsonGenerator:
         return meta
 
     def _build_study_description(
-        self, exp_id: str, meta: Dict[str, Any], folder_name: str
+        self,
+        exp_id: str,
+        meta: Dict[str, Any],
+        folder_name: str,
+        fcs_summary: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, str]:
         """
         Build a descriptive title and description from extracted metadata.
+
+        Args:
+            exp_id: Experiment identifier
+            meta: Extracted experiment metadata
+            folder_name: Original experiment folder name
+            fcs_summary: Optional FCS acquisition summary (feature 1, merge
+                plan Phase 1).  When provided, the description is enriched
+                with Live/Dead, instrument, acquisition-date and factor notes
+                (see :meth:`_fcs_enrich_description`).
 
         Returns:
             Tuple of (title, description)
@@ -590,6 +764,13 @@ class ISAJsonGenerator:
 
         description = " ".join(desc_parts)
 
+        # FCS-derived enrichment (feature 1, merge plan Phase 1): Live/Dead
+        # note, instrument, acquisition date and detected factors.  No-op
+        # when no FCS summary is available (non-FCS experiments).
+        if fcs_summary:
+            factor_names = sorted(meta.get("factor_values", {}).keys())
+            description = self._fcs_enrich_description(description, fcs_summary, factor_names)
+
         return title, description
 
     # ── Study generation ─────────────────────────────────────────────────
@@ -626,9 +807,14 @@ class ISAJsonGenerator:
             subfolder_names=subfolder_names or None,
         )
 
-        # Build title and description
+        # Build title and description (FCS enrichment applied when the folder
+        # contains FCS files - feature 1, Phase 1)
+        fcs_summary = self._extract_fcs_summary(str(path))
         title, description = self._build_study_description(
-            exp_meta["experiment_id"], exp_meta, path.name
+            exp_meta["experiment_id"],
+            exp_meta,
+            path.name,
+            fcs_summary=fcs_summary,
         )
 
         # Build characteristic categories, units, factors
@@ -840,9 +1026,14 @@ class ISAJsonGenerator:
             exp_id = exp_metadata.experiment_id
             study_id = f"study_{exp_id}"
 
-            # Build title and description
+            # Build title and description (FCS enrichment applied when the
+            # experiment folder contains FCS files - feature 1, Phase 1)
+            fcs_summary = self._extract_fcs_summary(getattr(exp_metadata, "folder_path", None))
             title, description = self._build_study_description(
-                exp_id, exp_meta, exp_metadata.experiment_name or exp_id
+                exp_id,
+                exp_meta,
+                exp_metadata.experiment_name or exp_id,
+                fcs_summary=fcs_summary,
             )
 
             # Build characteristic categories, units, factors
@@ -942,6 +1133,27 @@ class ISAJsonGenerator:
                         }
                     )
 
+            # FCS enrichment of the study-level assay protocol (feature 1,
+            # Phase 1): once the assay protocol is declared at study level,
+            # append the instrument and reagent parameters (config-gated via
+            # the assay registry's ``fcs_enrichment`` flag).
+            if fcs_summary:
+                for assay_obj in study.assays:
+                    if not assay_obj.process_sequence:
+                        continue
+                    proto_name = assay_obj.process_sequence[0].executes_protocol
+                    if not proto_name:
+                        continue
+                    protocol = next(
+                        (p for p in study.protocols if p.get("name") == proto_name), None
+                    )
+                    self._fcs_enrich_assay(
+                        assay_obj,
+                        protocol,
+                        fcs_summary,
+                        self._assay_registry().get(assay_obj.assay_type_key),
+                    )
+
             studies.append(study)
 
         return studies
@@ -985,6 +1197,7 @@ class ISAJsonGenerator:
             assay_name=assay_name,
             measurement_type=template.get("measurementType", {}),
             technology_type=template.get("technologyType", {}),
+            assay_type_key=assay_type_key,
             data_files=self._create_data_files(
                 exp_metadata.file_inventory or FileInventory(), assay_id, assay_type_key.lower()
             ),
@@ -995,6 +1208,23 @@ class ISAJsonGenerator:
                 {"name": "Experiment Type", "value": assay_type_key},
             ],
         )
+
+        # FCS enrichment (feature 1, merge plan Phase 1): instrument, live/dead
+        # override and reagent parameters are attached when the experiment has
+        # FCS files and the registry entry opts in via ``fcs_enrichment``.
+        summary = self._extract_fcs_summary(getattr(exp_metadata, "folder_path", None))
+        if summary:
+            registry_entry = self._assay_registry().get(assay_type_key)
+            # The study-level protocol is declared after the assays in
+            # _group_experiments_into_studies; the enrichment appends its
+            # parameters there.  When the assay is built standalone (e.g.
+            # generate_study) no protocol object exists yet, so the assay-level
+            # parameters (instrument) still carry the enrichment.
+            self._fcs_enrich_assay(assay, None, summary, registry_entry)
+            if assay.process_sequence:
+                for process in assay.process_sequence:
+                    process.date = summary.get("acquisition_date_iso") or ""
+                    process.performer = summary.get("operator") or ""
 
         return assay
 
@@ -1918,6 +2148,7 @@ class ISAJsonGenerator:
             "technologyPlatform": assay.technology_platform,
             "dataFiles": assay.data_files,
             "materials": assay.materials,
+            "parameters": assay.parameters,
             "characteristicCategories": (
                 assay.characteristicCategories if hasattr(assay, "characteristicCategories") else []
             ),
@@ -1931,14 +2162,18 @@ class ISAJsonGenerator:
     def _process_to_dict(self, process: ISAProcess) -> Dict[str, Any]:
         """
         Convert process object to dictionary.
+
+        ``performer`` and ``date`` carry the FCS acquisition metadata when
+        available (feature 1, Phase 1); they default to the empty string for
+        processes without FCS context, preserving prior output shape.
         """
         return {
             "@id": process.process_id,
             "name": process.process_id.replace("#process/", ""),
             "executesProtocol": {"@id": process.executes_protocol},
             "parameterValues": process.parameter_values,
-            "performer": "",
-            "date": "",
+            "performer": process.performer,
+            "date": process.date,
             "inputs": process.inputs,
             "outputs": process.outputs,
             "comments": process.comments,

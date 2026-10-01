@@ -3,6 +3,7 @@ Unit tests for ISAJsonGenerator component.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -556,3 +557,211 @@ class TestParameterPopulation:
         assert len(processes) >= 1
         total_params = sum(len(p.parameter_values) for p in processes)
         assert total_params > 0, "processSequence should have non-empty parameterValues"
+
+
+@pytest.mark.unit
+@pytest.mark.batch_component
+class TestPathAFcsAssayEnrichment:
+    """FCS assay enrichment in the merged Path A generator (merge plan Phase 1).
+
+    These exercise the NEW Path A enrichment surface
+    (:meth:`ISAJsonGenerator._extract_fcs_summary`,
+    :meth:`ISAJsonGenerator._fcs_enrich_assay`,
+    :meth:`ISAJsonGenerator._fcs_enrich_description`) using the committed
+    synthetic fixture FCS data (``E10_explant_facs_treatment_donor``) and a
+    synthetic summary mirroring those headers.
+    """
+
+    FIXTURES = Path(__file__).parent / "fixtures"
+    E10_FOLDER = FIXTURES / "E10_explant_facs_treatment_donor"
+
+    @staticmethod
+    def _fcs_summary():
+        """A summary mirroring the synthetic fixture FCS headers."""
+        return {
+            "instrument": "LSRFortessa",
+            "operator": "Boneva",
+            "acquisition_date": "16-DEC-2025",
+            "acquisition_date_iso": "2025-12-16",
+            "channels": ["FSC-A", "FITC-A", "PI-A", "Time"],
+            "markers": [
+                {"channel": "FITC-A", "dye": "Calcein-AM", "role": "live"},
+                {"channel": "PI-A", "dye": "Propidium Iodide", "role": "dead"},
+            ],
+            "is_live_dead": True,
+            "file_count": 8,
+        }
+
+    def _facs_metadata(self):
+        """FolderMetadata for the E10 fixture folder."""
+        from utils.batch.folder_scanner import FolderMetadata
+
+        return FolderMetadata(
+            experiment_id="E10",
+            experiment_name="E10_explant_facs_treatment_donor",
+            folder_path=str(self.E10_FOLDER),
+        )
+
+    def test_extract_fcs_summary_from_fixture_folder(self, isa_json_generator):
+        """_extract_fcs_summary reads the real fixture FCS headers."""
+        summary = isa_json_generator._extract_fcs_summary(str(self.E10_FOLDER))
+        assert summary.get("is_live_dead") is True
+        assert summary.get("instrument") == "LSRFortessa"
+        assert summary.get("operator") == "Boneva"
+        assert summary.get("acquisition_date_iso") == "2025-12-16"
+        dyes = {m.get("dye") for m in summary.get("markers", [])}
+        assert {"Calcein-AM", "Propidium Iodide"} <= dyes
+
+    def test_extract_fcs_summary_empty_for_folder_without_fcs(self, isa_json_generator, temp_dir):
+        """Folders without .fcs files yield an empty summary (no enrichment)."""
+        (temp_dir / "data.xlsx").write_bytes(b"")
+        assert isa_json_generator._extract_fcs_summary(str(temp_dir)) == {}
+        assert isa_json_generator._extract_fcs_summary(None) == {}
+        assert isa_json_generator._extract_fcs_summary(str(temp_dir / "missing")) == {}
+
+    def test_enrichment_overrides_facs_measurement_type_when_live_dead(self, isa_json_generator):
+        """facs + is_live_dead → registry live_dead_measurement_type override."""
+        assay = isa_json_generator.generate_assay(
+            assay_id="assay_1",
+            assay_name="FACS assay",
+            measurement_type={"annotationValue": "flow cytometry assay", "termSource": "OBI"},
+            technology_type={"annotationValue": "flow cytometry", "termSource": "OBI"},
+        )
+        summary = self._fcs_summary()
+        isa_json_generator._fcs_enrich_assay(
+            assay, None, summary, isa_json_generator._assay_registry()["facs"]
+        )
+        assert assay.measurement_type["annotationValue"] == "toxicity test"
+        assert assay.parameters and assay.parameters[0] == {
+            "name": "instrument",
+            "value": "LSRFortessa",
+        }
+
+    def test_enrichment_keeps_measurement_type_when_not_live_dead(self, isa_json_generator):
+        """Non live/dead FCS leaves the template measurement type intact."""
+        assay = isa_json_generator.generate_assay(
+            assay_id="assay_1",
+            assay_name="FACS assay",
+            measurement_type={"annotationValue": "flow cytometry assay", "termSource": "OBI"},
+            technology_type={"annotationValue": "flow cytometry", "termSource": "OBI"},
+        )
+        summary = self._fcs_summary()
+        summary["is_live_dead"] = False
+        isa_json_generator._fcs_enrich_assay(
+            assay, None, summary, isa_json_generator._assay_registry()["facs"]
+        )
+        assert assay.measurement_type["annotationValue"] == "flow cytometry assay"
+        assert assay.parameters[0]["value"] == "LSRFortessa"
+
+    def test_enrichment_adds_protocol_parameters(self, isa_json_generator):
+        """Instrument + reagents are declared as protocol parameters."""
+        assay = isa_json_generator.generate_assay(
+            assay_id="assay_1",
+            assay_name="FACS assay",
+            measurement_type={"annotationValue": "flow cytometry assay", "termSource": "OBI"},
+            technology_type={"annotationValue": "flow cytometry", "termSource": "OBI"},
+        )
+        protocol = {
+            "@id": "#protocol/flow_cytometry_assay",
+            "name": "flow cytometry assay",
+            "parameters": [],
+            "components": [],
+        }
+        isa_json_generator._fcs_enrich_assay(
+            assay, protocol, self._fcs_summary(), isa_json_generator._assay_registry()["facs"]
+        )
+        param_names = {
+            p.get("parameterName", {}).get("annotationValue", "")
+            for p in protocol.get("parameters", [])
+        }
+        assert "instrument" in param_names
+        assert "Calcein-AM" in param_names
+        assert "Propidium Iodide" in param_names
+
+    def test_enrichment_noop_for_empty_summary_or_non_facs_entry(self, isa_json_generator):
+        """Empty summary / non-FCS registry entry leave the assay untouched."""
+        assay = isa_json_generator.generate_assay(
+            assay_id="assay_1",
+            assay_name="Calcein assay",
+            measurement_type={"annotationValue": "viability assay", "termSource": "OBI"},
+            technology_type={"annotationValue": "fluorescence microscopy", "termSource": "OBI"},
+        )
+        isa_json_generator._fcs_enrich_assay(
+            assay,
+            {"@id": "#protocol/x", "parameters": []},
+            {},
+            isa_json_generator._assay_registry()["calcein"],
+        )
+        assert assay.measurement_type["annotationValue"] == "viability assay"
+        assert assay.parameters == []
+
+    def test_enrich_description_appends_live_dead_instrument_date_factors(self, isa_json_generator):
+        """_fcs_enrich_description appends FCS-derived details to the description."""
+        desc = isa_json_generator._fcs_enrich_description(
+            "This study covers experiment E10.",
+            self._fcs_summary(),
+            ["concentration", "donor", "treatment"],
+        )
+        assert "Live/Dead" in desc
+        assert "LSRFortessa" in desc
+        assert "2025-12-16" in desc
+        assert "donor" in desc and "concentration" in desc
+        # Operator is intentionally excluded from the study-level description.
+        assert "Boneva" not in desc
+
+    def test_enrich_description_noop_without_summary(self, isa_json_generator):
+        """A missing/empty summary (and no factors) leaves the description unchanged."""
+        desc = "This study covers experiment E1."
+        assert isa_json_generator._fcs_enrich_description(desc, {}, []) == desc
+        assert isa_json_generator._fcs_enrich_description(desc, None, []) == desc
+
+    def test_enrich_description_lists_factors_even_without_fcs(self, isa_json_generator):
+        """Factor notes are appended regardless of FCS availability (Path B parity)."""
+        desc = "This study covers experiment E1."
+        assert isa_json_generator._fcs_enrich_description(desc, {}, ["donor"]) == (
+            "This study covers experiment E1. Factors: donor."
+        )
+
+    def test_create_assay_from_experiment_applies_fcs_enrichment(self, isa_json_generator):
+        """_create_assay_from_experiment enriches the assay for the E10 FCS fixture."""
+        metadata = self._facs_metadata()
+        exp_meta = isa_json_generator._extract_experiment_metadata(
+            "E10_explant_facs_treatment_donor",
+            file_names=["L D_161225_B_Control.fcs"],
+        )
+        assay = isa_json_generator._create_assay_from_experiment(metadata, exp_meta, "facs")
+
+        # Live/dead override from the registry entry.
+        assert assay.measurement_type["annotationValue"] == "toxicity test"
+        # Instrument as an assay parameter.
+        assert any(
+            p.get("name") == "instrument" and p.get("value") == "LSRFortessa"
+            for p in assay.parameters
+        )
+        # The single (generic) assay process carries the FCS date/performer.
+        assert assay.process_sequence, "expected at least one assay process"
+        for process in assay.process_sequence:
+            assert process.date == "2025-12-16"
+            assert process.performer == "Boneva"
+
+        # Serialized form carries the enrichment.
+        d = isa_json_generator._assay_to_dict(assay)
+        assert d["measurementType"]["annotationValue"] == "toxicity test"
+        assert d["parameters"] and d["parameters"][0]["value"] == "LSRFortessa"
+        assert d["processSequence"][0]["date"] == "2025-12-16"
+        assert d["processSequence"][0]["performer"] == "Boneva"
+
+    def test_generate_study_description_enriched_for_fcs_experiment(self, isa_json_generator):
+        """generate_study description includes FCS details for an FCS experiment."""
+        study = isa_json_generator.generate_study(
+            experiment_path=self.E10_FOLDER,
+            investigation_id="test_inv",
+            study_id="study_E10",
+        )
+        assert any(
+            a.assay_type_key == "facs" for a in study.assays
+        ), "expected a facs assay in the study"
+        desc = study.study_description
+        assert "Live/Dead" in desc
+        assert "LSRFortessa" in desc
+        assert "2025-12-16" in desc
