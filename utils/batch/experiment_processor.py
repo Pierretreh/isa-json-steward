@@ -30,10 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from utils.batch.experiment_classifier import (
-    ExperimentClassification,
-    ExperimentClassifier,
-)
+from utils.batch.experiment_classifier import ExperimentClassification, ExperimentClassifier
 from utils.batch.factor_rules import FactorRulesExtractor
 from utils.batch.folder_scanner import FolderMetadata
 from utils.config_loader import get_profile
