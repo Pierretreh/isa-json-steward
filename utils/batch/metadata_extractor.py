@@ -687,7 +687,11 @@ class MetadataExtractor:
         metadata: Dict[str, Any] = {
             "file_type": "fcs",
             "extraction_method": "basic_file_info",
-            "notes": "Full FCS metadata extraction requires specialized library (fcsparser)",
+            "notes": (
+                "FCS metadata extracted via the built-in native 58-byte FCS header "
+                "parser (TEXT-segment key/value parsing below); no external FCS "
+                "library is required or imported."
+            ),
         }
 
         try:

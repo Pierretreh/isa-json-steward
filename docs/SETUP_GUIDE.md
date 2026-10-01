@@ -78,7 +78,7 @@ python -m utils.batch --data-root "path/to/data" --output-dir ./output
 
 # Process with a domain profile and skip conversion
 isa-json-steward-batch --data-root "path/to/data" --output-dir ./output \
-    --profile ./domain-profile --skip-conversion
+    --profile ./path/to/profile/ --skip-conversion
 ```
 
 ### Batch CLI Options

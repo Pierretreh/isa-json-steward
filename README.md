@@ -39,7 +39,7 @@ python -m utils.batch --data-root ./data --output-dir ./output
 
 # Useful options
 isa-json-steward-batch --data-root ./data --output-dir ./output \
-    --profile ./domain-profile \
+    --profile ./path/to/profile/ \
     --investigation-id inv_001 \
     --inv-inm-path path/to/existing/investigation \
     --skip-conversion \

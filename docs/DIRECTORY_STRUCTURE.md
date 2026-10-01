@@ -161,4 +161,4 @@ When the batch pipeline or GUI creates an investigation, the output follows this
 
 - [ISA-JSON Specification](https://isa-specs.readthedocs.io/)
 - [FAIR Principles](https://www.go-fair.org/fair-principles/)
-- [PMDco Ontology](https://w3id.org/pmd/co/)
+- Domain ontology (profile-supplied): a project-specific OWL/Turtle domain ontology and SHACL shapes are supplied by the active profile (generic names `onto.owl`/`onto.ttl`/`shapes.ttl` per `profile.json`); any domain ontology can be substituted via the profile.

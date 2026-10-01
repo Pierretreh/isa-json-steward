@@ -27,12 +27,12 @@ python -m gui.main
 4. **Process Sequence page**: Build process chains linking materials through protocols
 5. **Assays page**: Configure assay workflows from templates (FACS, microscopy, ELISA, etc.)
 6. **Files page**: Attach, convert, and manage data files
-7. **Ontology Browser**: Browse and search PMDco, OBI, and UO ontologies for term selection
+7. **Ontology Browser**: Browse and search the domain ontology, OBI, and UO ontologies for term selection
 
 ### Key Features
 
 - **Template system**: Pre-configured templates for 22 assay types, 16 protocol types, and common materials
-- **Ontology integration**: All terms can be linked to PMDco, OBI, UO, ChEBI, and NCBITaxon
+- **Ontology integration**: All terms can be linked to the domain ontology, OBI, UO, ChEBI, and NCBITaxon
 - **ISA-JSON export**: Studies are exported as valid ISA-JSON files
 - **Dark/light theme**: Toggle via settings page
 
@@ -48,7 +48,7 @@ isa-json-steward-batch --data-root "path/to/data" --output-dir ./output --invest
 python -m utils.batch --data-root "path/to/data" --output-dir ./output --investigation-id inv_001
 
 # Process with a domain profile
-isa-json-steward-batch --data-root "path/to/data" --output-dir ./output --profile ./domain-profile
+isa-json-steward-batch --data-root "path/to/data" --output-dir ./output --profile ./path/to/profile/
 ```
 
 The pipeline runs seven stages:

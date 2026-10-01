@@ -117,9 +117,8 @@ MAX_PARSE_SIZE_BYTES = 50 * 1024 * 1024
 
 # ---------------------------------------------------------------------------
 # Ontology prefix / termSource machinery
-# (ported from ``domain-profile/scripts/verify_ontology_refs.py`` — the
-# reference implementation; the per-run validators here are the offline
-# pipeline variant of that script)
+# (ported from the project's reference ontology-verification script; the
+# per-run validators here are the offline pipeline variant of that script)
 # ---------------------------------------------------------------------------
 
 #: Maps normalized ``termSource`` values to the expected URI prefix.
@@ -671,7 +670,7 @@ class SchemaLayer:
 class SemanticValidator:
     """``semantic`` layer — offline ontology-term verification.
 
-    Two offline tiers (port of ``domain-profile/scripts/verify_ontology_refs.py``):
+    Two offline tiers (port of the project's reference ontology-verification script):
 
     1. **Prefix/namespace resolution** — every ``termSource`` must be a
        known ontology and its ``termAccession`` must carry the expected URI
@@ -1274,8 +1273,8 @@ class ShaclValidator:
 class OwlConsistencyValidator:
     """``owl`` layer — per-run OWL structural consistency (rdflib-only).
 
-    Port of the rdflib checks in
-    ``domain-profile/scripts/validate_reasoner.py`` (``validate_with_rdflib``):
+    Port of the rdflib checks in the project's reference reasoner script
+    (``validate_with_rdflib``):
 
     * **Error:** circular ``subClassOf`` chains; conflicting duplicate
       definitions (a class with two ``subClassOf`` parents where one is an

@@ -269,13 +269,13 @@ class GraphBuilder:
 
         for parent in parents:
             parent_lower = parent.lower()
-            # Material hierarchy (PMDco Sample, Source, OtherMaterial)
+            # Material hierarchy (domain-ontology Sample, Source, OtherMaterial)
             if any(m in parent_lower for m in ["sample", "source", "othermaterial"]):
                 return "Materials"
-            # Process hierarchy (PMDco ManufacturingProcess)
+            # Process hierarchy (domain-ontology ManufacturingProcess)
             if "manufacturingprocess" in parent_lower:
                 return "Processes"
-            # Assay hierarchy — OBI terms (OBI_*) or PMDco assay
+            # Assay hierarchy — OBI terms (OBI_*) or a domain-ontology assay
             if parent.startswith("http://purl.obolibrary.org/obo/OBI_"):
                 return "Assays"
             if "pmd/co/assay" in parent_lower:
