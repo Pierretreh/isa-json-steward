@@ -113,15 +113,28 @@ class ImagesPage(ScrollablePage):
             self.main_window.current_investigation, self.main_window.current_study
         )
 
-        # Load raw images from assays
-        raw_dir = study_path / "raw_data" / "images"
-        if raw_dir.exists():
-            for img_file in sorted(raw_dir.glob("*")):
-                if img_file.is_file() and self._is_image_file(img_file):
-                    item = QListWidgetItem(img_file.name)
-                    item.setData(Qt.ItemDataRole.UserRole, str(img_file))
-                    item.setToolTip(f"Path: {img_file}")
-                    self.raw_list.addItem(item)
+        # Load raw images from the canonical files/ directory
+        # (created by DirectoryManager.create_study_directory), plus the
+        # legacy raw_data/images and assay subdirectory layouts.
+        image_dirs = [
+            study_path / "files" / "original",
+            study_path / "raw_data" / "images",
+            study_path / "assays",
+        ]
+        seen = set()
+        for base_dir in image_dirs:
+            if not base_dir.exists():
+                continue
+            for img_file in sorted(base_dir.rglob("*")):
+                if not img_file.is_file() or not self._is_image_file(img_file):
+                    continue
+                if img_file in seen:
+                    continue
+                seen.add(img_file)
+                item = QListWidgetItem(img_file.name)
+                item.setData(Qt.ItemDataRole.UserRole, str(img_file))
+                item.setToolTip(f"Path: {img_file}")
+                self.raw_list.addItem(item)
 
         # Load processed TIFFs
         tiff_dir = study_path / "processed_data" / "tiff"
@@ -159,14 +172,14 @@ class ImagesPage(ScrollablePage):
         )
         if file_path:
             try:
-                # Copy to raw images directory
+                # Copy to the canonical raw images directory
                 dm = self.main_window.get_directory_manager()
                 raw_dir = (
                     dm.get_study_path(
                         self.main_window.current_investigation, self.main_window.current_study
                     )
-                    / "raw_data"
-                    / "images"
+                    / "files"
+                    / "original"
                 )
 
                 raw_dir.mkdir(parents=True, exist_ok=True)

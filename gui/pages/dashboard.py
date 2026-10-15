@@ -119,7 +119,17 @@ class DashboardPage(ScrollablePage):
         if self.main_window.current_study:
             study_data = self.main_window.get_study_data()
             if study_data:
-                assays = study_data.get("assays", [])
+                # study.json may be a complete ISA-JSON wrapper
+                # ({"studies": [study, ...]}) or a bare study dict.
+                study = study_data
+                if (
+                    "studies" in study_data
+                    and isinstance(study_data["studies"], list)
+                    and study_data["studies"]
+                ):
+                    study = study_data["studies"][0]
+
+                assays = study.get("assays", [])
                 total_assays = len(assays) if isinstance(assays, list) else 0
 
                 # Count images in study directories
@@ -127,30 +137,32 @@ class DashboardPage(ScrollablePage):
                     self.main_window.current_investigation, self.main_window.current_study
                 )
 
-                # Count raw images
-                raw_images_dir = study_path / "raw_data" / "images"
-                if raw_images_dir.exists():
-                    total_images += sum(
-                        1
-                        for f in raw_images_dir.iterdir()
-                        if f.is_file() and self._is_image_file(f)
+                def _count_images(directory: Path) -> int:
+                    if not directory.exists():
+                        return 0
+                    return sum(
+                        1 for f in directory.iterdir() if f.is_file() and self._is_image_file(f)
                     )
 
-                # Count processed TIFFs
+                # Canonical layout: files/original + files/converted
+                # (created by DirectoryManager.create_study_directory)
+                total_images += _count_images(study_path / "files" / "original")
+                total_images += _count_images(study_path / "files" / "converted")
+
+                # Legacy layouts (kept for backward compatibility)
+                total_images += _count_images(study_path / "raw_data" / "images")
                 tiff_dir = study_path / "processed_data" / "tiff"
                 if tiff_dir.exists():
                     total_images += sum(1 for f in tiff_dir.glob("*.tif") if f.is_file())
 
-                # Count assay images
                 assays_dir = study_path / "assays"
                 if assays_dir.exists():
                     for assay_type_dir in assays_dir.iterdir():
                         if assay_type_dir.is_dir():
+                            total_images += _count_images(assay_type_dir)
                             for subdir in assay_type_dir.iterdir():
                                 if subdir.is_dir():
-                                    for img_file in subdir.iterdir():
-                                        if img_file.is_file() and self._is_image_file(img_file):
-                                            total_images += 1
+                                    total_images += _count_images(subdir)
 
         self.assays_card.value_label.setText(str(total_assays))
         self.images_card.value_label.setText(str(total_images))
@@ -170,9 +182,15 @@ class DashboardPage(ScrollablePage):
 
         if study_id:
             study_name = study_id
-            # Try to get study name from data
+            # Try to get study name from data (complete ISA-JSON wrapper or
+            # simple study structure)
             if self.main_window.study_data:
-                study_name = self.main_window.study_data.get("study_name", study_id)
+                sd = self.main_window.study_data
+                studies = sd.get("studies")
+                if isinstance(studies, list) and studies:
+                    study_name = studies[0].get("title") or study_name
+                else:
+                    study_name = sd.get("title") or sd.get("study_name") or study_name
 
             self.study_label.setText(f"Study: {study_name}")
             self.study_label.setStyleSheet("color: #2c3e50; padding: 4px; font-weight: bold;")

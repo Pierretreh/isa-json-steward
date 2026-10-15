@@ -738,7 +738,8 @@ class TestPathAFcsAssayEnrichment:
             p.get("name") == "instrument" and p.get("value") == "LSRFortessa"
             for p in assay.parameters
         )
-        # The single (generic) assay process carries the FCS date/performer.
+        # The assay process carries the FCS date/performer (Phase 1 behavior;
+        # with data files present, Phase 2's per-sample processes carry them).
         assert assay.process_sequence, "expected at least one assay process"
         for process in assay.process_sequence:
             assert process.date == "2025-12-16"

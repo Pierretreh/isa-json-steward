@@ -362,6 +362,111 @@ class ISAJsonGenerator:
         except Exception:  # pragma: no cover - defensive
             return {}
 
+    def _default_assay_key(self) -> str:
+        """Return the registry's catch-all assay key (``calcein`` by core default)."""
+        try:
+            return get_profile().get_assay_types().get("default_assay") or "calcein"
+        except Exception:  # pragma: no cover - defensive
+            return "calcein"
+
+    def _file_extension_map(self) -> Dict[str, List[str]]:
+        """Map assay key -> file extensions from the registry's ``file_extensions``."""
+        ext_map: Dict[str, List[str]] = {}
+        for key, entry in self._assay_registry().items():
+            if isinstance(entry, dict):
+                ext_map[key] = list(entry.get("file_extensions") or [])
+        return ext_map
+
+    def _map_file_to_sample(
+        self,
+        filename: str,
+        samples: List[Dict[str, Any]],
+        aliases: Optional[Dict[str, Dict[str, List[str]]]] = None,
+    ) -> Optional[str]:
+        """Map a file to the best-matching sample ``@id`` via the shared engine.
+
+        Thin wrapper over
+        :meth:`utils.batch.factor_rules.FactorRulesExtractor.map_file_to_sample`
+        (merge plan feature 2 / D1) so Path A uses the exact same
+        delimited-token mapper as Path B.  Returns ``None`` when the profile
+        has no rule engine or no sample scores above zero.
+        """
+        extractor = self._get_factor_rules_extractor()
+        if extractor is None:
+            return None
+        return cast(Optional[str], extractor.map_file_to_sample(filename, samples, aliases))
+
+    @staticmethod
+    def _ensure_sample_comment(data_file: Dict[str, Any], sample_id: str) -> None:
+        """Attach/replace the ``derivedFromSample`` comment on a data file."""
+        comments = data_file.setdefault("comments", [])
+        comments[:] = [c for c in comments if c.get("name") != "derivedFromSample"]
+        comments.append({"name": "derivedFromSample", "value": sample_id})
+
+    def _assign_files_to_assays(
+        self,
+        files: List[str],
+        assay_keys: List[str],
+        folder_root: Optional[Path] = None,
+    ) -> Dict[str, List[str]]:
+        """Assign files to assay keys: subdirectory context first, then extension.
+
+        Port of ``ExperimentProcessor._assign_files_to_assays`` (merge plan
+        feature 2 / D1): a directory named after an assay key wins (context
+        aware), otherwise the registry's ``file_extensions`` decide, and a
+        final fallback uses the registry's ``default_assay`` (or the first
+        requested key) so no file is ever dropped.
+
+        Args:
+            files: File paths (absolute or relative to *folder_root*).
+            assay_keys: Assay keys to distribute the files among.
+            folder_root: Root used to resolve subdirectory context; required
+                for relative paths (e.g. a ``FileInventory``'s relative
+                entries).
+
+        Returns:
+            Mapping ``assay_key -> [file, ...]`` (keys with no files are
+            included with an empty list).
+        """
+        ext_map = self._file_extension_map()
+        result: Dict[str, List[str]] = {key: [] for key in assay_keys}
+        if not assay_keys:
+            return result
+
+        def _key_for(path: Path, rel: Optional[Path]) -> str:
+            parent_dir = ""
+            if rel is not None and len(rel.parts) > 1:
+                parent_dir = rel.parts[0].lower()
+            # 1) Context-aware: a directory named after an assay wins.
+            for key in assay_keys:
+                k = key.lower()
+                if parent_dir and (
+                    parent_dir == k or (parent_dir.startswith(k) and k in parent_dir)
+                ):
+                    return key
+            # 2) Extension-based assignment (registry-driven extensions).
+            suffix = path.suffix.lower()
+            for key in assay_keys:
+                if suffix in ext_map.get(key, []):
+                    return key
+            # 3) Catch-all fallback.
+            default_key = self._default_assay_key()
+            return default_key if default_key in assay_keys else assay_keys[0]
+
+        for entry in files:
+            path = Path(entry)
+            rel: Optional[Path] = None
+            if folder_root is not None and not path.is_absolute():
+                rel = path
+            else:
+                try:
+                    if folder_root is not None:
+                        rel = path.resolve().relative_to(folder_root.resolve())
+                except (ValueError, OSError):
+                    rel = None
+            result[_key_for(path, rel)].append(entry)
+        return result
+
     def _extract_fcs_summary(self, folder_path: Optional[str]) -> Dict[str, Any]:
         """Build the FCS acquisition summary for *folder_path* (best effort).
 
@@ -1080,58 +1185,63 @@ class ISAJsonGenerator:
                 study.assays.append(assay)
 
             # Promote assay materials to study level (ISA-JSON requires this)
-            # Sources
-            for src in assay.materials.get("sources", []):
-                study.materials["sources"].append(src)
-            # Samples (with full definitions at study level)
-            for samp in assay.materials.get("samples", []):
-                study.materials["samples"].append(samp)
-            # Convert assay-level samples to references only
-            assay.materials["samples"] = [
-                {"@id": s.get("@id", "")} for s in assay.materials.get("samples", [])
-            ]
+            # for every assay, not just the last created one.
+            for assay_obj in study.assays:
+                # Sources
+                for src in assay_obj.materials.get("sources", []):
+                    study.materials["sources"].append(src)
+                # Samples (with full definitions at study level)
+                for samp in assay_obj.materials.get("samples", []):
+                    study.materials["samples"].append(samp)
+                # Convert assay-level samples to references only
+                assay_obj.materials["samples"] = [
+                    {"@id": s.get("@id", "")} for s in assay_obj.materials.get("samples", [])
+                ]
 
             # Promote assay processes to study-level processSequence
-            for proc in assay.process_sequence:
-                study.process_sequence.append(proc)
+            # (every assay, not just the last created one).
+            for assay_obj in study.assays:
+                for proc in assay_obj.process_sequence:
+                    study.process_sequence.append(proc)
 
             # Ensure the assay protocol is declared at study level
-            # with all parameters used in its processes
-            for proc in assay.process_sequence:
-                proto_name = proc.executes_protocol
-                if proto_name and not any(p.get("name") == proto_name for p in study.protocols):
-                    # Collect parameter declarations from process parameterValues
-                    protocol_params: List[Dict[str, Any]] = []
-                    for pv in proc.parameter_values:
-                        cat = pv.get("category", {})
-                        param_id = cat.get("@id", "")
-                        param_name_obj = cat.get("parameterName", {})
-                        if param_id and not any(
-                            pp.get("@id") == param_id for pp in protocol_params
-                        ):
-                            protocol_params.append(
-                                {
-                                    "@id": param_id,
-                                    "parameterName": param_name_obj,
-                                }
-                            )
+            # with all parameters used in its processes (per assay).
+            for assay_obj in study.assays:
+                for proc in assay_obj.process_sequence:
+                    proto_name = proc.executes_protocol
+                    if proto_name and not any(p.get("name") == proto_name for p in study.protocols):
+                        # Collect parameter declarations from process parameterValues
+                        protocol_params: List[Dict[str, Any]] = []
+                        for pv in proc.parameter_values:
+                            cat = pv.get("category", {})
+                            param_id = cat.get("@id", "")
+                            param_name_obj = cat.get("parameterName", {})
+                            if param_id and not any(
+                                pp.get("@id") == param_id for pp in protocol_params
+                            ):
+                                protocol_params.append(
+                                    {
+                                        "@id": param_id,
+                                        "parameterName": param_name_obj,
+                                    }
+                                )
 
-                    study.protocols.append(
-                        {
-                            "@id": f"#protocol/{proto_name}",
-                            "name": proto_name,
-                            "protocolType": {
-                                "annotationValue": "assay",
-                                "termSource": "OBI",
-                                "termAccession": "http://purl.obolibrary.org/obo/OBI_0000070",
-                            },
-                            "description": f"Protocol: {proto_name}",
-                            "uri": "",
-                            "version": "",
-                            "parameters": protocol_params,
-                            "components": [],
-                        }
-                    )
+                        study.protocols.append(
+                            {
+                                "@id": f"#protocol/{proto_name}",
+                                "name": proto_name,
+                                "protocolType": {
+                                    "annotationValue": "assay",
+                                    "termSource": "OBI",
+                                    "termAccession": "http://purl.obolibrary.org/obo/OBI_0000070",
+                                },
+                                "description": f"Protocol: {proto_name}",
+                                "uri": "",
+                                "version": "",
+                                "parameters": protocol_params,
+                                "components": [],
+                            }
+                        )
 
             # FCS enrichment of the study-level assay protocol (feature 1,
             # Phase 1): once the assay protocol is declared at study level,
@@ -1209,10 +1319,27 @@ class ISAJsonGenerator:
             ],
         )
 
+        summary = self._extract_fcs_summary(getattr(exp_metadata, "folder_path", None))
+
+        # Per-sample processes (feature 2, merge plan Phase 2 / D1): the single
+        # generic assay process is replaced by one process per sample, with the
+        # assay's data files mapped to samples via the shared rule engine
+        # mapper and the template parameter_values + FCS date/performer
+        # attached to every per-sample process, so nothing is lost.
+        if assay.data_files:
+            samples = self._build_samples(exp_meta, self._build_sources(exp_meta))
+            self._build_per_sample_processes(assay, samples, summary, exp_meta, template)
+        elif summary:
+            # No data files to map (e.g. a standalone assay with an empty
+            # file inventory): keep the generic process but still carry the
+            # FCS date/performer (Phase 1 behavior).
+            for process in assay.process_sequence:
+                process.date = summary.get("acquisition_date_iso") or ""
+                process.performer = summary.get("operator") or ""
+
         # FCS enrichment (feature 1, merge plan Phase 1): instrument, live/dead
         # override and reagent parameters are attached when the experiment has
         # FCS files and the registry entry opts in via ``fcs_enrichment``.
-        summary = self._extract_fcs_summary(getattr(exp_metadata, "folder_path", None))
         if summary:
             registry_entry = self._assay_registry().get(assay_type_key)
             # The study-level protocol is declared after the assays in
@@ -1221,10 +1348,6 @@ class ISAJsonGenerator:
             # generate_study) no protocol object exists yet, so the assay-level
             # parameters (instrument) still carry the enrichment.
             self._fcs_enrich_assay(assay, None, summary, registry_entry)
-            if assay.process_sequence:
-                for process in assay.process_sequence:
-                    process.date = summary.get("acquisition_date_iso") or ""
-                    process.performer = summary.get("operator") or ""
 
         return assay
 
@@ -1824,6 +1947,128 @@ class ISAJsonGenerator:
 
         processes.append(process)
 
+        return processes
+
+    def _build_per_sample_processes(
+        self,
+        assay: ISAAssay,
+        samples: List[Dict[str, Any]],
+        fcs_summary: Optional[Dict[str, Any]],
+        exp_meta: Optional[Dict[str, Any]] = None,
+        template: Optional[Dict[str, Any]] = None,
+    ) -> List[ISAProcess]:
+        """Create per-sample processes for *assay* (merge plan feature 2 / D1).
+
+        Port of ``ExperimentProcessor._build_per_sample_processes``: each
+        sample with at least one mapped data file gets one process
+        (``inputs=[sample]``, ``outputs=[its files]``); data files that map
+        to no sample are collected into a single ``unassigned`` process so no
+        data is lost.  Every process carries the template-derived
+        ``parameter_values`` (MUST KEEP) and, when available, the FCS
+        acquisition ``date`` / ``performer`` from *fcs_summary*.
+
+        The assay's ``process_sequence`` is replaced by the per-sample set
+        (the study-level sample-collection process lives on the study, not
+        here, and is therefore unaffected).
+
+        Args:
+            assay: The assay whose ``data_files`` are mapped to samples.
+            samples: Study-level sample dicts (``@id`` + ``factorValues``).
+            fcs_summary: FCS acquisition summary (``{}`` when unavailable).
+            exp_meta: Extracted experiment metadata used to resolve the
+                template-driven parameter values.
+            template: Assay template; re-loaded from the classifier when not
+                provided (standalone calls).
+        """
+        summary = fcs_summary or {}
+        fcs_date = summary.get("acquisition_date_iso") or ""
+        performer = summary.get("operator") or ""
+
+        # Template-driven parameters: the same values are attached to every
+        # per-sample process, so the single-generic-process information is
+        # preserved (D1).
+        if template is None:
+            template_name = self.classifier.TYPE_TO_TEMPLATE.get(
+                assay.assay_type_key, "microscopy_assay.json"
+            )
+            template = self._load_assay_template(
+                self.classifier.suggest_template(
+                    ExperimentClassification(
+                        type_name=assay.assay_type_key,
+                        assay_template=template_name,
+                        confidence=1.0,
+                        detected_keywords=[assay.assay_type_key],
+                        detected_files=[],
+                    )
+                )
+            )
+        param_values = self._extract_parameter_values(exp_meta or {}, template)
+
+        assay_measurement = assay.measurement_type.get("annotationValue", "") or template.get(
+            "measurementType", {}
+        ).get("annotationValue", "assay")
+        protocol_name = f"assay {assay_measurement}"
+        assay_key = assay.assay_type_key or "assay"
+
+        aliases: Optional[Dict[str, Dict[str, List[str]]]] = None
+        extractor = self._get_factor_rules_extractor()
+        if extractor is not None:
+            aliases = extractor.aliases
+
+        processes: List[ISAProcess] = []
+        assigned_names: set = set()
+
+        if samples:
+            # Map each file against the *full* sample list and attribute it to
+            # its best match; files matching no sample end up unassigned.
+            file_owner: Dict[str, str] = {}
+            for f in assay.data_files:
+                owner = self._map_file_to_sample(f.get("name", ""), samples, aliases)
+                if owner:
+                    file_owner[f.get("name", "")] = owner
+
+            for sample in samples:
+                sample_id = sample.get("@id", "")
+                sample_files = [
+                    f for f in assay.data_files if file_owner.get(f.get("name", "")) == sample_id
+                ]
+                if not sample_files:
+                    continue
+
+                for f in sample_files:
+                    self._ensure_sample_comment(f, sample_id)
+                assigned_names.update(f.get("name", "") for f in sample_files)
+
+                processes.append(
+                    ISAProcess(
+                        process_id=f"#process/{assay_key}_{sample_id}",
+                        executes_protocol=protocol_name,
+                        inputs=[{"@id": sample_id}],
+                        outputs=[{"@id": f.get("@id", "")} for f in sample_files],
+                        parameter_values=list(param_values),
+                        date=fcs_date,
+                        performer=performer,
+                    )
+                )
+
+        # Unassigned files -> single process without sample inputs.
+        unassigned = [f for f in assay.data_files if f.get("name", "") not in assigned_names]
+        for f in unassigned:
+            self._ensure_sample_comment(f, "unassigned")
+        if unassigned:
+            processes.append(
+                ISAProcess(
+                    process_id=f"#process/{assay_key}_unassigned",
+                    executes_protocol=protocol_name,
+                    inputs=[],
+                    outputs=[{"@id": f.get("@id", "")} for f in unassigned],
+                    parameter_values=list(param_values),
+                    date=fcs_date,
+                    performer=performer,
+                )
+            )
+
+        assay.process_sequence = processes
         return processes
 
     # ── People ───────────────────────────────────────────────────────────
