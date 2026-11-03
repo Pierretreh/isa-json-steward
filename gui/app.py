@@ -13,9 +13,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.config_loader import get_profile  # noqa: E402
 
+from .agent_tools.crash import StewardNotifyMixin  # noqa: E402
 
-class StewardApp(QApplication):
-    """Main application class for the ISA Data Steward GUI."""
+
+class StewardApp(StewardNotifyMixin, QApplication):
+    """Main application class for the ISA Data Steward GUI.
+
+    Mixes in :class:`~gui.agent_tools.crash.StewardNotifyMixin` (P1-1): once
+    ``install_crash_hooks()`` is called (see ``gui/main.py``), exceptions
+    escaping Qt event dispatch are captured as crash bundles instead of
+    aborting the process (see gui/agent_tools/crash.py for details).
+    """
 
     def __init__(self, argv):
         super().__init__(argv)

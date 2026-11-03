@@ -18,7 +18,6 @@ runners where ``libEGL.so.1`` is missing.  The Qt-dependent
 be imported.
 """
 
-import time
 from pathlib import Path
 
 import pytest
@@ -39,39 +38,6 @@ def _make_experiment_root(temp_dir: Path) -> Path:
     exp_dir.mkdir(parents=True, exist_ok=True)
     (exp_dir / "data.csv").write_text("col1,col2\nval1,val2\n", encoding="utf-8")
     return temp_dir
-
-
-def _run_worker(worker, timeout_seconds: float = 60.0):
-    """Spin the Qt event loop until the worker finishes (or timeout).
-
-    Returns a tuple ``(outcome, result, report_path, failure)`` where
-    ``outcome`` is ``"succeeded"``, ``"failed"`` or ``"timeout"``.
-    """
-    from PyQt6.QtCore import QEventLoop, QTimer
-
-    state = {"outcome": "timeout", "result": None, "report_path": None, "failure": None}
-
-    def _on_succeeded(result, report_path):
-        state.update(outcome="succeeded", result=result, report_path=report_path)
-        loop.quit()
-
-    def _on_failed(message):
-        state.update(outcome="failed", failure=message)
-        loop.quit()
-
-    def _on_finished():
-        loop.quit()
-
-    loop = QEventLoop()
-    worker.succeeded.connect(_on_succeeded)
-    worker.failed.connect(_on_failed)
-    worker.finished.connect(_on_finished)
-    QTimer.singleShot(int(timeout_seconds * 1000), loop.quit)
-    worker.start()
-    loop.exec()
-    if state["outcome"] == "timeout":
-        worker.wait(int(timeout_seconds * 1000))
-    return state["outcome"], state["result"], state["report_path"], state["failure"]
 
 
 @pytest.mark.gui
@@ -150,7 +116,7 @@ class TestBatchWorker:
         worker.request_cancel()
         assert worker._cancel_event.is_set()
 
-    def test_worker_end_to_end(self, qapp, temp_dir):
+    def test_worker_end_to_end(self, qtbot, temp_dir):
         """T4: worker runs the full pipeline on a temp data root."""
         from gui.batch_runner import BatchConfig, BatchWorker
 
@@ -167,14 +133,34 @@ class TestBatchWorker:
         )
         worker = BatchWorker(cfg)
 
-        outcome, result, report_path, failure = _run_worker(worker)
-        assert outcome == "succeeded", f"worker failed: {failure}"
+        with qtbot.waitSignal(worker.succeeded, timeout=60_000) as blocker:
+            worker.start()
+        result, report_path = blocker.args
         assert result is not None
         assert result.total_experiments == 1
         assert (output_dir / "processing_report.json").exists()
         assert report_path is not None and report_path.endswith("processing_report.json")
+        worker.wait(5_000)  # clean thread teardown
 
-    def test_gui_cli_parity(self, qapp, temp_dir):
+    def test_worker_failure_path(self, qtbot, monkeypatch):
+        """A pipeline exception surfaces via the ``failed`` signal."""
+        import utils.batch.batch_processor as batch_processor
+
+        from gui.batch_runner import BatchConfig, BatchWorker
+
+        def _boom(self, *args, **kwargs):
+            raise RuntimeError("pipeline exploded")
+
+        monkeypatch.setattr(batch_processor.BatchProcessor, "process_batch", _boom)
+        worker = BatchWorker(BatchConfig())
+
+        with qtbot.waitSignal(worker.failed, timeout=60_000) as blocker:
+            worker.start()
+        (message,) = blocker.args
+        assert "pipeline exploded" in message
+        worker.wait(5_000)  # clean thread teardown
+
+    def test_gui_cli_parity(self, qtbot, temp_dir):
         """T5: identical summary fields via BatchProcessor directly vs BatchWorker.
 
         This is the executable proof of the paper's claim that the GUI and the
@@ -207,8 +193,10 @@ class TestBatchWorker:
             skip_validation=True,
         )
         worker = BatchWorker(cfg)
-        outcome, result, _report, failure = _run_worker(worker)
-        assert outcome == "succeeded", f"worker failed: {failure}"
+        with qtbot.waitSignal(worker.succeeded, timeout=60_000) as blocker:
+            worker.start()
+        result, _report = blocker.args
+        worker.wait(5_000)  # clean thread teardown
 
         # Compare the summary fields (deterministic across both paths)
         summary_fields = (
@@ -271,10 +259,8 @@ class TestBatchProcessingDialog:
         finally:
             dialog.close()
 
-    def test_start_with_valid_paths_starts_worker(self, qapp, temp_dir):
+    def test_start_with_valid_paths_starts_worker(self, qtbot, temp_dir):
         """Start with valid paths constructs and starts the worker."""
-        from PyQt6.QtCore import QCoreApplication
-
         from gui.dialogs.batch_processing import BatchProcessingDialog
 
         data_root = _make_experiment_root(temp_dir)
@@ -288,16 +274,11 @@ class TestBatchProcessingDialog:
             dialog.skip_conversion_check.setChecked(True)
             dialog.skip_validation_check.setChecked(True)
 
-            # Allow the worker to finish so we can assert it started.
             dialog._on_start()
             assert dialog.worker is not None
-            # Pump the event loop until the (queued) succeeded/failed slot has
-            # been delivered and the dialog re-enabled its inputs.
-            deadline = time.time() + 60.0
-            while not dialog.start_btn.isEnabled() and time.time() < deadline:
-                QCoreApplication.processEvents()
-                time.sleep(0.02)
-            assert dialog.start_btn.isEnabled()
+            # Wait until the (queued) succeeded/failed slot has been delivered
+            # and the dialog re-enabled its inputs.
+            qtbot.waitUntil(lambda: dialog.start_btn.isEnabled(), timeout=60_000)
         finally:
             dialog.close()
 
@@ -345,7 +326,7 @@ class TestBatchProcessingDialog:
         rows = BatchProcessingDialog._parse_experiment_rows(result)
         assert rows == [("E1", "microscopy", "0.85")]
 
-    def test_cancel_event_short_circuits_pipeline(self, temp_dir):
+    def test_cancel_event_short_circuits_pipeline(self, qtbot, temp_dir):
         """D5: a pre-set cancel_event stops the run before Step 2."""
         import threading as _threading
 
@@ -366,8 +347,10 @@ class TestBatchProcessingDialog:
         worker._cancel_event = _threading.Event()
         worker._cancel_event.set()
 
-        outcome, result, _report, _failure = _run_worker(worker)
-        assert outcome == "succeeded"
+        with qtbot.waitSignal(worker.succeeded, timeout=60_000) as blocker:
+            worker.start()
+        result, _report = blocker.args
+        worker.wait(5_000)  # clean thread teardown
         assert "Pipeline cancelled by user" in result.errors
         assert result.classifications == {}
         # No Step-7 / report output was produced (cancelled before organizing).

@@ -12,6 +12,8 @@ from typing import Any, Dict, Optional
 from PyQt6.QtCore import QTimer, pyqtSlot
 from PyQt6.QtWidgets import QHBoxLayout, QMainWindow, QMessageBox, QStackedWidget, QWidget
 
+from .agent_tools.events import log_gui_event
+from .agent_tools.ids import set_test_id
 from .pages.assays import AssaysPage
 from .pages.base_page import BasePage
 from .pages.dashboard import DashboardPage
@@ -98,11 +100,14 @@ class MainWindow(QMainWindow):
         # Content area
         self.content_stack = QStackedWidget()
         self.content_stack.setObjectName("contentArea")
+        set_test_id(self.content_stack, "window.main.contentStack")
         main_layout.addWidget(self.content_stack)
 
         # Status bar
         self.status_bar = StatusBar()
         self.setStatusBar(self.status_bar)
+
+        set_test_id(self, "window.main")
 
     def initialize_pages(self):
         """Initialize all pages."""
@@ -120,6 +125,7 @@ class MainWindow(QMainWindow):
 
         # Add to stack
         for page_id, page in self.pages.items():
+            set_test_id(page, f"page.{page_id}")
             self.content_stack.addWidget(page)
             page.dataChanged.connect(self._on_page_data_changed)
 
@@ -176,14 +182,17 @@ class MainWindow(QMainWindow):
         current_page = self.content_stack.currentWidget()
         if current_page:
             current_page.on_exit()
+            log_gui_event("page_exit", widget=current_page)
 
         # Switch to new page
         new_page = self.pages[page_id]
         self.content_stack.setCurrentWidget(new_page)
         self.sidebar.set_current_page(page_id)
+        log_gui_event("navigate", detail={"page": page_id})
 
         # Call on_enter for new page
         new_page.on_enter()
+        log_gui_event("page_enter", widget=new_page)
 
         # Update status bar
         self.status_bar.show_message(f"View: {page_id.replace('_', ' ').title()}")
@@ -192,6 +201,9 @@ class MainWindow(QMainWindow):
     def _on_page_data_changed(self):
         """Handle page data changes."""
         self.status_bar.show_message("Data changed - Auto-save pending...")
+        sender = self.sender()
+        widget = sender if isinstance(sender, QWidget) else self.content_stack.currentWidget()
+        log_gui_event("data_changed", widget=widget)
 
     def load_settings(self):
         """Load application settings."""
@@ -259,25 +271,20 @@ class MainWindow(QMainWindow):
                 with open(study_file, "r", encoding="utf-8") as f:
                     loaded_data = json.load(f)
 
-                # DEBUG: Log loaded data structure
-                print(
-                    f"[DEBUG] MainWindow.set_study() - loaded_data keys: {list(loaded_data.keys())}"
-                )
-                print(
-                    f"[DEBUG] MainWindow.set_study() - has 'studies' key: {'studies' in loaded_data}"  # noqa: E501
-                )
-                print(
-                    f"[DEBUG] MainWindow.set_study() - has 'assays' key: {'assays' in loaded_data}"
-                )
+                # Log loaded data structure
+                logger.debug("set_study: loaded_data keys: %s", list(loaded_data.keys()))
+                logger.debug("set_study: has 'studies' key: %s", "studies" in loaded_data)
+                logger.debug("set_study: has 'assays' key: %s", "assays" in loaded_data)
 
                 # Preserve the full ISA-JSON structure for proper assay loading
                 # The AssaysPage expects the complete structure with "studies" key
                 self.study_data = loaded_data
-                print(
-                    f"[DEBUG] MainWindow.set_study() - Preserved full structure, has 'studies' key: {'studies' in self.study_data}"  # noqa: E501
+                logger.debug(
+                    "set_study: preserved full structure, has 'studies' key: %s",
+                    "studies" in self.study_data,
                 )
             except Exception as e:
-                print(f"[DEBUG] MainWindow.set_study() - Error loading study: {e}")
+                logger.error("set_study: error loading study: %s", e)
                 self.status_bar.show_message(f"Error loading study: {e}")
                 self.study_data = None
         else:

@@ -93,40 +93,11 @@ class TestMainWindow:
         assert hasattr(MainWindow, "setup_ui")
 
     @pytest.fixture
-    def main_window(self, qapp):
-        """Construct a real MainWindow with a lightweight app stub."""
+    def main_window(self, qapp, stub_app):
+        """Construct a real MainWindow with the shared lightweight app stub."""
         from gui.main_window import MainWindow
 
-        class _StubApp:
-            """Minimal stand-in for StewardApp (settings + window state)."""
-
-            class _Settings:
-                @staticmethod
-                def value(key, default=None, type=None):
-                    return default
-
-            def __init__(self):
-                self.settings = self._Settings()
-
-            def get_window_geometry(self):
-                return None
-
-            def get_window_state(self):
-                return None
-
-            def set_window_geometry(self, geometry):
-                pass
-
-            def set_window_state(self, state):
-                pass
-
-            def set_current_investigation(self, investigation_id):
-                pass
-
-            def set_current_study(self, study_id):
-                pass
-
-        window = MainWindow(_StubApp())
+        window = MainWindow(stub_app)
         window.close()
         return window
 

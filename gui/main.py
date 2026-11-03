@@ -15,7 +15,7 @@ from .main_window import MainWindow
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import utilities for logging setup
-from utils.logging_config import get_logger, setup_logging  # noqa: E402
+from utils.logging_config import get_logger, setup_gui_event_log, setup_logging  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -93,6 +93,16 @@ def main():
 
     # Create application
     app = create_app()
+
+    # P1-1 diagnostics: structured GUI-event log + crash bundles.  Cheap
+    # installs (wrapped excepthooks + one application event filter) that never
+    # block startup (plans/agent-gui-observability.md sections 2.5 and 3.2).
+    from .agent_tools.crash import install_crash_hooks
+    from .agent_tools.events import install_event_filter
+
+    setup_gui_event_log()
+    install_event_filter(app)
+    install_crash_hooks(app)
 
     # Create and show main window
     window = MainWindow(app)

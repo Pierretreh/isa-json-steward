@@ -566,12 +566,6 @@ def invalid_investigation_json():
 
 
 @pytest.fixture
-def qtbot(qtbot):
-    """QtBot fixture for GUI testing."""
-    return qtbot
-
-
-@pytest.fixture
 def main_window(qtbot):
     """Main window fixture for GUI testing."""
     try:
