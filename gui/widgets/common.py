@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
+
 
 class FormLabel(QLabel):
     """A styled label for form fields."""
@@ -27,40 +29,48 @@ class FormLabel(QLabel):
 class FormField(QLineEdit):
     """A styled text input field for forms."""
 
-    def __init__(self, placeholder: str = "", parent=None):
+    def __init__(self, placeholder: str = "", parent=None, *, test_id: str | None = None):
         super().__init__(parent)
         if placeholder:
             self.setPlaceholderText(placeholder)
         self.setMinimumHeight(30)
+        if test_id is not None:
+            set_test_id(self, test_id)
 
 
 class ActionButton(QPushButton):
     """A standard action button."""
 
-    def __init__(self, text: str, parent=None):
+    def __init__(self, text: str, parent=None, *, test_id: str | None = None):
         super().__init__(text, parent)
         self.setMinimumHeight(32)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        if test_id is not None:
+            set_test_id(self, test_id)
 
 
 class PrimaryButton(QPushButton):
     """A primary action button with distinct styling."""
 
-    def __init__(self, text: str, parent=None):
+    def __init__(self, text: str, parent=None, *, test_id: str | None = None):
         super().__init__(text, parent)
         self.setObjectName("primaryButton")
         self.setMinimumHeight(32)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        if test_id is not None:
+            set_test_id(self, test_id)
 
 
 class DangerButton(QPushButton):
     """A danger button for destructive actions."""
 
-    def __init__(self, text: str, parent=None):
+    def __init__(self, text: str, parent=None, *, test_id: str | None = None):
         super().__init__(text, parent)
         self.setObjectName("dangerButton")
         self.setMinimumHeight(32)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        if test_id is not None:
+            set_test_id(self, test_id)
 
 
 class CardWidget(QFrame):

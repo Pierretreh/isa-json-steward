@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..widgets.collapsible_group_box import CollapsibleGroupBox
 from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
 from ..widgets.path_picker import PathPicker
@@ -86,6 +87,7 @@ class SettingsPage(ScrollablePage):
 
         # Theme
         self.theme_combo = QComboBox()
+        set_test_id(self.theme_combo, "page.settings.themeCombo")
         self.theme_combo.addItems(["light", "dark"])
         self.theme_combo.setCurrentText(
             self.main_window.app.settings.value("gui/theme", "light", str)
@@ -95,6 +97,7 @@ class SettingsPage(ScrollablePage):
 
         # Font Family
         self.font_family_combo = QComboBox()
+        set_test_id(self.font_family_combo, "page.settings.fontFamilyCombo")
         self.font_family_combo.addItems(
             ["Segoe UI", "Arial", "Helvetica", "Calibri", "Verdana", "Tahoma", "Times New Roman"]
         )
@@ -105,6 +108,7 @@ class SettingsPage(ScrollablePage):
 
         # Font Size
         self.font_size_spin = QSpinBox()
+        set_test_id(self.font_size_spin, "page.settings.fontSizeSpin")
         self.font_size_spin.setRange(8, 24)
         self.font_size_spin.setValue(self.main_window.app.settings.value("gui/font_size", 10, int))
         self.font_size_spin.valueChanged.connect(self._on_font_size_changed)
@@ -120,6 +124,7 @@ class SettingsPage(ScrollablePage):
 
         # Window Width
         self.window_width_spin = QSpinBox()
+        set_test_id(self.window_width_spin, "page.settings.windowWidthSpin")
         self.window_width_spin.setRange(800, 2560)
         self.window_width_spin.setSuffix(" px")
         self.window_width_spin.setValue(self._raw_config.get("gui", {}).get("window_width", 1200))
@@ -128,6 +133,7 @@ class SettingsPage(ScrollablePage):
 
         # Window Height
         self.window_height_spin = QSpinBox()
+        set_test_id(self.window_height_spin, "page.settings.windowHeightSpin")
         self.window_height_spin.setRange(600, 1440)
         self.window_height_spin.setSuffix(" px")
         self.window_height_spin.setValue(self._raw_config.get("gui", {}).get("window_height", 800))
@@ -136,6 +142,7 @@ class SettingsPage(ScrollablePage):
 
         # Min Window Width
         self.min_window_width_spin = QSpinBox()
+        set_test_id(self.min_window_width_spin, "page.settings.minWindowWidthSpin")
         self.min_window_width_spin.setRange(400, 1200)
         self.min_window_width_spin.setSuffix(" px")
         self.min_window_width_spin.setValue(
@@ -146,6 +153,7 @@ class SettingsPage(ScrollablePage):
 
         # Min Window Height
         self.min_window_height_spin = QSpinBox()
+        set_test_id(self.min_window_height_spin, "page.settings.minWindowHeightSpin")
         self.min_window_height_spin.setRange(300, 900)
         self.min_window_height_spin.setSuffix(" px")
         self.min_window_height_spin.setValue(
@@ -169,6 +177,7 @@ class SettingsPage(ScrollablePage):
 
         # Auto-Save Interval
         self.autosave_interval_spin = QSpinBox()
+        set_test_id(self.autosave_interval_spin, "page.settings.autoSaveIntervalSpin")
         self.autosave_interval_spin.setRange(30, 3600)
         self.autosave_interval_spin.setSuffix(" seconds")
         self.autosave_interval_spin.setValue(
@@ -179,6 +188,7 @@ class SettingsPage(ScrollablePage):
 
         # Backup Count
         self.backup_count_spin = QSpinBox()
+        set_test_id(self.backup_count_spin, "page.settings.backupCountSpin")
         self.backup_count_spin.setRange(0, 50)
         self.backup_count_spin.setSuffix(" backups")
         self.backup_count_spin.setValue(self._raw_config.get("gui", {}).get("backup_count", 5))
@@ -187,6 +197,7 @@ class SettingsPage(ScrollablePage):
 
         # Backup on Save
         self.backup_on_save_check = QCheckBox()
+        set_test_id(self.backup_on_save_check, "page.settings.backupOnSaveCheck")
         self.backup_on_save_check.setChecked(
             self._raw_config.get("gui", {}).get("backup_on_save", True)
         )
@@ -205,6 +216,7 @@ class SettingsPage(ScrollablePage):
 
         # Base Path
         self.base_path_picker = PathPicker()
+        set_test_id(self.base_path_picker, "page.settings.basePathPicker")
         self.base_path_picker.set_path(dirs_config.get("base_path", "."))
         self.base_path_picker.set_placeholder_text("Select base directory...")
         self.base_path_picker.pathChanged.connect(self._mark_restart_required)
@@ -212,6 +224,7 @@ class SettingsPage(ScrollablePage):
 
         # Investigations Root
         self.investigations_root_edit = QLineEdit()
+        set_test_id(self.investigations_root_edit, "page.settings.investigationsRootField")
         self.investigations_root_edit.setText(
             dirs_config.get("investigations_root", "investigations")
         )
@@ -220,36 +233,42 @@ class SettingsPage(ScrollablePage):
 
         # Templates Root
         self.templates_root_edit = QLineEdit()
+        set_test_id(self.templates_root_edit, "page.settings.templatesRootField")
         self.templates_root_edit.setText(dirs_config.get("templates_root", "templates"))
         self.templates_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Templates Root:", self.templates_root_edit)
 
         # Ontologies Root
         self.ontologies_root_edit = QLineEdit()
+        set_test_id(self.ontologies_root_edit, "page.settings.ontologiesRootField")
         self.ontologies_root_edit.setText(dirs_config.get("ontologies_root", "ontologies"))
         self.ontologies_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Ontologies Root:", self.ontologies_root_edit)
 
         # Exports Root
         self.exports_root_edit = QLineEdit()
+        set_test_id(self.exports_root_edit, "page.settings.exportsRootField")
         self.exports_root_edit.setText(dirs_config.get("exports_root", "exports"))
         self.exports_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Exports Root:", self.exports_root_edit)
 
         # Archive Root
         self.archive_root_edit = QLineEdit()
+        set_test_id(self.archive_root_edit, "page.settings.archiveRootField")
         self.archive_root_edit.setText(dirs_config.get("archive_root", "archive"))
         self.archive_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Archive Root:", self.archive_root_edit)
 
         # Config Root
         self.config_root_edit = QLineEdit()
+        set_test_id(self.config_root_edit, "page.settings.configRootField")
         self.config_root_edit.setText(dirs_config.get("config_root", "config"))
         self.config_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Config Root:", self.config_root_edit)
 
         # Docs Root
         self.docs_root_edit = QLineEdit()
+        set_test_id(self.docs_root_edit, "page.settings.docsRootField")
         self.docs_root_edit.setText(dirs_config.get("docs_root", "docs"))
         self.docs_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Docs Root:", self.docs_root_edit)
@@ -271,6 +290,7 @@ class SettingsPage(ScrollablePage):
 
         # Base URL
         self.base_url_edit = UrlLineEdit()
+        set_test_id(self.base_url_edit, "page.settings.baseUrlField")
         self.base_url_edit.set_url(
             urls_config.get("base_url", "https://example.org/investigations")
         )
@@ -280,6 +300,9 @@ class SettingsPage(ScrollablePage):
 
         # Investigation URL Template
         self.investigation_url_template_edit = QLineEdit()
+        set_test_id(
+            self.investigation_url_template_edit, "page.settings.investigationUrlTemplateField"
+        )
         self.investigation_url_template_edit.setText(
             urls_config.get("investigation_url_template", "{base_url}/{investigation_id}")
         )
@@ -289,6 +312,7 @@ class SettingsPage(ScrollablePage):
 
         # Study URL Template
         self.study_url_template_edit = QLineEdit()
+        set_test_id(self.study_url_template_edit, "page.settings.studyUrlTemplateField")
         self.study_url_template_edit.setText(
             urls_config.get(
                 "study_url_template", "{base_url}/{investigation_id}/studies/{study_id}"
@@ -302,6 +326,7 @@ class SettingsPage(ScrollablePage):
 
         # Material URL Template
         self.material_url_template_edit = QLineEdit()
+        set_test_id(self.material_url_template_edit, "page.settings.materialUrlTemplateField")
         self.material_url_template_edit.setText(
             urls_config.get(
                 "material_url_template",
@@ -316,6 +341,7 @@ class SettingsPage(ScrollablePage):
 
         # Process URL Template
         self.process_url_template_edit = QLineEdit()
+        set_test_id(self.process_url_template_edit, "page.settings.processUrlTemplateField")
         self.process_url_template_edit.setText(
             urls_config.get(
                 "process_url_template",
@@ -345,11 +371,13 @@ class SettingsPage(ScrollablePage):
 
         # Validate on Save
         self.validate_on_save_check = QCheckBox()
+        set_test_id(self.validate_on_save_check, "page.settings.validateOnSaveCheck")
         self.validate_on_save_check.setChecked(validation_config.get("validate_on_save", True))
         validation_layout.addRow("Validate on Save:", self.validate_on_save_check)
 
         # Validate Required Fields
         self.validate_required_fields_check = QCheckBox()
+        set_test_id(self.validate_required_fields_check, "page.settings.validateRequiredFieldsCheck")
         self.validate_required_fields_check.setChecked(
             validation_config.get("validate_required_fields", True)
         )
@@ -357,6 +385,9 @@ class SettingsPage(ScrollablePage):
 
         # Validate Ontology Terms
         self.validate_ontology_terms_check = QCheckBox()
+        set_test_id(
+            self.validate_ontology_terms_check, "page.settings.validateOntologyTermsCheck"
+        )
         self.validate_ontology_terms_check.setChecked(
             validation_config.get("validate_ontology_terms", True)
         )
@@ -364,11 +395,13 @@ class SettingsPage(ScrollablePage):
 
         # Validate Units
         self.validate_units_check = QCheckBox()
+        set_test_id(self.validate_units_check, "page.settings.validateUnitsCheck")
         self.validate_units_check.setChecked(validation_config.get("validate_units", True))
         validation_layout.addRow("Validate Units:", self.validate_units_check)
 
         # Validate Date Formats
         self.validate_date_formats_check = QCheckBox()
+        set_test_id(self.validate_date_formats_check, "page.settings.validateDateFormatsCheck")
         self.validate_date_formats_check.setChecked(
             validation_config.get("validate_date_formats", True)
         )
@@ -376,6 +409,9 @@ class SettingsPage(ScrollablePage):
 
         # Warn on Missing Metadata
         self.warn_on_missing_metadata_check = QCheckBox()
+        set_test_id(
+            self.warn_on_missing_metadata_check, "page.settings.warnOnMissingMetadataCheck"
+        )
         self.warn_on_missing_metadata_check.setChecked(
             validation_config.get("warn_on_missing_metadata", True)
         )
@@ -393,17 +429,20 @@ class SettingsPage(ScrollablePage):
 
         # Default Export Format
         self.export_format_combo = QComboBox()
+        set_test_id(self.export_format_combo, "page.settings.exportFormatCombo")
         self.export_format_combo.addItems(["JSON", "CSV", "Excel", "ISA-Tab"])
         self.export_format_combo.setCurrentText(export_config.get("default_format", "JSON"))
         export_layout.addRow("Default Export Format:", self.export_format_combo)
 
         # Include Raw Data
         self.include_raw_data_check = QCheckBox()
+        set_test_id(self.include_raw_data_check, "page.settings.includeRawDataCheck")
         self.include_raw_data_check.setChecked(export_config.get("include_raw_data", False))
         export_layout.addRow("Include Raw Data:", self.include_raw_data_check)
 
         # Include Processed Data
         self.include_processed_data_check = QCheckBox()
+        set_test_id(self.include_processed_data_check, "page.settings.includeProcessedDataCheck")
         self.include_processed_data_check.setChecked(
             export_config.get("include_processed_data", True)
         )
@@ -411,11 +450,13 @@ class SettingsPage(ScrollablePage):
 
         # Include Assay Data
         self.include_assay_data_check = QCheckBox()
+        set_test_id(self.include_assay_data_check, "page.settings.includeAssayDataCheck")
         self.include_assay_data_check.setChecked(export_config.get("include_assay_data", True))
         export_layout.addRow("Include Assay Data:", self.include_assay_data_check)
 
         # Include Protocols
         self.include_protocols_check = QCheckBox()
+        set_test_id(self.include_protocols_check, "page.settings.includeProtocolsCheck")
         self.include_protocols_check.setChecked(export_config.get("include_protocols", True))
         export_layout.addRow("Include Protocols:", self.include_protocols_check)
 
@@ -431,22 +472,26 @@ class SettingsPage(ScrollablePage):
 
         # Enable Version Control
         self.enable_version_control_check = QCheckBox()
+        set_test_id(self.enable_version_control_check, "page.settings.enableVersionControlCheck")
         self.enable_version_control_check.setChecked(vc_config.get("enabled", True))
         vc_layout.addRow("Enable Version Control:", self.enable_version_control_check)
 
         # Auto-Version on Save
         self.auto_version_on_save_check = QCheckBox()
+        set_test_id(self.auto_version_on_save_check, "page.settings.autoVersionOnSaveCheck")
         self.auto_version_on_save_check.setChecked(vc_config.get("auto_version_on_save", True))
         vc_layout.addRow("Auto-Version on Save:", self.auto_version_on_save_check)
 
         # Version Prefix
         self.version_prefix_edit = QLineEdit()
+        set_test_id(self.version_prefix_edit, "page.settings.versionPrefixField")
         self.version_prefix_edit.setText(vc_config.get("version_prefix", "v"))
         self.version_prefix_edit.textChanged.connect(self._mark_restart_required)
         vc_layout.addRow("Version Prefix:", self.version_prefix_edit)
 
         # Max Versions
         self.max_versions_spin = QSpinBox()
+        set_test_id(self.max_versions_spin, "page.settings.maxVersionsSpin")
         self.max_versions_spin.setRange(0, 100)
         self.max_versions_spin.setSpecialValueText("Unlimited")
         self.max_versions_spin.setValue(vc_config.get("max_versions", 10))
@@ -455,6 +500,7 @@ class SettingsPage(ScrollablePage):
 
         # Compress Old Versions
         self.compress_old_versions_check = QCheckBox()
+        set_test_id(self.compress_old_versions_check, "page.settings.compressOldVersionsCheck")
         self.compress_old_versions_check.setChecked(vc_config.get("compress_old_versions", False))
         vc_layout.addRow("Compress Old Versions:", self.compress_old_versions_check)
 
@@ -467,12 +513,12 @@ class SettingsPage(ScrollablePage):
         button_layout.addStretch()
 
         # Reset to Defaults button
-        reset_btn = ActionButton("Reset to Defaults")
+        reset_btn = ActionButton("Reset to Defaults", test_id="page.settings.resetButton")
         reset_btn.clicked.connect(self._on_reset_to_defaults)
         button_layout.addWidget(reset_btn)
 
         # Save Settings button
-        save_btn = PrimaryButton("Save Settings")
+        save_btn = PrimaryButton("Save Settings", test_id="page.settings.saveButton")
         save_btn.clicked.connect(self._on_save_settings)
         button_layout.addWidget(save_btn)
 

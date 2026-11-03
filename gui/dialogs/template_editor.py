@@ -36,6 +36,8 @@ from PyQt6.QtWidgets import (
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.constants import TemplateConstants  # noqa: E402
 
+from ..agent_tools.ids import set_test_id
+
 
 class TemplateEditorDialog(QDialog):
     """Dialog for editing assay and protocol templates."""
@@ -52,6 +54,8 @@ class TemplateEditorDialog(QDialog):
         super().__init__(parent)
         self.template_type = template_type
         self.template_data: Dict[str, Any] = template_data or {}
+        self._param_row_seq = 0  # Monotonic counter for dynamic row widget IDs
+        set_test_id(self, "dialog.templateEditor")
         self.setWindowTitle(f"Edit {template_type.capitalize()} Template")
         self.setMinimumSize(900, 700)
         self.setup_ui()
@@ -89,10 +93,12 @@ class TemplateEditorDialog(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
+        set_test_id(cancel_btn, "dialog.templateEditor.cancelButton")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         save_btn = QPushButton("Save")
+        set_test_id(save_btn, "dialog.templateEditor.saveButton")
         save_btn.clicked.connect(self._on_save)
         btn_layout.addWidget(save_btn)
 
@@ -110,11 +116,13 @@ class TemplateEditorDialog(QDialog):
         form = QFormLayout()
 
         self.name_edit = QLineEdit()
+        set_test_id(self.name_edit, "dialog.templateEditor.nameField")
         self.name_edit.setText(self.template_data.get("name", ""))
         self.name_edit.setPlaceholderText("Template name")
         form.addRow("Name:", self.name_edit)
 
         self.desc_edit = QTextEdit()
+        set_test_id(self.desc_edit, "dialog.templateEditor.descriptionField")
         self.desc_edit.setPlainText(self.template_data.get("description", ""))
         self.desc_edit.setPlaceholderText("Template description...")
         self.desc_edit.setMaximumHeight(80)
@@ -134,6 +142,7 @@ class TemplateEditorDialog(QDialog):
 
         # JSON editor
         self.json_edit = QTextEdit()
+        set_test_id(self.json_edit, "dialog.templateEditor.jsonEditor")
         self.json_edit.setPlainText(json.dumps(self.template_data, indent=2))
         self.json_edit.setPlaceholderText("Enter JSON data...")
         self.json_edit.setFont(QFont("Courier New", 10))
@@ -146,6 +155,7 @@ class TemplateEditorDialog(QDialog):
 
         # Format button
         format_btn = QPushButton("Format JSON")
+        set_test_id(format_btn, "dialog.templateEditor.formatButton")
         format_btn.clicked.connect(self._format_json)
         layout.addWidget(format_btn)
 
@@ -166,6 +176,7 @@ class TemplateEditorDialog(QDialog):
         header_layout.addStretch()
 
         add_param_btn = QPushButton("+ Add Parameter")
+        set_test_id(add_param_btn, "dialog.templateEditor.addParameterButton")
         add_param_btn.clicked.connect(self._on_add_parameter)
         header_layout.addWidget(add_param_btn)
 
@@ -173,6 +184,7 @@ class TemplateEditorDialog(QDialog):
 
         # Parameters table
         self.params_table = QTableWidget()
+        set_test_id(self.params_table, "dialog.templateEditor.parametersTable")
         self.params_table.setColumnCount(5)
         self.params_table.setHorizontalHeaderLabels(
             ["Parameter Name", "Description", "Unit", "Default Value", "Actions"]
@@ -241,6 +253,9 @@ class TemplateEditorDialog(QDialog):
 
         # Unit (dropdown)
         unit_combo = QComboBox()
+        seq = self._param_row_seq
+        self._param_row_seq += 1
+        set_test_id(unit_combo, f"dialog.templateEditor.unitCombo_{seq}")
         unit_combo.setEditable(True)
         unit_combo.addItem("")  # Empty option
         for unit in sorted(self.NUMERIC_UNITS):
@@ -259,6 +274,7 @@ class TemplateEditorDialog(QDialog):
 
         # Remove button
         remove_btn = QToolButton()
+        set_test_id(remove_btn, f"dialog.templateEditor.removeButton_{seq}")
         remove_btn.setText("×")
         remove_btn.setToolTip("Remove parameter")
         remove_btn.clicked.connect(lambda checked, r=row: self._on_remove_parameter(r))

@@ -16,12 +16,15 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..agent_tools.ids import set_test_id
+
 
 class ImageConverterDialog(QDialog):
     """Dialog for converting images to TIFF format."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        set_test_id(self, "dialog.imageConverter")
         self.setWindowTitle("Convert Image to TIFF")
         self.setMinimumWidth(500)
         self.setup_ui()
@@ -37,11 +40,13 @@ class ImageConverterDialog(QDialog):
         file_layout.addWidget(file_label)
 
         self.file_path_edit = QLineEdit()
+        set_test_id(self.file_path_edit, "dialog.imageConverter.filePathField")
         self.file_path_edit.setPlaceholderText("Select image file...")
         self.file_path_edit.setReadOnly(True)
         file_layout.addWidget(self.file_path_edit)
 
         browse_btn = QPushButton("Browse...")
+        set_test_id(browse_btn, "dialog.imageConverter.browseButton")
         browse_btn.clicked.connect(self._on_browse_file)
         file_layout.addWidget(browse_btn)
 
@@ -53,6 +58,7 @@ class ImageConverterDialog(QDialog):
         desc_layout.addWidget(desc_label)
 
         self.desc_edit = QLineEdit()
+        set_test_id(self.desc_edit, "dialog.imageConverter.descriptionField")
         self.desc_edit.setPlaceholderText("Enter description...")
         desc_layout.addWidget(self.desc_edit)
 
@@ -69,10 +75,12 @@ class ImageConverterDialog(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
+        set_test_id(cancel_btn, "dialog.imageConverter.cancelButton")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         convert_btn = QPushButton("Convert")
+        set_test_id(convert_btn, "dialog.imageConverter.convertButton")
         convert_btn.clicked.connect(self._on_convert)
         btn_layout.addWidget(convert_btn)
 

@@ -12,6 +12,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..agent_tools.ids import set_test_id
+
 
 class AddParameterDialog(QDialog):
     """Dialog for adding a custom parameter to an assay."""
@@ -19,6 +21,7 @@ class AddParameterDialog(QDialog):
     def __init__(self, parent=None, existing_params=None):
         super().__init__(parent)
         self.existing_params = existing_params or []
+        set_test_id(self, "dialog.addParameter")
         self.setWindowTitle("Add Parameter")
         self.setMinimumWidth(400)
         self.setup_ui()
@@ -30,18 +33,22 @@ class AddParameterDialog(QDialog):
         form = QFormLayout()
 
         self.name_edit = QLineEdit()
+        set_test_id(self.name_edit, "dialog.addParameter.nameField")
         self.name_edit.setPlaceholderText("Parameter name (e.g., temperature)")
         form.addRow("Parameter Name:", self.name_edit)
 
         self.description_edit = QLineEdit()
+        set_test_id(self.description_edit, "dialog.addParameter.descriptionField")
         self.description_edit.setPlaceholderText("Description (optional)")
         form.addRow("Description:", self.description_edit)
 
         self.unit_edit = QLineEdit()
+        set_test_id(self.unit_edit, "dialog.addParameter.unitField")
         self.unit_edit.setPlaceholderText("Unit (e.g., °C, minutes)")
         form.addRow("Unit:", self.unit_edit)
 
         self.value_edit = QLineEdit()
+        set_test_id(self.value_edit, "dialog.addParameter.valueField")
         self.value_edit.setPlaceholderText("Default value (optional)")
         form.addRow("Default Value:", self.value_edit)
 
@@ -52,10 +59,12 @@ class AddParameterDialog(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
+        set_test_id(cancel_btn, "dialog.addParameter.cancelButton")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         add_btn = QPushButton("Add Parameter")
+        set_test_id(add_btn, "dialog.addParameter.addButton")
         add_btn.clicked.connect(self._on_add)
         btn_layout.addWidget(add_btn)
 

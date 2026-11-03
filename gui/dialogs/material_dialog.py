@@ -19,6 +19,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
+
 
 class CharacteristicEditor(QWidget):
     """Widget for editing material characteristics."""
@@ -35,6 +37,9 @@ class CharacteristicEditor(QWidget):
 
         # Characteristics list
         self.list_widget = QListWidget()
+        # CharacteristicEditor is only instantiated inside MaterialDialog, so
+        # its interactive children are addressed under dialog.material.*.
+        set_test_id(self.list_widget, "dialog.material.characteristicsList")
         self.list_widget.setMinimumHeight(200)
         layout.addWidget(self.list_widget)
 
@@ -42,10 +47,12 @@ class CharacteristicEditor(QWidget):
         buttons_layout = QHBoxLayout()
 
         add_btn = QPushButton("+ Add Characteristic")
+        set_test_id(add_btn, "dialog.material.addCharacteristicButton")
         add_btn.clicked.connect(self._on_add_characteristic)
         buttons_layout.addWidget(add_btn)
 
         remove_btn = QPushButton("- Remove Selected")
+        set_test_id(remove_btn, "dialog.material.removeCharacteristicButton")
         remove_btn.clicked.connect(self._on_remove_characteristic)
         buttons_layout.addWidget(remove_btn)
 
@@ -96,6 +103,7 @@ class CharacteristicDialog(QDialog):
     def __init__(self, parent=None, characteristic=None):
         super().__init__(parent)
         self.characteristic = characteristic or {}
+        set_test_id(self, "dialog.characteristic")
         self.setWindowTitle("Add Characteristic")
         self.setMinimumSize(500, 300)
         self.setup_ui()
@@ -108,12 +116,14 @@ class CharacteristicDialog(QDialog):
 
         # Characteristic type
         self.type_edit = QLineEdit()
+        set_test_id(self.type_edit, "dialog.characteristic.typeField")
         self.type_edit.setPlaceholderText("e.g., organism, strain, buffer composition")
         self.type_edit.setText(self.characteristic.get("category", {}).get("annotationValue", ""))
         form_layout.addRow("Characteristic Type:", self.type_edit)
 
         # Term source
         self.source_combo = QComboBox()
+        set_test_id(self.source_combo, "dialog.characteristic.sourceCombo")
         self.source_combo.addItems(["OBI", "NCBITaxon", "ChEBI", "UO", "PMDco"])
         current_source = self.characteristic.get("category", {}).get("termSource", "")
         if current_source:
@@ -124,7 +134,10 @@ class CharacteristicDialog(QDialog):
 
         # Term accession
         self.accession_edit = QLineEdit()
-        self.accession_edit.setPlaceholderText("e.g., http://purl.obolibrary.org/obo/NCBITaxon_562")
+        set_test_id(self.accession_edit, "dialog.characteristic.accessionField")
+        self.accession_edit.setPlaceholderText(
+            "e.g., http://purl.obolibrary.org/obo/NCBITaxon_562"
+        )
         self.accession_edit.setText(
             self.characteristic.get("category", {}).get("termAccession", "")
         )
@@ -132,6 +145,7 @@ class CharacteristicDialog(QDialog):
 
         # Value
         self.value_edit = QLineEdit()
+        set_test_id(self.value_edit, "dialog.characteristic.valueField")
         self.value_edit.setPlaceholderText("Characteristic value")
         self.value_edit.setText(str(self.characteristic.get("value", "")))
         form_layout.addRow("Value:", self.value_edit)
@@ -143,10 +157,12 @@ class CharacteristicDialog(QDialog):
         buttons_layout.addStretch()
 
         ok_btn = QPushButton("OK")
+        set_test_id(ok_btn, "dialog.characteristic.okButton")
         ok_btn.clicked.connect(self.accept)
         buttons_layout.addWidget(ok_btn)
 
         cancel_btn = QPushButton("Cancel")
+        set_test_id(cancel_btn, "dialog.characteristic.cancelButton")
         cancel_btn.clicked.connect(self.reject)
         buttons_layout.addWidget(cancel_btn)
 
@@ -172,6 +188,7 @@ class MaterialDialog(QDialog):
         self.dm = dm
         self.material_data = material_data or {}
         self.templates = templates or []
+        set_test_id(self, "dialog.material")
         self.setWindowTitle("Edit Material")
         self.setMinimumSize(700, 600)
         self.setup_ui()
@@ -188,11 +205,13 @@ class MaterialDialog(QDialog):
         basic_layout = QFormLayout(basic_tab)
 
         self.name_edit = QLineEdit()
+        set_test_id(self.name_edit, "dialog.material.nameField")
         self.name_edit.setText(self.material_data.get("name", ""))
         self.name_edit.setPlaceholderText("Material name")
         basic_layout.addRow("Material Name:", self.name_edit)
 
         self.type_combo = QComboBox()
+        set_test_id(self.type_combo, "dialog.material.typeCombo")
         self.type_combo.addItems(["source", "sample", "otherMaterial"])
         material_type = self.material_data.get("materialType", "")
         if material_type:
@@ -203,12 +222,14 @@ class MaterialDialog(QDialog):
 
         # Derives from (for samples)
         self.derives_from_edit = QLineEdit()
+        set_test_id(self.derives_from_edit, "dialog.material.derivesFromField")
         self.derives_from_edit.setText(", ".join(self.material_data.get("derivesFrom", [])))
         self.derives_from_edit.setPlaceholderText("Comma-separated material IDs")
         basic_layout.addRow("Derives From:", self.derives_from_edit)
 
         # Description
         self.description_edit = QLineEdit()
+        set_test_id(self.description_edit, "dialog.material.descriptionField")
         self.description_edit.setText(self.material_data.get("description", ""))
         self.description_edit.setPlaceholderText("Material description")
         basic_layout.addRow("Description:", self.description_edit)
@@ -236,6 +257,7 @@ class MaterialDialog(QDialog):
             template_layout.addWidget(QLabel("Select a template to create material from:"))
 
             self.template_combo = QComboBox()
+            set_test_id(self.template_combo, "dialog.material.templateCombo")
             self.template_combo.addItem("-- No Template --", None)
             for template in self.templates:
                 template_name = template.get("name", "Unknown")
@@ -245,6 +267,7 @@ class MaterialDialog(QDialog):
             template_layout.addWidget(self.template_combo)
 
             use_template_btn = QPushButton("Use Template")
+            set_test_id(use_template_btn, "dialog.material.useTemplateButton")
             use_template_btn.clicked.connect(self._on_use_template)
             template_layout.addWidget(use_template_btn)
 
@@ -258,10 +281,12 @@ class MaterialDialog(QDialog):
         buttons_layout.addStretch()
 
         save_btn = QPushButton("Save")
+        set_test_id(save_btn, "dialog.material.saveButton")
         save_btn.clicked.connect(self._on_save)
         buttons_layout.addWidget(save_btn)
 
         cancel_btn = QPushButton("Cancel")
+        set_test_id(cancel_btn, "dialog.material.cancelButton")
         cancel_btn.clicked.connect(self.reject)
         buttons_layout.addWidget(cancel_btn)
 

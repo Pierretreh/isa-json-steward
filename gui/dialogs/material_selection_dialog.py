@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..agent_tools.ids import set_test_id
+
 
 class MaterialSelectionDialog(QDialog):
     """Dialog for selecting materials for process inputs/outputs."""
@@ -24,6 +26,7 @@ class MaterialSelectionDialog(QDialog):
         self.materials = materials or []
         self.multi_select = multi_select
         self.selected_materials = []
+        set_test_id(self, "dialog.materialSelection")
         self.setWindowTitle(title)
         self.setMinimumSize(600, 500)
         self.setup_ui()
@@ -40,6 +43,7 @@ class MaterialSelectionDialog(QDialog):
         search_layout.addWidget(search_label)
 
         self.search_entry = QLineEdit()
+        set_test_id(self.search_entry, "dialog.materialSelection.searchField")
         self.search_entry.setPlaceholderText("Search materials...")
         self.search_entry.textChanged.connect(self._on_search_changed)
         search_layout.addWidget(self.search_entry)
@@ -48,6 +52,7 @@ class MaterialSelectionDialog(QDialog):
 
         # Material tree
         self.tree = QTreeWidget()
+        set_test_id(self.tree, "dialog.materialSelection.materialsTree")
         self.tree.setHeaderLabels(["Material", "Type", "ID"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setColumnWidth(0, 300)
@@ -63,6 +68,7 @@ class MaterialSelectionDialog(QDialog):
 
         # Group by type checkbox
         self.group_by_type = QCheckBox("Group by material type")
+        set_test_id(self.group_by_type, "dialog.materialSelection.groupByTypeCheck")
         self.group_by_type.setChecked(True)
         self.group_by_type.toggled.connect(self.load_materials)
         layout.addWidget(self.group_by_type)
@@ -70,6 +76,14 @@ class MaterialSelectionDialog(QDialog):
         # Buttons
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        set_test_id(
+            buttons.button(QDialogButtonBox.StandardButton.Ok),
+            "dialog.materialSelection.okButton",
+        )
+        set_test_id(
+            buttons.button(QDialogButtonBox.StandardButton.Cancel),
+            "dialog.materialSelection.cancelButton",
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)

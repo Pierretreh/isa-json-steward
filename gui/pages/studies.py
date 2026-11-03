@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..dialogs.investigation_dialog import InvestigationDialog
 from ..dialogs.study_wizard import StudyWizard
 from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
@@ -56,6 +57,7 @@ class StudiesPage(ScrollablePage):
         left_layout.setContentsMargins(0, 0, 0, 0)
 
         self.tree = QTreeWidget()
+        set_test_id(self.tree, "page.studies.studiesTree")
         self.tree.setHeaderLabels(["Name", "Type", "ID"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setMinimumHeight(400)
@@ -130,18 +132,22 @@ class StudiesPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         refresh_btn = ActionButton("Refresh")
+        set_test_id(refresh_btn, "page.studies.refreshButton")
         refresh_btn.clicked.connect(self.refresh)
         buttons_layout.addWidget(refresh_btn)
 
         create_inv_btn = PrimaryButton("Create New Investigation")
+        set_test_id(create_inv_btn, "page.studies.createInvestigationButton")
         create_inv_btn.clicked.connect(self._on_create_investigation)
         buttons_layout.addWidget(create_inv_btn)
 
         create_btn = PrimaryButton("Create New Study")
+        set_test_id(create_btn, "page.studies.createStudyButton")
         create_btn.clicked.connect(self._on_create_study)
         buttons_layout.addWidget(create_btn)
 
         delete_btn = ActionButton("Delete Selected")
+        set_test_id(delete_btn, "page.studies.deleteButton")
         delete_btn.clicked.connect(self._on_delete)
         buttons_layout.addWidget(delete_btn)
 

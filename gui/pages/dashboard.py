@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from ..agent_tools.ids import set_test_id
 from ..widgets.common import ActionButton, CardWidget, InfoCard, PrimaryButton, SectionHeader
 from .base_page import ScrollablePage
 
@@ -57,22 +58,27 @@ class DashboardPage(ScrollablePage):
         actions_layout.setSpacing(12)
 
         create_inv_btn = PrimaryButton("Create New Investigation")
+        set_test_id(create_inv_btn, "page.dashboard.createInvestigationButton")
         create_inv_btn.clicked.connect(self._on_create_investigation)
         actions_layout.addWidget(create_inv_btn)
 
         create_study_btn = PrimaryButton("Create New Study")
+        set_test_id(create_study_btn, "page.dashboard.createStudyButton")
         create_study_btn.clicked.connect(self._on_create_study)
         actions_layout.addWidget(create_study_btn)
 
         open_study_btn = ActionButton("Open Recent Study")
+        set_test_id(open_study_btn, "page.dashboard.openRecentStudyButton")
         open_study_btn.clicked.connect(self._on_open_recent)
         actions_layout.addWidget(open_study_btn)
 
         browse_ontology_btn = ActionButton("Browse Ontology")
+        set_test_id(browse_ontology_btn, "page.dashboard.browseOntologyButton")
         browse_ontology_btn.clicked.connect(self._on_browse_ontology)
         actions_layout.addWidget(browse_ontology_btn)
 
         batch_btn = PrimaryButton("Run Batch Pipeline")
+        set_test_id(batch_btn, "page.dashboard.runBatchButton")
         batch_btn.clicked.connect(self._on_run_batch_pipeline)
         actions_layout.addWidget(batch_btn)
 

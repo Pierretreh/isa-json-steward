@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..dialogs.material_dialog import MaterialDialog
 from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
 from .base_page import ScrollablePage
@@ -58,6 +59,7 @@ class MaterialsPage(ScrollablePage):
         filter_layout.addWidget(filter_label)
 
         self.type_filter = QComboBox()
+        set_test_id(self.type_filter, "page.materials.typeFilter")
         self.type_filter.addItems(["All", "Sources", "Samples", "Other Materials"])
         self.type_filter.currentTextChanged.connect(self._on_filter_changed)
         filter_layout.addWidget(self.type_filter)
@@ -74,6 +76,7 @@ class MaterialsPage(ScrollablePage):
         left_layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
+        set_test_id(self.table, "page.materials.materialsTable")
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(
             ["Name", "Type", "ID", "Characteristics", "Derives From"]
@@ -150,18 +153,22 @@ class MaterialsPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         add_btn = PrimaryButton("Add Material")
+        set_test_id(add_btn, "page.materials.addButton")
         add_btn.clicked.connect(self._on_add_material)
         buttons_layout.addWidget(add_btn)
 
         edit_btn = ActionButton("Edit Selected")
+        set_test_id(edit_btn, "page.materials.editButton")
         edit_btn.clicked.connect(self._on_edit_material)
         buttons_layout.addWidget(edit_btn)
 
         delete_btn = ActionButton("Delete Selected")
+        set_test_id(delete_btn, "page.materials.deleteButton")
         delete_btn.clicked.connect(self._on_delete_material)
         buttons_layout.addWidget(delete_btn)
 
         refresh_btn = ActionButton("Refresh")
+        set_test_id(refresh_btn, "page.materials.refreshButton")
         refresh_btn.clicked.connect(self.refresh)
         buttons_layout.addWidget(refresh_btn)
 

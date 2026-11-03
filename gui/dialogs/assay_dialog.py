@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..widgets.file_attachment_widget import FileAttachmentWidget
 from .add_parameter_dialog import AddParameterDialog
 from .material_selection_dialog import MaterialSelectionDialog
@@ -68,11 +69,13 @@ class AssayDialog(QDialog):
         self.parameter_definitions = parameter_definitions or []
         self.expected_attachments = expected_attachments or []
         self.study_data = study_data or {}
+        set_test_id(self, "dialog.assay")
         self.setWindowTitle("Edit Assay")
         self.setMinimumSize(700, 600)
 
         # Track parameter entries: {name: (widget, param_def)}
         self.param_entries = {}
+        self._param_field_seq = 0  # Monotonic counter for dynamic row widget IDs
 
         # Current view mode: 'form' or 'json'
         self.view_mode = "form"
@@ -97,11 +100,13 @@ class AssayDialog(QDialog):
         basic_layout = QFormLayout(basic_tab)
 
         self.name_edit = QLineEdit()
+        set_test_id(self.name_edit, "dialog.assay.nameField")
         self.name_edit.setText(self.assay_data.get("name", ""))
         self.name_edit.setPlaceholderText("Assay name")
         basic_layout.addRow("Assay Name:", self.name_edit)
 
         self.type_combo = QComboBox()
+        set_test_id(self.type_combo, "dialog.assay.typeCombo")
         self.type_combo.addItems(
             [
                 "SDS-PAGE",
@@ -129,6 +134,7 @@ class AssayDialog(QDialog):
         self.type_combo.currentTextChanged.connect(self._on_type_changed)
 
         self.date_edit = QDateEdit()
+        set_test_id(self.date_edit, "dialog.assay.dateField")
         self.date_edit.setCalendarPopup(True)
         self.date_edit.setDate(QDate.currentDate())
         if "date" in self.assay_data:
@@ -149,6 +155,7 @@ class AssayDialog(QDialog):
         desc_layout.addWidget(desc_label)
 
         self.desc_edit = QTextEdit()
+        set_test_id(self.desc_edit, "dialog.assay.descriptionField")
         self.desc_edit.setPlainText(self.assay_data.get("description", ""))
         self.desc_edit.setPlaceholderText("Enter assay description...")
         desc_layout.addWidget(self.desc_edit)
@@ -163,12 +170,14 @@ class AssayDialog(QDialog):
         header_layout = QHBoxLayout()
 
         self.form_view_btn = QPushButton("Form View")
+        set_test_id(self.form_view_btn, "dialog.assay.formViewButton")
         self.form_view_btn.setCheckable(True)
         self.form_view_btn.setChecked(True)
         self.form_view_btn.clicked.connect(self._show_form_view)
         header_layout.addWidget(self.form_view_btn)
 
         self.json_view_btn = QPushButton("JSON View")
+        set_test_id(self.json_view_btn, "dialog.assay.jsonViewButton")
         self.json_view_btn.setCheckable(True)
         self.json_view_btn.clicked.connect(self._show_json_view)
         header_layout.addWidget(self.json_view_btn)
@@ -176,6 +185,7 @@ class AssayDialog(QDialog):
         header_layout.addStretch()
 
         add_param_btn = QPushButton("+ Add Parameter")
+        set_test_id(add_param_btn, "dialog.assay.addParameterButton")
         add_param_btn.clicked.connect(self._on_add_parameter)
         header_layout.addWidget(add_param_btn)
 
@@ -205,6 +215,7 @@ class AssayDialog(QDialog):
         json_layout.addWidget(json_label)
 
         self.params_edit = QTextEdit()
+        set_test_id(self.params_edit, "dialog.assay.parametersEditor")
         self.params_edit.setFont(QFont("Courier New", 10))
         json_layout.addWidget(self.params_edit)
 
@@ -261,11 +272,13 @@ class AssayDialog(QDialog):
         materials_layout.addWidget(self.materials_status_label)
 
         self.inputs_list = QListWidget()
+        set_test_id(self.inputs_list, "dialog.assay.inputsList")
         self.inputs_list.setMaximumHeight(150)
         self.inputs_list.setAlternatingRowColors(True)
         materials_layout.addWidget(self.inputs_list)
 
         select_inputs_btn = QPushButton("Select Inputs...")
+        set_test_id(select_inputs_btn, "dialog.assay.selectInputsButton")
         select_inputs_btn.clicked.connect(self._on_select_inputs)
         materials_layout.addWidget(select_inputs_btn)
 
@@ -284,10 +297,12 @@ class AssayDialog(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
+        set_test_id(cancel_btn, "dialog.assay.cancelButton")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         save_btn = QPushButton("Save")
+        set_test_id(save_btn, "dialog.assay.saveButton")
         save_btn.clicked.connect(self._on_save)
         btn_layout.addWidget(save_btn)
 
@@ -360,6 +375,8 @@ class AssayDialog(QDialog):
 
     def _add_parameter_field(self, name: str, param_def: dict, value: str = ""):
         """Add a parameter field to the form."""
+        seq = self._param_field_seq
+        self._param_field_seq += 1
         description = param_def.get("description", "")
         unit_info = param_def.get("unit", {})
         unit = unit_info.get("annotationValue", "")
@@ -404,11 +421,13 @@ class AssayDialog(QDialog):
             widget = line
 
         if widget is not None:
+            set_test_id(widget, f"dialog.assay.valueField_{seq}")
             widget.setToolTip(description)
             row_layout.addWidget(widget)
 
         # Remove button
         remove_btn = QToolButton()
+        set_test_id(remove_btn, f"dialog.assay.removeButton_{seq}")
         remove_btn.setText("×")
         remove_btn.setToolTip("Remove parameter")
         remove_btn.clicked.connect(lambda: self._remove_parameter(name))
@@ -848,17 +867,20 @@ class AssayDialog(QDialog):
         # Name fields
         name_layout = QHBoxLayout()
         self.first_name_edit = QLineEdit()
+        set_test_id(self.first_name_edit, "dialog.assay.firstNameField")
         self.first_name_edit.setPlaceholderText("First name")
         name_layout.addWidget(QLabel("First Name:"))
         name_layout.addWidget(self.first_name_edit)
 
         self.mid_initials_edit = QLineEdit()
+        set_test_id(self.mid_initials_edit, "dialog.assay.midInitialsField")
         self.mid_initials_edit.setPlaceholderText("MI")
         self.mid_initials_edit.setMaximumWidth(50)
         name_layout.addWidget(QLabel("MI:"))
         name_layout.addWidget(self.mid_initials_edit)
 
         self.last_name_edit = QLineEdit()
+        set_test_id(self.last_name_edit, "dialog.assay.lastNameField")
         self.last_name_edit.setPlaceholderText("Last name")
         name_layout.addWidget(QLabel("Last Name:"))
         name_layout.addWidget(self.last_name_edit)
@@ -867,37 +889,45 @@ class AssayDialog(QDialog):
 
         # Contact fields
         self.email_edit = QLineEdit()
+        set_test_id(self.email_edit, "dialog.assay.emailField")
         self.email_edit.setPlaceholderText("email@example.com")
         performer_layout.addRow("Email:", self.email_edit)
 
         self.phone_edit = QLineEdit()
+        set_test_id(self.phone_edit, "dialog.assay.phoneField")
         self.phone_edit.setPlaceholderText("+1-234-567-8900")
         performer_layout.addRow("Phone:", self.phone_edit)
 
         self.fax_edit = QLineEdit()
+        set_test_id(self.fax_edit, "dialog.assay.faxField")
         self.fax_edit.setPlaceholderText("+1-234-567-8901")
         performer_layout.addRow("Fax:", self.fax_edit)
 
         # Address
         self.address_edit = QTextEdit()
+        set_test_id(self.address_edit, "dialog.assay.addressField")
         self.address_edit.setMaximumHeight(80)
         self.address_edit.setPlaceholderText("Street address, City, State, ZIP, Country")
         performer_layout.addRow("Address:", self.address_edit)
 
         # Affiliation
         self.affiliation_edit = QLineEdit()
+        set_test_id(self.affiliation_edit, "dialog.assay.affiliationField")
         self.affiliation_edit.setPlaceholderText("Organization name")
         performer_layout.addRow("Affiliation:", self.affiliation_edit)
 
         # Template buttons
         template_layout = QHBoxLayout()
         save_template_btn = QPushButton("Save as Template")
+        set_test_id(save_template_btn, "dialog.assay.savePerformerTemplateButton")
         save_template_btn.clicked.connect(self._save_performer_template)
         template_layout.addWidget(save_template_btn)
 
         self.performer_template_combo = QComboBox()
+        set_test_id(self.performer_template_combo, "dialog.assay.performerTemplateCombo")
         self.performer_template_combo.addItem("-- Select Template --")
         load_template_btn = QPushButton("Load Template")
+        set_test_id(load_template_btn, "dialog.assay.loadPerformerTemplateButton")
         load_template_btn.clicked.connect(
             lambda: self._load_performer_template(self.performer_template_combo)
         )

@@ -14,6 +14,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
+
 
 class ParameterDialog(QDialog):
     """Dialog for editing protocol parameters."""
@@ -22,6 +24,7 @@ class ParameterDialog(QDialog):
         super().__init__(parent)
         self.protocol_name = protocol_name
         self.parameters = parameters or []
+        set_test_id(self, "dialog.parameter")
         self.setWindowTitle(f"Parameters: {protocol_name}")
         self.setMinimumSize(600, 400)
         self.setup_ui()
@@ -43,9 +46,10 @@ class ParameterDialog(QDialog):
         self.form = QFormLayout(form_widget)
 
         self.param_entries = {}
-        for param in self.parameters:
+        for index, param in enumerate(self.parameters):
             name = param.get("annotationValue", param.get("name", "Unknown"))
             entry = QLineEdit()
+            set_test_id(entry, f"dialog.parameter.valueField_{index}")
             entry.setPlaceholderText("Enter value...")
             self.form.addRow(f"{name}:", entry)
             self.param_entries[name] = entry
@@ -58,10 +62,12 @@ class ParameterDialog(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
+        set_test_id(cancel_btn, "dialog.parameter.cancelButton")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         save_btn = QPushButton("Save")
+        set_test_id(save_btn, "dialog.parameter.saveButton")
         save_btn.clicked.connect(self.accept)
         btn_layout.addWidget(save_btn)
 

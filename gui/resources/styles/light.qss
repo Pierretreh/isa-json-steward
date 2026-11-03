@@ -49,7 +49,7 @@ QPushButton#sidebarButton:checked:hover {
 }
 
 /* Content Area */
-QWidget#contentArea {
+QWidget#contentArea, QWidget#contentPage {
     background-color: #ffffff;
     color: #2c3e50;
 }

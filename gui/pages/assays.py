@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..dialogs.assay_dialog import AssayDialog
 from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
 from .base_page import ScrollablePage
@@ -205,6 +206,7 @@ class AssaysPage(ScrollablePage):
         template_layout.addWidget(template_label)
 
         self.template_combo = QComboBox()
+        set_test_id(self.template_combo, "page.assays.templateCombo")
         self.template_combo.addItems(
             [
                 "SDS-PAGE",
@@ -236,6 +238,7 @@ class AssaysPage(ScrollablePage):
         left_layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
+        set_test_id(self.table, "page.assays.assaysTable")
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
             ["Assay Name", "Type", "Date", "Performer", "Materials", "Files"]
@@ -312,14 +315,17 @@ class AssaysPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         add_btn = PrimaryButton("Add Assay")
+        set_test_id(add_btn, "page.assays.addButton")
         add_btn.clicked.connect(self._on_add_assay)
         buttons_layout.addWidget(add_btn)
 
         edit_btn = ActionButton("Edit Selected")
+        set_test_id(edit_btn, "page.assays.editButton")
         edit_btn.clicked.connect(self._on_edit_assay)
         buttons_layout.addWidget(edit_btn)
 
         delete_btn = ActionButton("Delete Selected")
+        set_test_id(delete_btn, "page.assays.deleteButton")
         delete_btn.clicked.connect(self._on_delete_assay)
         buttons_layout.addWidget(delete_btn)
 

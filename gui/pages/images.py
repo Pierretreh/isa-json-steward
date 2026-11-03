@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..dialogs.image_converter import ImageConverterDialog
 from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
 from .base_page import ScrollablePage
@@ -45,6 +46,7 @@ class ImagesPage(ScrollablePage):
         raw_layout.addWidget(raw_label)
 
         self.raw_list = QListWidget()
+        set_test_id(self.raw_list, "page.images.rawImagesList")
         self.raw_list.setAlternatingRowColors(True)
         self.raw_list.setMinimumHeight(400)
         self.raw_list.itemDoubleClicked.connect(self._on_raw_image_selected)
@@ -62,6 +64,7 @@ class ImagesPage(ScrollablePage):
         processed_layout.addWidget(processed_label)
 
         self.processed_list = QListWidget()
+        set_test_id(self.processed_list, "page.images.processedImagesList")
         self.processed_list.setAlternatingRowColors(True)
         self.processed_list.setMinimumHeight(400)
         self.processed_list.itemDoubleClicked.connect(self._on_processed_image_selected)
@@ -83,14 +86,17 @@ class ImagesPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         import_btn = ActionButton("Import Image")
+        set_test_id(import_btn, "page.images.importButton")
         import_btn.clicked.connect(self._on_import_image)
         buttons_layout.addWidget(import_btn)
 
         convert_btn = PrimaryButton("Convert to TIFF")
+        set_test_id(convert_btn, "page.images.convertButton")
         convert_btn.clicked.connect(self._on_convert)
         buttons_layout.addWidget(convert_btn)
 
         refresh_btn = ActionButton("Refresh")
+        set_test_id(refresh_btn, "page.images.refreshButton")
         refresh_btn.clicked.connect(self._on_refresh)
         buttons_layout.addWidget(refresh_btn)
 

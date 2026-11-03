@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
 from .base_page import ScrollablePage
 
@@ -59,6 +60,7 @@ class FilesPage(ScrollablePage):
         filter_layout.addWidget(filter_label)
 
         self.filter_combo = QComboBox()
+        set_test_id(self.filter_combo, "page.files.filterCombo")
         self.filter_combo.addItems(["All Files", "Images", "Data", "Sequencing", "Reports"])
         self.filter_combo.currentTextChanged.connect(self._on_filter_changed)
         filter_layout.addWidget(self.filter_combo)
@@ -71,6 +73,7 @@ class FilesPage(ScrollablePage):
         filter_layout.addWidget(search_label)
 
         self.search_edit = QLineEdit()
+        set_test_id(self.search_edit, "page.files.searchField")
         self.search_edit.setPlaceholderText("Search files...")
         self.search_edit.textChanged.connect(self._on_search_changed)
         filter_layout.addWidget(self.search_edit)
@@ -89,6 +92,7 @@ class FilesPage(ScrollablePage):
 
         # File tree
         self.file_tree = QTreeWidget()
+        set_test_id(self.file_tree, "page.files.fileTree")
         self.file_tree.setHeaderLabels(["File", "Type", "Entity", "Size", "Status"])
         file_tree_header = self.file_tree.header()
         file_tree_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
@@ -200,14 +204,17 @@ class FilesPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         refresh_btn = ActionButton("Refresh")
+        set_test_id(refresh_btn, "page.files.refreshButton")
         refresh_btn.clicked.connect(self._on_refresh)
         buttons_layout.addWidget(refresh_btn)
 
         export_btn = PrimaryButton("Export File")
+        set_test_id(export_btn, "page.files.exportButton")
         export_btn.clicked.connect(self._on_export_file)
         buttons_layout.addWidget(export_btn)
 
         delete_btn = ActionButton("Delete Selected")
+        set_test_id(delete_btn, "page.files.deleteButton")
         delete_btn.clicked.connect(self._on_delete_files)
         buttons_layout.addWidget(delete_btn)
 

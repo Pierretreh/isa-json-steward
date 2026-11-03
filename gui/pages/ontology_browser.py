@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..widgets.common import ActionButton, SectionHeader
 from ..widgets.graph_widget import GraphWidget
 from .base_page import ScrollablePage
@@ -50,15 +51,18 @@ class OntologyBrowserPage(ScrollablePage):
         search_layout.addWidget(search_label)
 
         self.search_edit = QLineEdit()
+        set_test_id(self.search_edit, "page.ontology.searchField")
         self.search_edit.setPlaceholderText("Search ontology terms...")
         self.search_edit.returnPressed.connect(self._on_search)
         search_layout.addWidget(self.search_edit)
 
         search_btn = ActionButton("Search")
+        set_test_id(search_btn, "page.ontology.searchButton")
         search_btn.clicked.connect(self._on_search)
         search_layout.addWidget(search_btn)
 
         clear_btn = ActionButton("Clear")
+        set_test_id(clear_btn, "page.ontology.clearButton")
         clear_btn.clicked.connect(self._on_clear_search)
         search_layout.addWidget(clear_btn)
 
@@ -80,10 +84,12 @@ class OntologyBrowserPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         expand_all_btn = ActionButton("Expand All")
+        set_test_id(expand_all_btn, "page.ontology.expandAllButton")
         expand_all_btn.clicked.connect(self.tree.expandAll)
         buttons_layout.addWidget(expand_all_btn)
 
         collapse_all_btn = ActionButton("Collapse All")
+        set_test_id(collapse_all_btn, "page.ontology.collapseAllButton")
         collapse_all_btn.clicked.connect(self.tree.collapseAll)
         buttons_layout.addWidget(collapse_all_btn)
 
@@ -102,6 +108,7 @@ class OntologyBrowserPage(ScrollablePage):
 
         # Tree widget for ontology hierarchy
         self.tree = QTreeWidget()
+        set_test_id(self.tree, "page.ontology.ontologyTree")
         self.tree.setHeaderLabels(["Term", "Type", "URI"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setMinimumHeight(400)
@@ -139,6 +146,7 @@ class OntologyBrowserPage(ScrollablePage):
         details_layout.addWidget(self.term_uri)
 
         self.term_description = QTextEdit()
+        set_test_id(self.term_description, "page.ontology.termDescription")
         self.term_description.setReadOnly(True)
         self.term_description.setPlaceholderText("Description will appear here...")
         details_layout.addWidget(self.term_description)
@@ -177,6 +185,7 @@ class OntologyBrowserPage(ScrollablePage):
         top_bar.addWidget(category_label)
 
         self.category_combo = QComboBox()
+        set_test_id(self.category_combo, "page.ontology.categoryCombo")
         self.category_combo.addItems(
             ["All", "Materials", "Processes", "Assays", "DataFiles", "Parameters", "External"]
         )
@@ -187,6 +196,7 @@ class OntologyBrowserPage(ScrollablePage):
         # Legend toggle
         self.legend_visible = True
         legend_btn = ActionButton("?")
+        set_test_id(legend_btn, "page.ontology.legendButton")
         legend_btn.setFixedSize(24, 24)
         legend_btn.setToolTip("Toggle legend")
         legend_btn.setCheckable(True)

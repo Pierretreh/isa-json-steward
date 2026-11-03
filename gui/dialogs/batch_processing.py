@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..batch_runner import BatchConfig, BatchWorker
 from ..widgets.common import ActionButton, InfoCard, PrimaryButton, SectionHeader
 
@@ -95,6 +96,7 @@ class BatchProcessingDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
+        set_test_id(self, "dialog.batchProcessing")
         self.setWindowTitle("Run Batch Pipeline")
         self.setMinimumWidth(640)
         self.worker: BatchWorker | None = None
@@ -115,11 +117,13 @@ class BatchProcessingDialog(QDialog):
         form = QFormLayout()
 
         self.data_root_edit = QLineEdit()
+        set_test_id(self.data_root_edit, "dialog.batchProcessing.dataRootField")
         self.data_root_edit.setPlaceholderText(
             "Root directory containing experiment folders (e.g. E1_, E2_ - pattern "
             "configurable in the profile)"
         )
         browse_data_btn = QPushButton("Browse...")
+        set_test_id(browse_data_btn, "dialog.batchProcessing.browseDataButton")
         browse_data_btn.setFixedWidth(80)
         browse_data_btn.clicked.connect(self._browse_data_root)
         data_root_row = QHBoxLayout()
@@ -128,8 +132,10 @@ class BatchProcessingDialog(QDialog):
         form.addRow("Data root", data_root_row)
 
         self.output_dir_edit = QLineEdit()
+        set_test_id(self.output_dir_edit, "dialog.batchProcessing.outputDirField")
         self.output_dir_edit.setPlaceholderText("Output directory for the processed investigation")
         browse_out_btn = QPushButton("Browse...")
+        set_test_id(browse_out_btn, "dialog.batchProcessing.browseOutputButton")
         browse_out_btn.setFixedWidth(80)
         browse_out_btn.clicked.connect(self._browse_output_dir)
         output_row = QHBoxLayout()
@@ -138,18 +144,22 @@ class BatchProcessingDialog(QDialog):
         form.addRow("Output directory", output_row)
 
         self.investigation_id_edit = QLineEdit()
+        set_test_id(self.investigation_id_edit, "dialog.batchProcessing.investigationIdField")
         self.investigation_id_edit.setPlaceholderText("e.g. inv_default")
         form.addRow("Investigation ID", self.investigation_id_edit)
 
         self.inv_inm_edit = QLineEdit()
+        set_test_id(self.inv_inm_edit, "dialog.batchProcessing.invInmField")
         self.inv_inm_edit.setPlaceholderText("Optional: path to inv_inm for material references")
         form.addRow("inv_inm path", self.inv_inm_edit)
 
         self.skip_conversion_check = QCheckBox("Skip file format conversion (stage 4)")
+        set_test_id(self.skip_conversion_check, "dialog.batchProcessing.skipConversionCheck")
         self.skip_conversion_check.setChecked(True)
         form.addRow("Options", self.skip_conversion_check)
 
         self.skip_validation_check = QCheckBox("Skip validation (stage 7)")
+        set_test_id(self.skip_validation_check, "dialog.batchProcessing.skipValidationCheck")
         self.skip_validation_check.setChecked(True)
         self.skip_validation_check.toggled.connect(self._on_skip_validation_toggled)
         form.addRow("Options", self.skip_validation_check)
@@ -165,12 +175,15 @@ class BatchProcessingDialog(QDialog):
         layers_layout.setContentsMargins(0, 0, 0, 0)
         for name, tooltip in _LAYER_CHECKS:
             check = QCheckBox(name)
+            camel = "".join(part.title() for part in name.split("_"))
+            set_test_id(check, f"dialog.batchProcessing.{camel[0].lower() + camel[1:]}LayerCheck")
             check.setChecked(True)
             check.setToolTip(tooltip)
             layers_layout.addWidget(check)
             self._layer_checks[name] = check
 
         self.ols_check = QCheckBox("OLS lookup (network, slow) — optional")
+        set_test_id(self.ols_check, "dialog.batchProcessing.olsLayerCheck")
         self.ols_check.setChecked(False)
         self.ols_check.setToolTip(_OLS_CHECKBOX_TIP)
         layers_layout.addWidget(self.ols_check)
@@ -196,6 +209,7 @@ class BatchProcessingDialog(QDialog):
         layout.addWidget(self.progress_bar)
 
         self.log_view = QPlainTextEdit()
+        set_test_id(self.log_view, "dialog.batchProcessing.logView")
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumHeight(180)
         self.log_view.setPlaceholderText("Pipeline log output...")
@@ -209,15 +223,15 @@ class BatchProcessingDialog(QDialog):
 
         # --- Action buttons --------------------------------------------
         actions = QHBoxLayout()
-        self.start_btn = PrimaryButton("Start")
+        self.start_btn = PrimaryButton("Start", test_id="dialog.batchProcessing.startButton")
         self.start_btn.clicked.connect(self._on_start)
         actions.addWidget(self.start_btn)
 
-        self.cancel_btn = ActionButton("Cancel")
+        self.cancel_btn = ActionButton("Cancel", test_id="dialog.batchProcessing.cancelButton")
         self.cancel_btn.clicked.connect(self._on_cancel)
         actions.addWidget(self.cancel_btn)
 
-        self.close_btn = ActionButton("Close")
+        self.close_btn = ActionButton("Close", test_id="dialog.batchProcessing.closeButton")
         self.close_btn.clicked.connect(self.close)
         actions.addWidget(self.close_btn)
 
@@ -262,6 +276,7 @@ class BatchProcessingDialog(QDialog):
 
         # Per-experiment table
         self.experiment_tree = QTreeWidget()
+        set_test_id(self.experiment_tree, "dialog.batchProcessing.experimentTree")
         self.experiment_tree.setHeaderLabels(["Experiment", "Type", "Confidence"])
         self.experiment_tree.setColumnWidth(0, 140)
         self.experiment_tree.setColumnWidth(1, 220)
@@ -270,6 +285,7 @@ class BatchProcessingDialog(QDialog):
 
         # Errors / warnings
         self.messages_view = QPlainTextEdit()
+        set_test_id(self.messages_view, "dialog.batchProcessing.messagesView")
         self.messages_view.setReadOnly(True)
         self.messages_view.setMaximumHeight(140)
         layout.addWidget(self.messages_view)
@@ -279,7 +295,9 @@ class BatchProcessingDialog(QDialog):
         self.report_label = QLabel("Report: —")
         self.report_label.setOpenExternalLinks(True)
         report_row.addWidget(self.report_label)
-        self.open_folder_btn = ActionButton("Open Folder")
+        self.open_folder_btn = ActionButton(
+            "Open Folder", test_id="dialog.batchProcessing.openFolderButton"
+        )
         self.open_folder_btn.clicked.connect(self._open_report_folder)
         report_row.addWidget(self.open_folder_btn)
         report_row.addStretch()

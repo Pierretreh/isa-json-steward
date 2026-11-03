@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..dialogs.material_selection_dialog import MaterialSelectionDialog
 from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
 from ..widgets.file_attachment_widget import FileAttachmentWidget
@@ -92,6 +93,7 @@ class ProcessSequencePage(ScrollablePage):
         self.process_manager: Optional[ProcessSequenceManager] = None
         self.material_manager = None
         self.process_tree_items = {}  # Map process_id to tree item
+        self._param_field_seq = 0  # Monotonic counter for dynamic parameter field IDs
         self.setup_process_ui()
 
     def setup_process_ui(self):
@@ -110,11 +112,11 @@ class ProcessSequencePage(ScrollablePage):
         # Process sequence buttons
         buttons_layout = QHBoxLayout()
 
-        add_btn = PrimaryButton("Add Process")
+        add_btn = PrimaryButton("Add Process", test_id="page.process_sequence.addProcessButton")
         add_btn.clicked.connect(self._on_add_process)
         buttons_layout.addWidget(add_btn)
 
-        remove_btn = ActionButton("Remove")
+        remove_btn = ActionButton("Remove", test_id="page.process_sequence.removeProcessButton")
         remove_btn.clicked.connect(self._on_remove_process)
         buttons_layout.addWidget(remove_btn)
 
@@ -123,6 +125,7 @@ class ProcessSequencePage(ScrollablePage):
 
         # Process tree with drag-drop reordering
         self.tree = DraggableTreeWidget()
+        set_test_id(self.tree, "page.process_sequence.processTree")
         self.tree.setHeaderLabels(["Process", "Status", "Materials"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setMinimumHeight(400)
@@ -187,10 +190,13 @@ class ProcessSequencePage(ScrollablePage):
         inputs_layout.addWidget(inputs_label)
 
         self.inputs_list = QListWidget()
+        set_test_id(self.inputs_list, "page.process_sequence.inputsList")
         self.inputs_list.setMaximumHeight(100)
         inputs_layout.addWidget(self.inputs_list)
 
-        select_inputs_btn = ActionButton("Select Inputs...")
+        select_inputs_btn = ActionButton(
+            "Select Inputs...", test_id="page.process_sequence.selectInputsButton"
+        )
         select_inputs_btn.clicked.connect(self._on_select_inputs)
         inputs_layout.addWidget(select_inputs_btn)
 
@@ -202,10 +208,13 @@ class ProcessSequencePage(ScrollablePage):
         outputs_layout.addWidget(outputs_label)
 
         self.outputs_list = QListWidget()
+        set_test_id(self.outputs_list, "page.process_sequence.outputsList")
         self.outputs_list.setMaximumHeight(100)
         outputs_layout.addWidget(self.outputs_list)
 
-        select_outputs_btn = ActionButton("Select Outputs...")
+        select_outputs_btn = ActionButton(
+            "Select Outputs...", test_id="page.process_sequence.selectOutputsButton"
+        )
         select_outputs_btn.clicked.connect(self._on_select_outputs)
         outputs_layout.addWidget(select_outputs_btn)
 
@@ -219,6 +228,7 @@ class ProcessSequencePage(ScrollablePage):
 
         # Create file attachment widget
         self.file_attachment_widget = FileAttachmentWidget(parent=files_group)
+        set_test_id(self.file_attachment_widget, "page.process_sequence.fileAttachments")
         files_layout.addWidget(self.file_attachment_widget)
 
         files_group.setLayout(files_layout)
@@ -242,11 +252,13 @@ class ProcessSequencePage(ScrollablePage):
         # Bottom buttons
         bottom_layout = QHBoxLayout()
 
-        save_btn = PrimaryButton("Save Process")
+        save_btn = PrimaryButton("Save Process", test_id="page.process_sequence.saveButton")
         save_btn.clicked.connect(self._on_save)
         bottom_layout.addWidget(save_btn)
 
-        validate_btn = ActionButton("Validate Handover")
+        validate_btn = ActionButton(
+            "Validate Handover", test_id="page.process_sequence.validateButton"
+        )
         validate_btn.clicked.connect(self._on_validate_handover)
         bottom_layout.addWidget(validate_btn)
 
@@ -685,6 +697,8 @@ class ProcessSequencePage(ScrollablePage):
     ):
         """Add a single parameter entry to the form."""
         entry = QLineEdit()
+        set_test_id(entry, f"page.process_sequence.parameterValueField_{self._param_field_seq}")
+        self._param_field_seq += 1
 
         if description:
             entry.setPlaceholderText(description)

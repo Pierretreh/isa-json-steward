@@ -5,6 +5,8 @@ Status bar widget for the ISA-JSON Data Steward GUI.
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QStatusBar, QWidget
 
+from ..agent_tools.ids import set_test_id
+
 
 class StatusBar(QStatusBar):
     """Custom status bar with progress indicator and status messages."""
@@ -26,6 +28,7 @@ class StatusBar(QStatusBar):
 
         # Status message
         self.status_label = QLabel("Ready")
+        set_test_id(self.status_label, "statusBar.messageLabel")
         self.status_label.setStyleSheet("color: #ecf0f1;")
         layout.addWidget(self.status_label)
 
@@ -33,6 +36,7 @@ class StatusBar(QStatusBar):
 
         # Progress bar (hidden by default)
         self.progress_bar = QProgressBar()
+        set_test_id(self.progress_bar, "statusBar.progressBar")
         self.progress_bar.setMaximumWidth(200)
         self.progress_bar.setMaximumHeight(16)
         self.progress_bar.setTextVisible(False)
@@ -41,10 +45,12 @@ class StatusBar(QStatusBar):
 
         # Permanent widgets
         self.investigation_label = QLabel()
+        set_test_id(self.investigation_label, "statusBar.investigationLabel")
         self.investigation_label.setStyleSheet("color: #bdc3c7; margin-left: 10px;")
         self.addPermanentWidget(self.investigation_label)
 
         self.study_label = QLabel()
+        set_test_id(self.study_label, "statusBar.studyLabel")
         self.study_label.setStyleSheet("color: #bdc3c7; margin-left: 10px;")
         self.addPermanentWidget(self.study_label)
 

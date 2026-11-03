@@ -19,6 +19,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..agent_tools.ids import set_test_id
+
 
 class StudyWizard(QDialog):
     """Wizard dialog for creating a new study."""
@@ -26,6 +28,7 @@ class StudyWizard(QDialog):
     def __init__(self, parent=None, dm=None):
         super().__init__(parent)
         self.dm = dm
+        set_test_id(self, "dialog.studyWizard")
         self.setWindowTitle("Create New Study")
         self.setMinimumWidth(500)
         self.setup_ui()
@@ -40,11 +43,13 @@ class StudyWizard(QDialog):
         inv_layout.addWidget(inv_label)
 
         self.inv_combo = QComboBox()
+        set_test_id(self.inv_combo, "dialog.studyWizard.investigationCombo")
         investigations = self.dm.list_investigations() if self.dm else []
         self.inv_combo.addItems(investigations)
         inv_layout.addWidget(self.inv_combo)
 
         create_inv_btn = QPushButton("New...")
+        set_test_id(create_inv_btn, "dialog.studyWizard.createInvestigationButton")
         create_inv_btn.setToolTip("Create a new investigation")
         create_inv_btn.clicked.connect(self._on_create_investigation)
         inv_layout.addWidget(create_inv_btn)
@@ -64,25 +69,30 @@ class StudyWizard(QDialog):
         form = QFormLayout()
 
         self.name_edit = QLineEdit()
+        set_test_id(self.name_edit, "dialog.studyWizard.nameField")
         self.name_edit.setPlaceholderText("Study name")
         form.addRow("Study Name:", self.name_edit)
 
         self.strain_edit = QLineEdit()
+        set_test_id(self.strain_edit, "dialog.studyWizard.strainField")
         self.strain_edit.setPlaceholderText("Bacterial strain")
         form.addRow("Strain:", self.strain_edit)
 
         self.plasmid_edit = QLineEdit()
+        set_test_id(self.plasmid_edit, "dialog.studyWizard.plasmidField")
         self.plasmid_edit.setPlaceholderText("Protein plasmid")
         form.addRow("Plasmid:", self.plasmid_edit)
 
         # Sequence file
         seq_layout = QHBoxLayout()
         self.seq_path_edit = QLineEdit()
+        set_test_id(self.seq_path_edit, "dialog.studyWizard.sequencePathField")
         self.seq_path_edit.setPlaceholderText("Select sequence file...")
         self.seq_path_edit.setReadOnly(True)
         seq_layout.addWidget(self.seq_path_edit)
 
         browse_btn = QPushButton("Browse...")
+        set_test_id(browse_btn, "dialog.studyWizard.browseButton")
         browse_btn.clicked.connect(self._on_browse_sequence)
         seq_layout.addWidget(browse_btn)
 
@@ -95,10 +105,12 @@ class StudyWizard(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
+        set_test_id(cancel_btn, "dialog.studyWizard.cancelButton")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         create_btn = QPushButton("Create")
+        set_test_id(create_btn, "dialog.studyWizard.createButton")
         create_btn.clicked.connect(self._on_create)
         btn_layout.addWidget(create_btn)
 

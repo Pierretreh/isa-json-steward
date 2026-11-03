@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
+
 
 class Sidebar(QWidget):
     """Sidebar navigation widget with navigation buttons."""
@@ -42,6 +44,7 @@ class Sidebar(QWidget):
         title_label = QLabel(sidebar_title)
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setObjectName("sidebarTitle")
+        set_test_id(title_label, "sidebar.title")
         layout.addWidget(title_label)
 
         # Divider
@@ -55,6 +58,7 @@ class Sidebar(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        set_test_id(scroll, "sidebar.scrollArea")
 
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
@@ -121,6 +125,7 @@ class Sidebar(QWidget):
         """Create a navigation button."""
         btn = QPushButton(label)
         btn.setObjectName("sidebarButton")
+        set_test_id(btn, f"sidebar.navButton.{page_id}", accessible_name=label)
         btn.setCheckable(True)
         btn.setProperty("pageId", page_id)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)

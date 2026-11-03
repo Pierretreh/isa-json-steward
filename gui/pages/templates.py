@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..agent_tools.ids import set_test_id
 from ..dialogs.template_editor import TemplateEditorDialog
 from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
 from .base_page import ScrollablePage
@@ -118,6 +119,7 @@ class TemplatesPage(ScrollablePage):
         type_layout.addWidget(type_label)
 
         self.type_combo = QComboBox()
+        set_test_id(self.type_combo, "page.templates.typeCombo")
         self.type_combo.addItems(["Assay Templates", "Protocol Templates"])
         self.type_combo.currentTextChanged.connect(self._on_type_changed)
         type_layout.addWidget(self.type_combo)
@@ -136,6 +138,7 @@ class TemplatesPage(ScrollablePage):
         list_layout.addWidget(list_label)
 
         self.template_list = QListWidget()
+        set_test_id(self.template_list, "page.templates.templateList")
         self.template_list.setAlternatingRowColors(True)
         self.template_list.setMinimumHeight(400)
         self.template_list.itemSelectionChanged.connect(self._on_template_selected)
@@ -178,18 +181,22 @@ class TemplatesPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         create_btn = PrimaryButton("Create Template")
+        set_test_id(create_btn, "page.templates.createButton")
         create_btn.clicked.connect(self._on_create_template)
         buttons_layout.addWidget(create_btn)
 
         edit_btn = ActionButton("Edit Selected")
+        set_test_id(edit_btn, "page.templates.editButton")
         edit_btn.clicked.connect(self._on_edit_template)
         buttons_layout.addWidget(edit_btn)
 
         import_btn = ActionButton("Import Template")
+        set_test_id(import_btn, "page.templates.importButton")
         import_btn.clicked.connect(self._on_import_template)
         buttons_layout.addWidget(import_btn)
 
         export_btn = ActionButton("Export Selected")
+        set_test_id(export_btn, "page.templates.exportButton")
         export_btn.clicked.connect(self._on_export_template)
         buttons_layout.addWidget(export_btn)
 
