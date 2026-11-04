@@ -18,6 +18,21 @@ from PyQt6.QtWidgets import (
 from ..agent_tools.ids import set_test_id
 
 
+def set_ui_role(widget: QWidget, role: str | None) -> None:
+    """Set the ``uiRole`` dynamic property used for theme-aware QSS rules.
+
+    ``role`` is one of the values styled in both theme stylesheets
+    (``muted``, ``statValue``, ``error``, ``success``, ``warning``, ``panel``)
+    or ``None`` to clear it.  The widget is re-polished so attribute-selector
+    rules re-match immediately even when no stylesheet change follows.
+    """
+    widget.setProperty("uiRole", role)
+    style = widget.style()
+    if style is not None:
+        style.unpolish(widget)
+        style.polish(widget)
+
+
 class FormLabel(QLabel):
     """A styled label for form fields."""
 
@@ -156,12 +171,16 @@ class InfoCard(QFrame):
     def setup_ui(self, title: str, value: str):
         layout = QVBoxLayout(self)
 
+        # U-03: colors come from the theme QSS via uiRole rules; only
+        # layout-only properties stay inline.
         title_label = QLabel(title)
-        title_label.setStyleSheet("color: #7f8c8d; font-size: 12px;")
+        set_ui_role(title_label, "muted")
+        title_label.setStyleSheet("font-size: 12px;")
         layout.addWidget(title_label)
 
         self.value_label = QLabel(value)
-        self.value_label.setStyleSheet("color: #2c3e50; font-size: 24px; font-weight: bold;")
+        set_ui_role(self.value_label, "statValue")
+        self.value_label.setStyleSheet("font-size: 24px; font-weight: bold;")
         layout.addWidget(self.value_label)
 
 
@@ -177,7 +196,9 @@ class FormRow(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         label = FormLabel(label_text)
-        label.setMinimumWidth(150)
+        # U-08: 120px (was 150) so form rows cannot force a page wider than
+        # the default content viewport.
+        label.setMinimumWidth(120)
         layout.addWidget(label)
 
         layout.addWidget(field_widget)

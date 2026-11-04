@@ -27,6 +27,10 @@ class Sidebar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("sidebar")
+        # U-09: QWidget subclasses do not paint QSS backgrounds without this
+        # attribute -- without it the ``QWidget#sidebar`` background never
+        # renders behind the title (white-on-white in the light theme).
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.button_group = QButtonGroup(self)
         self.current_page = "dashboard"
         self.setup_ui()

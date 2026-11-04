@@ -49,21 +49,10 @@ class CollapsibleGroupBox(QGroupBox):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
 
-        # Add collapse button to title
-        self.setStyleSheet("""
-            QGroupBox {{
-                font-weight: bold;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }}
-        """)
+        # U-03: no widget-level stylesheet here -- the theme QSS ``QGroupBox``
+        # rules own the border and title color so titles stay legible in both
+        # themes (the previous inline override forced the light border color
+        # and left the title uncolored).
 
         # Set up the group box layout
         self.setLayout(self._main_layout)

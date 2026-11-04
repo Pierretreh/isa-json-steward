@@ -25,6 +25,8 @@ from PyQt6.QtWidgets import (
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.file_manager import FileManager  # noqa: E402
 
+from .common import set_ui_role
+
 
 class FileAttachmentWidget(QWidget):
     """Widget for managing file attachments with type-specific import buttons."""
@@ -96,7 +98,8 @@ class FileAttachmentWidget(QWidget):
 
         # Summary label
         self.summary_label = QLabel("No files attached")
-        self.summary_label.setStyleSheet("color: #666; font-style: italic;")
+        set_ui_role(self.summary_label, "muted")
+        self.summary_label.setStyleSheet("font-style: italic;")
         layout.addWidget(self.summary_label)
 
     def _create_attachment_section(self, attachment_spec: dict) -> QGroupBox:
@@ -115,22 +118,9 @@ class FileAttachmentWidget(QWidget):
         file_type = attachment_spec.get("fileType", "data")
         _multiple = attachment_spec.get("multiple", False)  # noqa: F841
 
-        # Create group box
+        # Create group box (U-03: no widget-level stylesheet -- the theme QSS
+        # ``QGroupBox`` rules own border and title color for both themes)
         group = QGroupBox(name)
-        group.setStyleSheet("""
-            QGroupBox {
-                font-weight: 600;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
 
         layout = QVBoxLayout(group)
 
@@ -138,20 +128,22 @@ class FileAttachmentWidget(QWidget):
         if description:
             desc_label = QLabel(description)
             desc_label.setWordWrap(True)
-            desc_label.setStyleSheet("color: #666; font-size: 11px;")
+            set_ui_role(desc_label, "muted")
+            desc_label.setStyleSheet("font-size: 11px;")
             layout.addWidget(desc_label)
 
         # Required indicator
         if required:
             required_label = QLabel("* Required")
-            required_label.setStyleSheet("color: #d32f2f; font-weight: bold;")
+            set_ui_role(required_label, "error")
+            required_label.setStyleSheet("font-weight: bold;")
             layout.addWidget(required_label)
 
         # File type icon and label
         type_layout = QHBoxLayout()
         type_icon = self._get_file_type_icon(file_type)
         type_label = QLabel(f"Type: {file_type.capitalize()}")
-        type_label.setStyleSheet("color: #666;")
+        set_ui_role(type_label, "muted")
         type_layout.addWidget(type_icon)
         type_layout.addWidget(type_label)
         type_layout.addStretch()
@@ -269,7 +261,8 @@ class FileAttachmentWidget(QWidget):
 
         if layout.count() == 0:
             empty_label = QLabel("No files attached")
-            empty_label.setStyleSheet("color: #999; font-style: italic; padding: 10px;")
+            set_ui_role(empty_label, "muted")
+            empty_label.setStyleSheet("font-style: italic; padding: 10px;")
             empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(empty_label)
 
@@ -284,14 +277,10 @@ class FileAttachmentWidget(QWidget):
             QWidget with file information and remove button
         """
         widget = QFrame()
-        widget.setStyleSheet("""
-            QFrame {
-                background-color: #f5f5f5;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                padding: 8px;
-            }
-        """)
+        # U-03: theme colors come from the uiRole="panel" QSS rule; only box
+        # metrics stay inline.
+        set_ui_role(widget, "panel")
+        widget.setStyleSheet("border-radius: 4px; padding: 8px;")
 
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(8, 4, 8, 4)
@@ -309,24 +298,25 @@ class FileAttachmentWidget(QWidget):
         name_label.setStyleSheet("font-weight: 500;")
         info_layout.addWidget(name_label)
 
-        # Conversion status
+        # Conversion status (U-03: semantic uiRole colors per theme)
         conversion_status = file_meta.get("conversion_status", "unknown")
         status_text = ""
-        status_color = "#666"
+        status_role = "muted"
 
         if conversion_status == "completed":
             status_text = f"✓ Converted to {file_meta.get('converted_format', '')}"
-            status_color = "#28a745"
+            status_role = "success"
         elif conversion_status == "failed":
             status_text = "✗ Conversion failed"
-            status_color = "#dc3545"
+            status_role = "error"
         elif conversion_status == "not_needed":
             status_text = "No conversion needed"
-            status_color = "#6c757d"
+            status_role = "muted"
 
         if status_text:
             status_label = QLabel(status_text)
-            status_label.setStyleSheet(f"color: {status_color}; font-size: 11px;")
+            set_ui_role(status_label, status_role)
+            status_label.setStyleSheet("font-size: 11px;")
             info_layout.addWidget(status_label)
 
         layout.addLayout(info_layout)

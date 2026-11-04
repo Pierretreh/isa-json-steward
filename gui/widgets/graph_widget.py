@@ -694,7 +694,9 @@ class GraphWidget(QWidget):
         self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
         self.zoom_slider.setRange(10, 2000)
         self.zoom_slider.setValue(100)
-        self.zoom_slider.setFixedWidth(200)
+        # U-08: max, not fixed -- the zoom slider must not force the graph
+        # (and therefore the page) wider than the viewport.
+        self.zoom_slider.setMaximumWidth(200)
         self.zoom_slider.valueChanged.connect(self._on_slider_changed)
 
         controls_layout.addWidget(zoom_label)
@@ -705,10 +707,16 @@ class GraphWidget(QWidget):
         controls_layout.addWidget(fit_btn)
         controls_layout.addWidget(self._show_hidden_btn)
         controls_layout.addStretch()
-        controls_layout.addWidget(export_png_btn)
-        controls_layout.addWidget(export_svg_btn)
+
+        # U-08: export actions on a second row so the controls bar can never
+        # force the graph (and therefore the page) wider than the viewport.
+        export_layout = QHBoxLayout()
+        export_layout.addStretch()
+        export_layout.addWidget(export_png_btn)
+        export_layout.addWidget(export_svg_btn)
 
         layout.addLayout(controls_layout)
+        layout.addLayout(export_layout)
         layout.addWidget(self.view)
 
     def _connect_signals(self):

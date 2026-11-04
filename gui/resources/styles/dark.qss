@@ -11,9 +11,11 @@ QWidget#sidebar {
     color: #cccccc;
 }
 
-/* Sidebar title */
+/* Sidebar title (U-09: self-contained chip so it stays legible even if the
+   container background mis-renders) */
 QLabel#sidebarTitle {
     color: #ffffff;
+    background-color: #252526;
     font-size: 20px;
     font-weight: bold;
     padding: 20px 0;
@@ -51,6 +53,24 @@ QPushButton#sidebarButton:checked:hover {
 /* Content Area */
 QWidget#contentArea, QWidget#contentPage {
     background-color: #1e1e1e;
+}
+
+/* ScrollablePage scroll viewports (U-03: the dark background must reach the
+   scroll area / viewport / content widget, which are plain widgets the
+   #contentPage rule alone never covers) */
+QWidget#contentPage QScrollArea,
+QWidget#contentPage QScrollArea > QWidget > QWidget {
+    background-color: #1e1e1e;
+}
+
+/* Labels - base text color (parity with light.qss) */
+QLabel {
+    color: #cccccc;
+}
+
+/* Checkable controls (default palette text is black -> invisible here) */
+QCheckBox, QRadioButton {
+    color: #cccccc;
 }
 
 /* Cards */
@@ -100,6 +120,24 @@ QPushButton#dangerButton:hover {
     background-color: #ff6b6b;
 }
 
+/* U-14: disabled variants for the styled button classes.  The #id rules
+   above out-specify the generic QPushButton:disabled rule, which would
+   otherwise never apply to PrimaryButton/DangerButton -- disabled buttons
+   kept their full color and looked enabled. */
+QPushButton#primaryButton:disabled,
+QPushButton#primaryButton:disabled:hover,
+QPushButton#primaryButton:disabled:pressed {
+    background-color: #3e3e42;
+    color: #6e6e6e;
+}
+
+QPushButton#dangerButton:disabled,
+QPushButton#dangerButton:disabled:hover,
+QPushButton#dangerButton:disabled:pressed {
+    background-color: #3e3e42;
+    color: #6e6e6e;
+}
+
 /* Form Labels */
 QLabel#formLabel {
     color: #cccccc;
@@ -122,21 +160,37 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextEdi
     background-color: #252526;
 }
 
-/* Tree Widget */
-QTreeWidget {
+/* Text Browser (U-03: details/preview panels must not fall back to the
+   light default palette) */
+QTextBrowser {
     background-color: #1e1e1e;
     border: 1px solid #3e3e42;
     border-radius: 4px;
+    color: #cccccc;
+    font-size: 12px;
     selection-background-color: #0e639c;
     selection-color: #ffffff;
 }
 
+/* Tree Widget */
+QTreeWidget {
+    background-color: #1e1e1e;
+    alternate-background-color: #252526;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    selection-background-color: #0e639c;
+    selection-color: #ffffff;
+    color: #cccccc;
+}
+
 QTreeWidget::item {
     padding: 4px;
+    color: #cccccc;
 }
 
 QTreeWidget::item:hover {
     background-color: #2a2d2e;
+    color: #cccccc;
 }
 
 QTreeWidget::item:selected {
@@ -147,15 +201,22 @@ QTreeWidget::item:selected {
 /* Table Widget */
 QTableWidget {
     background-color: #1e1e1e;
+    alternate-background-color: #252526;
     border: 1px solid #3e3e42;
     border-radius: 4px;
     selection-background-color: #0e639c;
     selection-color: #ffffff;
     gridline-color: #3e3e42;
+    color: #cccccc;
 }
 
 QTableWidget::item {
     padding: 4px;
+    color: #cccccc;
+}
+
+QTableWidget::item:selected {
+    color: #ffffff;
 }
 
 QHeaderView::section {
@@ -166,6 +227,73 @@ QHeaderView::section {
     border-bottom: 1px solid #3e3e42;
     border-right: 1px solid #3e3e42;
     font-weight: 500;
+}
+
+/* List Widget (U-03: lists must not fall back to the light default palette) */
+QListWidget {
+    background-color: #1e1e1e;
+    alternate-background-color: #252526;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    selection-background-color: #0e639c;
+    selection-color: #ffffff;
+    color: #cccccc;
+}
+
+QListWidget::item {
+    padding: 4px;
+    color: #cccccc;
+}
+
+QListWidget::item:hover {
+    background-color: #2a2d2e;
+    color: #cccccc;
+}
+
+QListWidget::item:selected {
+    background-color: #0e639c;
+    color: #ffffff;
+}
+
+/* Tree/Table views used inside dialogs */
+QTreeView, QTableView {
+    background-color: #1e1e1e;
+    alternate-background-color: #252526;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    selection-background-color: #0e639c;
+    selection-color: #ffffff;
+    gridline-color: #3e3e42;
+    color: #cccccc;
+}
+
+QTreeView::item, QTableView::item {
+    padding: 4px;
+    color: #cccccc;
+}
+
+QTreeView::item:hover, QTableView::item:hover {
+    background-color: #2a2d2e;
+    color: #cccccc;
+}
+
+QTreeView::item:selected, QTableView::item:selected {
+    background-color: #0e639c;
+    color: #ffffff;
+}
+
+/* Abstract Item View - General (parity with light.qss) */
+QAbstractItemView {
+    background-color: #1e1e1e;
+    color: #cccccc;
+}
+
+QAbstractItemView::item {
+    color: #cccccc;
+}
+
+QAbstractItemView::item:selected {
+    color: #ffffff;
 }
 
 /* Scrollbar */
@@ -312,4 +440,48 @@ QComboBox QAbstractItemView {
     border: 1px solid #3e3e42;
     selection-background-color: #0e639c;
     selection-color: #ffffff;
+}
+
+/* Dialog (parity with light.qss: dialogs share the dark surface) */
+QDialog {
+    background-color: #1e1e1e;
+    color: #cccccc;
+}
+
+QDialog QLabel {
+    color: #cccccc;
+}
+
+QDialog QTextEdit {
+    color: #cccccc;
+    background-color: #3c3c3c;
+}
+
+/* Semantic label roles (U-03: uiRole dynamic property replaces inline
+   light-theme stylesheets; QSS is the single theming source) */
+QLabel[uiRole="muted"] {
+    color: #9a9a9a;
+}
+
+QLabel[uiRole="statValue"] {
+    color: #ecf0f1;
+}
+
+QLabel[uiRole="error"] {
+    color: #ff6b6b;
+}
+
+QLabel[uiRole="success"] {
+    color: #6cc76c;
+}
+
+QLabel[uiRole="warning"] {
+    color: #f5b041;
+}
+
+/* Panel role (U-03: details/preview card frames keep box metrics inline,
+   colors come from QSS) */
+QFrame[uiRole="panel"] {
+    background-color: #252526;
+    border: 1px solid #3e3e42;
 }
