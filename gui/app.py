@@ -4,6 +4,7 @@ Application setup for the ISA Data Steward GUI.
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 from PyQt6.QtCore import QByteArray, QSettings, Qt
 from PyQt6.QtWidgets import QApplication
@@ -43,9 +44,22 @@ class StewardApp(StewardNotifyMixin, QApplication):
         # Set default font
         self.setup_fonts()
 
-    def apply_theme(self) -> None:
-        """Apply selected theme."""
-        theme = self.settings.value("gui/theme", "light", str)
+    def apply_theme(self, theme: Optional[str] = None, persist: bool = False) -> None:
+        """Apply a theme stylesheet (U-06: session-only unless asked to persist).
+
+        Args:
+            theme: ``"light"`` / ``"dark"`` (any shipped ``<name>.qss``);
+                ``None`` keeps the theme currently configured in the settings.
+            persist: when *True*, write ``gui/theme`` to :class:`QSettings` as
+                the user's preference (the settings-page theme combo is the
+                persisting caller).  Defaults to *False*: applying a theme is
+                session-only and never rewrites user preferences
+                (AGENTS.md section 8.1).
+        """
+        if theme is None:
+            theme = self.settings.value("gui/theme", "light", str)
+        if persist:
+            self.settings.setValue("gui/theme", theme)
 
         # Load stylesheet
         style_path = Path(__file__).parent / "resources" / "styles" / f"{theme}.qss"
@@ -65,9 +79,12 @@ class StewardApp(StewardNotifyMixin, QApplication):
         self.setFont(font)
 
     def set_theme(self, theme: str) -> None:
-        """Set application theme."""
-        self.settings.setValue("gui/theme", theme)
-        self.apply_theme()
+        """Set application theme and persist it as the user's preference.
+
+        Explicit user choice (settings-page theme combo); tooling that only
+        needs a session theme uses ``apply_theme(theme, persist=False)``.
+        """
+        self.apply_theme(theme, persist=True)
 
     def get_current_investigation(self) -> str:
         """Get current investigation ID."""

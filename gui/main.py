@@ -3,7 +3,6 @@ Main entry point for the ISA Data Steward GUI.
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -17,31 +16,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Import utilities for logging setup
 from utils.logging_config import get_logger, setup_gui_event_log, setup_logging  # noqa: E402
 
+# Profile discovery lives in utils.config_loader (U-05 relocation, pure move);
+# re-exported here so ``gui.main.discover_profile_dir`` keeps working and the
+# GUI/agent boot paths share one implementation.
+from utils.config_loader import discover_profile_dir  # noqa: E402,F401
+
 logger = get_logger(__name__)
-
-
-def discover_profile_dir(project_root: Path) -> Optional[Path]:
-    """Discover the profile directory for the GUI.
-
-    Priority:
-    1. --profile CLI argument
-    2. ISA_STEWARD_PROFILE environment variable
-    3. Any *-profile/ directory in the project root
-    """
-    # 1. Environment variable
-    env = os.environ.get("ISA_STEWARD_PROFILE")
-    if env and Path(env).is_dir():
-        logger.info("Using profile from ISA_STEWARD_PROFILE env: %s", env)
-        return Path(env).resolve()
-
-    # 2. Auto-discover *-profile/ directories
-    profile_dirs = sorted(project_root.glob("*-profile"))
-    if profile_dirs:
-        logger.info("Auto-discovered profile directory: %s", profile_dirs[0])
-        return profile_dirs[0].resolve()
-
-    logger.info("No profile directory discovered; using default config/")
-    return None
 
 
 def main():

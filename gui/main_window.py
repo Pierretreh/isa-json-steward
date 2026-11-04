@@ -168,7 +168,15 @@ class MainWindow(QMainWindow):
         if current_page and self.current_study:
             try:
                 current_page.save_data()
-                self.status_bar.show_message("Auto-saved", timeout=UIConstants.AUTO_SAVE_TIMEOUT)
+                if getattr(current_page, "auto_save_persists", True):
+                    self.status_bar.show_message("Auto-saved", timeout=UIConstants.AUTO_SAVE_TIMEOUT)
+                else:
+                    # U-07: never claim "Auto-saved" when the page's save_data()
+                    # is a no-op (SettingsPage persists manually only, U-02).
+                    self.status_bar.show_message(
+                        "Auto-save skipped (this page saves manually)",
+                        timeout=UIConstants.AUTO_SAVE_TIMEOUT,
+                    )
             except Exception as e:
                 logger.error(f"Auto-save error: {e}", exc_info=True)
 
