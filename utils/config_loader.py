@@ -18,6 +18,7 @@ It includes:
 
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -869,6 +870,16 @@ class ProfileLoader:
         """
         return self._profile_root / self.get_templates_dir()
 
+    def get_ontologies_root(self) -> Path:
+        """Return the resolved ontologies directory path.
+
+        Mirrors :meth:`get_templates_root`: resolves the relative
+        ``ontologies_dir`` from ``profile.json`` (default ``ontologies``)
+        against the profile root directory, so profile-shipped ontology
+        files are found regardless of the process working directory.
+        """
+        return self._profile_root / self.profile.get("ontologies_dir", "ontologies")
+
     def get_investigations_root(self) -> Path:
         """Return the resolved investigations directory path.
 
@@ -1184,3 +1195,35 @@ def set_profile(profile_path: str, strict: bool = False) -> ProfileLoader:
     global _profile
     _profile = ProfileLoader(profile_path, strict=strict)
     return _profile
+
+
+def discover_profile_dir(project_root: Path) -> Optional[Path]:
+    """Discover the profile directory for the GUI / agent tooling (U-05).
+
+    Priority:
+
+    1. ``ISA_STEWARD_PROFILE`` environment variable (when it names an
+       existing directory),
+    2. any ``*-profile/`` directory in *project_root* (sorted; first wins).
+
+    Explicitly pinned paths (e.g. ``gui/main.py``'s ``--profile`` argument or
+    ``HeadlessGui(profile=...)``) are resolved by the callers *before* calling
+    this function and take precedence over both rules.
+
+    Returns ``None`` when no profile directory is present, in which case the
+    default core ``config/`` directory is used (see :class:`ProfileLoader`).
+    """
+    # 1. Environment variable
+    env = os.environ.get("ISA_STEWARD_PROFILE")
+    if env and Path(env).is_dir():
+        logger.info("Using profile from ISA_STEWARD_PROFILE env: %s", env)
+        return Path(env).resolve()
+
+    # 2. Auto-discover *-profile/ directories
+    profile_dirs = sorted(project_root.glob("*-profile"))
+    if profile_dirs:
+        logger.info("Auto-discovered profile directory: %s", profile_dirs[0])
+        return profile_dirs[0].resolve()
+
+    logger.info("No profile directory discovered; using default config/")
+    return None

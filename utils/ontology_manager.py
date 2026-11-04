@@ -23,8 +23,22 @@ def _get_project_namespace() -> Namespace:
     return Namespace(get_profile().get_namespace())
 
 
-# Project ontology namespace (loaded from profile)
-PROJECT_NS = _get_project_namespace()
+def __getattr__(name: str) -> Any:
+    """Resolve ``PROJECT_NS`` lazily on attribute access (PEP 562).
+
+    The project namespace depends on the *active* profile, which may be
+    switched with ``set_profile()`` long after this module is imported.
+    An import-time ``PROJECT_NS = ...`` assignment silently froze the
+    default namespace and corrupted RDF export IRIs in profile sessions.
+    Module ``__getattr__`` keeps ``from utils.ontology_manager import
+    PROJECT_NS`` call sites working while always reflecting the current
+    profile.
+    """
+    if name == "PROJECT_NS":
+        return _get_project_namespace()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 PMD = Namespace("https://w3id.org/pmd/co/")
 OBI = Namespace("http://purl.obolibrary.org/obo/")
 UO = Namespace("http://purl.obolibrary.org/obo/UO_")
@@ -42,25 +56,41 @@ class OntologyManager:
         Initialize the ontology manager.
 
         Args:
-            base_path: Base path for ontology files. Defaults to project ontologies/ directory.
+            base_path: Base path for ontology files. When ``None`` (the
+                default), the active profile's ontologies directory is used
+                (``ProfileLoader.get_ontologies_root()``) and the ontology
+                filenames from ``profile.json`` are resolved against the
+                profile root without stripping directory components.  An
+                explicit ``base_path`` (kept for tests) resolves the same
+                filenames by their bare names inside that directory.
             offline_mode: If True, skip any network operations.
         """
-        if base_path is None:
-            base_path = Path(__file__).parent.parent / "ontologies"
-        else:
-            base_path = Path(base_path)
+        profile = get_profile()
+        ontology_files = profile.get_ontology_filenames()
 
-        self.base_path = base_path
+        if base_path is None:
+            # Profile-aware default: the configured filenames (e.g.
+            # "ontologies/billard_onto.owl") are relative to the profile
+            # root -- resolve them there WITHOUT the .name stripping.
+            self.base_path = profile.get_ontologies_root()
+            profile_root = profile.get_profile_root()
+            self.main_ontology = profile_root / ontology_files["main_owl"]
+            self.main_ontology_ttl = profile_root / ontology_files["main_ttl"]
+            self.shapes_file = profile_root / ontology_files["shapes"]
+        else:
+            # Explicit override (tests): look the files up by bare name
+            # inside the given directory.
+            self.base_path = Path(base_path)
+            self.main_ontology = self.base_path / Path(ontology_files["main_owl"]).name
+            self.main_ontology_ttl = self.base_path / Path(ontology_files["main_ttl"]).name
+            self.shapes_file = self.base_path / Path(ontology_files["shapes"]).name
+
         self.offline_mode = offline_mode
 
-        # Generated ontology files (from scripts/generate_ontology.py)
-        ontology_files = get_profile().get_ontology_filenames()
-        self.main_ontology = base_path / Path(ontology_files["main_owl"]).name
-        self.main_ontology_ttl = base_path / Path(ontology_files["main_ttl"]).name
-        self.mapping_file = base_path / "mappings" / "isa_to_rdf_mapping.json"
+        self.mapping_file = self.base_path / "mappings" / "isa_to_rdf_mapping.json"
 
         # Verification report (from scripts/verify_ontology_refs.py)
-        self.verification_report_path = base_path / "validation_report.json"
+        self.verification_report_path = self.base_path / "validation_report.json"
 
         self.graph = Graph()
         self.mapping = self._load_mapping()
@@ -69,6 +99,11 @@ class OntologyManager:
 
         # Track parsing errors for reporting
         self._parse_errors: List[str] = []
+
+    @property
+    def search_paths(self) -> List[Path]:
+        """Candidate ontology file paths consulted by :meth:`load_ontology`."""
+        return [self.main_ontology_ttl, self.main_ontology]
 
     def _load_mapping(self) -> Dict[str, Any]:
         """Load ISA-JSON to RDF mapping configuration."""
@@ -88,8 +123,8 @@ class OntologyManager:
         loaded = False
 
         # Try generated ontology (Turtle preferred for readability)
-        for gen_file in [self.main_ontology_ttl, self.main_ontology]:
-            if gen_file.exists():
+        for gen_file in self.search_paths:
+            if gen_file.is_file():
                 try:
                     fmt = "turtle" if gen_file.suffix == ".ttl" else "xml"
                     self.graph.parse(str(gen_file), format=fmt)
@@ -103,7 +138,10 @@ class OntologyManager:
                     self._parse_errors.append(str(e))
 
         if not loaded:
-            logger.warning("No ontology files found. Ontology graph is empty.")
+            logger.warning(
+                "No ontology files found (searched: %s). Ontology graph is empty.",
+                ", ".join(str(p) for p in self.search_paths),
+            )
 
         return self.graph
 
@@ -264,7 +302,8 @@ class OntologyManager:
         Returns:
             URIRef for the class, or None if not found.
         """
-        uri = PROJECT_NS[class_name]
+        ns = _get_project_namespace()
+        uri = ns[class_name]
         if (uri, None, None) in self.graph:
             return uri
         return None
@@ -282,8 +321,9 @@ class OntologyManager:
         output_graph = Graph()
 
         # Add namespace bindings
+        ns = _get_project_namespace()
         ns_prefix = get_profile().get_namespace_prefix() or "onto"
-        output_graph.bind(ns_prefix, PROJECT_NS)
+        output_graph.bind(ns_prefix, ns)
         output_graph.bind("co", PMD)
         output_graph.bind("obo", OBI)
         output_graph.bind("uo", UO)
@@ -301,10 +341,11 @@ class OntologyManager:
 
     def _convert_investigation(self, graph: Graph, investigation: Dict[str, Any]):
         """Convert investigation metadata to RDF."""
+        ns = _get_project_namespace()
         inv_id = investigation.get("@id", "")
-        inv_iri = URIRef(inv_id) if inv_id else PROJECT_NS["investigation"]
+        inv_iri = URIRef(inv_id) if inv_id else ns["investigation"]
 
-        graph.add((inv_iri, RDF.type, PROJECT_NS["Investigation"]))
+        graph.add((inv_iri, RDF.type, ns["Investigation"]))
 
         if "title" in investigation:
             graph.add((inv_iri, RDFS.label, Literal(investigation["title"])))
@@ -314,10 +355,11 @@ class OntologyManager:
 
     def _convert_study(self, graph: Graph, study: Dict[str, Any]):
         """Convert study data to RDF."""
+        ns = _get_project_namespace()
         study_id = study.get("@id", "")
-        study_iri = URIRef(study_id) if study_id else PROJECT_NS["study"]
+        study_iri = URIRef(study_id) if study_id else ns["study"]
 
-        graph.add((study_iri, RDF.type, PROJECT_NS["Study"]))
+        graph.add((study_iri, RDF.type, ns["Study"]))
 
         # Convert materials
         if "materials" in study:
@@ -354,10 +396,11 @@ class OntologyManager:
 
     def _convert_material(self, graph: Graph, material: Dict[str, Any], material_type: str):
         """Convert a single material to RDF."""
+        ns = _get_project_namespace()
         mat_id = material.get("@id", "")
-        mat_iri = URIRef(mat_id) if mat_id else PROJECT_NS[f"material_{material_type}"]
+        mat_iri = URIRef(mat_id) if mat_id else ns[f"material_{material_type}"]
 
-        graph.add((mat_iri, RDF.type, PROJECT_NS[material_type]))
+        graph.add((mat_iri, RDF.type, ns[material_type]))
 
         if "name" in material:
             graph.add((mat_iri, RDFS.label, Literal(material["name"])))
@@ -366,15 +409,16 @@ class OntologyManager:
         if "derivesFrom" in material:
             for parent_id in material["derivesFrom"]:
                 parent_iri = URIRef(parent_id)
-                graph.add((mat_iri, PROJECT_NS["derivesFrom"], parent_iri))
+                graph.add((mat_iri, ns["derivesFrom"], parent_iri))
 
     def _convert_protocols(self, graph: Graph, protocols: List[Dict[str, Any]]):
         """Convert protocols to RDF."""
         for protocol in protocols:
+            ns = _get_project_namespace()
             prot_id = protocol.get("@id", "")
-            prot_iri = URIRef(prot_id) if prot_id else PROJECT_NS["protocol"]
+            prot_iri = URIRef(prot_id) if prot_id else ns["protocol"]
 
-            graph.add((prot_iri, RDF.type, PROJECT_NS["Protocol"]))
+            graph.add((prot_iri, RDF.type, ns["Protocol"]))
 
             if "name" in protocol:
                 graph.add((prot_iri, RDFS.label, Literal(protocol["name"])))
@@ -401,10 +445,11 @@ class OntologyManager:
     def _convert_assays(self, graph: Graph, assays: List[Dict[str, Any]]):
         """Convert assays to RDF."""
         for assay in assays:
+            ns = _get_project_namespace()
             assay_id = assay.get("@id", "")
-            assay_iri = URIRef(assay_id) if assay_id else PROJECT_NS["assay"]
+            assay_iri = URIRef(assay_id) if assay_id else ns["assay"]
 
-            graph.add((assay_iri, RDF.type, PROJECT_NS["Assay"]))
+            graph.add((assay_iri, RDF.type, ns["Assay"]))
 
             if "name" in assay:
                 graph.add((assay_iri, RDFS.label, Literal(assay["name"])))
@@ -412,27 +457,28 @@ class OntologyManager:
     def _convert_process_sequence(self, graph: Graph, processes: List[Dict[str, Any]]):
         """Convert process sequence to RDF."""
         for process in processes:
+            ns = _get_project_namespace()
             proc_id = process.get("@id", "")
-            proc_iri = URIRef(proc_id) if proc_id else PROJECT_NS["process"]
+            proc_iri = URIRef(proc_id) if proc_id else ns["process"]
 
-            graph.add((proc_iri, RDF.type, PROJECT_NS["process"]))
+            graph.add((proc_iri, RDF.type, ns["process"]))
 
             # Add executesProtocol relationship
             if "executesProtocol" in process:
                 prot_iri = URIRef(process["executesProtocol"])
-                graph.add((proc_iri, PROJECT_NS["executesProtocol"], prot_iri))
+                graph.add((proc_iri, ns["executesProtocol"], prot_iri))
 
             # Add inputs
             if "inputs" in process:
                 for input_id in process["inputs"]:
                     input_iri = URIRef(input_id)
-                    graph.add((proc_iri, PROJECT_NS["hasInput"], input_iri))
+                    graph.add((proc_iri, ns["hasInput"], input_iri))
 
             # Add outputs
             if "outputs" in process:
                 for output_id in process["outputs"]:
                     output_iri = URIRef(output_id)
-                    graph.add((proc_iri, PROJECT_NS["hasOutput"], output_iri))
+                    graph.add((proc_iri, ns["hasOutput"], output_iri))
 
     def save_rdf(self, graph: Graph, output_path: str, format: str = "turtle"):
         """
@@ -476,44 +522,43 @@ def create_sample_individuals() -> Graph:
     Returns:
         RDFLib Graph with sample individuals.
     """
+    ns = _get_project_namespace()
     graph = Graph()
-    graph.bind("onto", PROJECT_NS)
+    graph.bind("onto", ns)
     graph.bind("obo", OBI)
     graph.bind("uo", UO)
 
     # Sample material individuals
     samples = {
         "cells_clearcoli_batchA": {
-            "type": PROJECT_NS.ClearColiCompetentCells,
+            "type": ns.ClearColiCompetentCells,
             "label": "ClearColi competent E. coli batch A",
         },
-        "dna_plasmid_A": {"type": PROJECT_NS.AssembledDNA, "label": "Plasmid A"},
+        "dna_plasmid_A": {"type": ns.AssembledDNA, "label": "Plasmid A"},
     }
 
     # Create individuals
     for sample_id, sample_data in samples.items():
-        sample_iri = PROJECT_NS[sample_id]
+        sample_iri = ns[sample_id]
         graph.add((sample_iri, RDF.type, cast(URIRef, sample_data["type"])))
         graph.add((sample_iri, RDFS.label, Literal(sample_data["label"])))
 
     # Sample parameter individuals
     parameters = {
         "param_electro_voltage_1200V": {
-            "type": PROJECT_NS.ElectroporationVoltage,
+            "type": ns.ElectroporationVoltage,
             "value": 1200,
             "unit": UO["0000218"],  # volt
         },
-        "param_pulse_number_1": {"type": PROJECT_NS.ElectroporationPulseNumber, "value": 1},
+        "param_pulse_number_1": {"type": ns.ElectroporationPulseNumber, "value": 1},
     }
 
     for param_id, param_data in parameters.items():
-        param_iri = PROJECT_NS[param_id]
+        param_iri = ns[param_id]
         graph.add((param_iri, RDF.type, cast(URIRef, param_data["type"])))
-        graph.add(
-            (param_iri, PROJECT_NS["value"], Literal(param_data["value"], datatype=XSD.decimal))
-        )
+        graph.add((param_iri, ns["value"], Literal(param_data["value"], datatype=XSD.decimal)))
         if "unit" in param_data:
-            graph.add((param_iri, PROJECT_NS["hasUnit"], cast(URIRef, param_data["unit"])))
+            graph.add((param_iri, ns["hasUnit"], cast(URIRef, param_data["unit"])))
 
     return graph
 

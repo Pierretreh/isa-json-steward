@@ -37,7 +37,16 @@ class ProcessSequenceManager:
         self._restore_process_counters()
 
     def _load_process_sequence(self) -> Dict[str, Any]:
-        """Load process sequence from study data."""
+        """Load process sequence from study data.
+
+        Handles both the simple study structure (``process_sequence`` /
+        ``processSequence`` at the top level of *study_data*) and the
+        complete ISA-JSON structure, where the sequence lives inside
+        ``studies[0]`` -- mirroring :meth:`_load_protocols`, which already
+        unwraps ``studies[0]``.  (Previously only the top-level shapes
+        were read, so direct manager use on a full ISA-JSON document
+        returned zero processes.)
+        """
         # Try to load from 'process_sequence' (snake_case)
         process_sequence = self.study_data.get("process_sequence", {})
 
@@ -45,12 +54,19 @@ class ProcessSequenceManager:
         if not process_sequence and "processSequence" in self.study_data:
             process_sequence = self.study_data.get("processSequence", {})
 
+        # Complete ISA-JSON structure: look inside studies[0]
+        if not process_sequence and "studies" in self.study_data:
+            studies = self.study_data.get("studies", [])
+            if studies:
+                study = studies[0] if isinstance(studies, list) else studies
+                process_sequence = study.get("process_sequence") or study.get("processSequence")
+
         # Handle case where process_sequence is a list (from complete ISA-JSON structure)
         # In complete ISA-JSON, processSequence is a list, not a dict with "processes" key
         if isinstance(process_sequence, list):
-            return {"processes": process_sequence}
+            return {"processes": list(process_sequence)}
 
-        return cast(Dict[str, Any], process_sequence)
+        return cast(Dict[str, Any], process_sequence or {})
 
     def _load_materials(self) -> Dict[str, List[Dict[str, Any]]]:
         """Load materials from study data."""

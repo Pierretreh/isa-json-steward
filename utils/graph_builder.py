@@ -26,8 +26,16 @@ def _get_project_namespace() -> Namespace:
     return Namespace(get_profile().get_namespace())
 
 
-# Project ontology namespace (loaded from profile)
-PROJECT_NS = _get_project_namespace()
+def __getattr__(name: str):
+    """Resolve ``PROJECT_NS`` lazily on attribute access (PEP 562).
+
+    Mirrors ``utils.ontology_manager.__getattr__``: the namespace depends
+    on the active profile and must not be frozen at import time (a
+    ``set_profile()`` call would otherwise silently corrupt RDF IRIs).
+    """
+    if name == "PROJECT_NS":
+        return _get_project_namespace()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class GraphBuilder:
@@ -368,12 +376,13 @@ class GraphBuilder:
         """
         edges = []
         ns_uri = get_profile().get_namespace()
+        ns = _get_project_namespace()
 
         io_properties = [
-            (PROJECT_NS.hasInput, "hasInput"),
-            (PROJECT_NS.hasOutput, "hasOutput"),
-            (PROJECT_NS.hasParameter, "hasParameter"),
-            (PROJECT_NS.hasExpectedFormat, "hasExpectedFormat"),
+            (ns.hasInput, "hasInput"),
+            (ns.hasOutput, "hasOutput"),
+            (ns.hasParameter, "hasParameter"),
+            (ns.hasExpectedFormat, "hasExpectedFormat"),
         ]
 
         for prop, relation_name in io_properties:
