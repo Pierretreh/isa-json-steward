@@ -26,13 +26,16 @@ from PyQt6.QtWidgets import (
 
 from ..agent_tools.ids import set_test_id
 from ..dialogs.assay_dialog import AssayDialog
-from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
+from ..widgets.common import ActionButton, DangerButton, PrimaryButton, SectionHeader, set_ui_role
 from .base_page import ScrollablePage
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.constants import TemplateConstants  # noqa: E402
 from utils.file_manager import FileManager  # noqa: E402
 from utils.isa_json_preview_helpers import ISAJsonPreviewHelper  # noqa: E402
+from utils.logging_config import get_logger  # noqa: E402
+
+logger = get_logger(__name__)
 
 
 class AssaysPage(ScrollablePage):
@@ -243,18 +246,14 @@ class AssaysPage(ScrollablePage):
         self.table.setHorizontalHeaderLabels(
             ["Assay Name", "Type", "Date", "Performer", "Materials", "Files"]
         )
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
-        self.table.setColumnWidth(0, 180)
-        self.table.setColumnWidth(1, 120)
-        self.table.setColumnWidth(2, 100)
-        self.table.setColumnWidth(3, 120)
-        self.table.setColumnWidth(4, 150)
-        self.table.setColumnWidth(5, 120)
+        # U-08: content columns size to their content (full header text or a
+        # clean "…" instead of mid-word clipping) and the last column
+        # stretches to fill the panel.
+        assay_header = self.table.horizontalHeader()
+        for col in range(5):
+            assay_header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        assay_header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        assay_header.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -271,14 +270,10 @@ class AssaysPage(ScrollablePage):
         right_layout.setContentsMargins(0, 0, 0, 0)
 
         details_group = QFrame()
-        details_group.setStyleSheet("""
-            QFrame {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                padding: 12px;
-            }
-        """)
+        # U-03: theme colors come from the uiRole="panel" QSS rule; only box
+        # metrics stay inline.
+        set_ui_role(details_group, "panel")
+        details_group.setStyleSheet("border-radius: 8px; padding: 12px;")
         details_layout = QVBoxLayout(details_group)
 
         details_header = QLabel("Assay Details")
@@ -291,12 +286,11 @@ class AssaysPage(ScrollablePage):
             QTextBrowser {
                 background-color: transparent;
                 border: none;
-                color: #333;
                 font-size: 12px;
             }
         """)
         self.details_browser.setHtml(
-            '<span style="color: #666;">Select an assay to view details</span>'
+            '<span>Select an assay to view details</span>'
         )
         details_layout.addWidget(self.details_browser)
 
@@ -324,7 +318,8 @@ class AssaysPage(ScrollablePage):
         edit_btn.clicked.connect(self._on_edit_assay)
         buttons_layout.addWidget(edit_btn)
 
-        delete_btn = ActionButton("Delete Selected")
+        # U-14: destructive action -> DangerButton (testId/label unchanged).
+        delete_btn = DangerButton("Delete Selected")
         set_test_id(delete_btn, "page.assays.deleteButton")
         delete_btn.clicked.connect(self._on_delete_assay)
         buttons_layout.addWidget(delete_btn)
@@ -333,17 +328,37 @@ class AssaysPage(ScrollablePage):
 
         self.add_layout(buttons_layout)
 
+        # U-11: keep references for selection/study gating; Edit/Delete start
+        # disabled until a row is selected, Add until a study is loaded.
+        self.add_btn = add_btn
+        self.edit_btn = edit_btn
+        self.delete_btn = delete_btn
+        self._update_action_states()
+
+    def _update_action_states(self):
+        """Enable/disable action buttons per selection/study state (U-11).
+
+        Edit/Delete require a selected row; Add requires a loaded study.
+        The QMessageBox guards in the handlers stay as defensive fallbacks
+        but are unreachable through the normal click path.
+        """
+        has_selection = bool(self.table.selectionModel().selectedRows())
+        self.edit_btn.setEnabled(has_selection)
+        self.delete_btn.setEnabled(has_selection)
+        self.add_btn.setEnabled(bool(self.main_window.current_study))
+
     def refresh(self):
         """Refresh the assays table."""
         self.table.setRowCount(0)
         self.assays = []
         self._isa_raw_assays = []
         self.preview_helper = None
+        self._update_action_states()
 
         # Reset details panel
         if hasattr(self, "details_browser"):
             self.details_browser.setHtml(
-                '<span style="color: #666;">Select an assay to view details</span>'
+                '<span>Select an assay to view details</span>'
             )
 
         # Load assays from study data
@@ -354,7 +369,7 @@ class AssaysPage(ScrollablePage):
             try:
                 self.preview_helper = ISAJsonPreviewHelper(study_data)
             except Exception as e:
-                print(f"[AssaysPage] Error building preview helper: {e}")
+                logger.error(f"[AssaysPage] Error building preview helper: {e}")
 
             # Handle both simple study structure and complete ISA-JSON structure
             if (
@@ -414,13 +429,16 @@ class AssaysPage(ScrollablePage):
             file_count = len(files) if isinstance(files, list) else 0
             self.table.setItem(row, 5, QTableWidgetItem(str(file_count)))
 
+        self._update_action_states()
+
     def _on_selection_changed(self):
         """Handle table selection change - update the details preview."""
+        self._update_action_states()
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
             if hasattr(self, "details_browser"):
                 self.details_browser.setHtml(
-                    '<span style="color: #666;">Select an assay to view details</span>'
+                    '<span>Select an assay to view details</span>'
                 )
             return
 
@@ -447,13 +465,13 @@ class AssaysPage(ScrollablePage):
             f'<b style="font-size: 14px;">{ISAJsonPreviewHelper._escape(assay.get("name", ""))}</b><br>'  # noqa: E501
         )
         html_parts.append(
-            f'<span style="color: #666;">Type:</span> {ISAJsonPreviewHelper._escape(assay.get("assay_type", ""))}<br>'  # noqa: E501
+            f'<span>Type:</span> {ISAJsonPreviewHelper._escape(assay.get("assay_type", ""))}<br>'  # noqa: E501
         )
         html_parts.append(
-            f'<span style="color: #666;">Date:</span> {ISAJsonPreviewHelper._escape(assay.get("date", ""))}<br>'  # noqa: E501
+            f'<span>Date:</span> {ISAJsonPreviewHelper._escape(assay.get("date", ""))}<br>'  # noqa: E501
         )
         html_parts.append(
-            f'<span style="color: #666;">Performer:</span> {ISAJsonPreviewHelper._escape(assay.get("performer", ""))}<br>'  # noqa: E501
+            f'<span>Performer:</span> {ISAJsonPreviewHelper._escape(assay.get("performer", ""))}<br>'  # noqa: E501
         )
 
         inputs = assay.get("inputs", [])
@@ -503,9 +521,11 @@ class AssaysPage(ScrollablePage):
                         # Extract expected attachments from template
                         expected_attachments = template_data.get("expectedAttachments", [])
             else:
-                print(f"Warning: No template file mapping found for assay type: {template_type}")
+                logger.warning(
+                    f"Warning: No template file mapping found for assay type: {template_type}"
+                )
         except Exception as e:
-            print(f"Warning: Could not load template: {e}")
+            logger.warning(f"Warning: Could not load template: {e}")
 
         # Add the assay_type to template_data so the dialog can set the correct type
         template_data["assay_type"] = template_type
@@ -553,7 +573,9 @@ class AssaysPage(ScrollablePage):
                     # Use the returned file metadata (which has relative paths)
                     processed_files.append(result.get("file_metadata", result))
                 else:
-                    print(f"Failed to copy file: {result.get('error', 'Unknown error')}")
+                    copy_error = f"Failed to copy file: {result.get('error', 'Unknown error')}"
+                    logger.warning(copy_error)
+                    self.main_window.status_bar.show_message(copy_error)
                     # Still keep original metadata if copy failed
                     processed_files.append(file_meta)
 
@@ -615,9 +637,11 @@ class AssaysPage(ScrollablePage):
                             parameter_definitions = template_data.get("parameters", [])
                             expected_attachments = template_data.get("expectedAttachments", [])
                 else:
-                    print(f"Warning: No template file mapping found for assay type: {assay_type}")
+                    logger.warning(
+                        f"Warning: No template file mapping found for assay type: {assay_type}"
+                    )
             except Exception as e:
-                print(f"Warning: Could not load template: {e}")
+                logger.warning(f"Warning: Could not load template: {e}")
 
         # Open dialog with existing data, parameter definitions, and expected attachments
         dialog = AssayDialog(
@@ -670,7 +694,9 @@ class AssaysPage(ScrollablePage):
                     # Use the returned file metadata (which has relative paths)
                     processed_files.append(result.get("file_metadata", result))
                 else:
-                    print(f"Failed to copy file: {result.get('error', 'Unknown error')}")
+                    copy_error = f"Failed to copy file: {result.get('error', 'Unknown error')}"
+                    logger.warning(copy_error)
+                    self.main_window.status_bar.show_message(copy_error)
                     # Still keep original metadata if copy failed
                     processed_files.append(file_meta)
 
@@ -788,7 +814,7 @@ class AssaysPage(ScrollablePage):
             error_details = (
                 f"Failed to save study data:\n{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
             )
-            print(f"[ERROR] {error_details}")
+            logger.error(f"[ERROR] {error_details}")
             QMessageBox.critical(self, "Error", error_details)
 
     def on_enter(self):

@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.constants import TemplateConstants  # noqa: E402
 
 from ..agent_tools.ids import set_test_id
+from ..widgets.common import set_ui_role
 
 
 class TemplateEditorDialog(QDialog):
@@ -148,9 +149,10 @@ class TemplateEditorDialog(QDialog):
         self.json_edit.setFont(QFont("Courier New", 10))
         layout.addWidget(self.json_edit)
 
-        # Validation status
+        # Validation status (U-03: semantic uiRole colors, layout stays inline)
         self.validation_label = QLabel()
-        self.validation_label.setStyleSheet("color: #7f8c8d; padding: 4px;")
+        set_ui_role(self.validation_label, "muted")
+        self.validation_label.setStyleSheet("padding: 4px;")
         layout.addWidget(self.validation_label)
 
         # Format button
@@ -218,7 +220,8 @@ class TemplateEditorDialog(QDialog):
             "Note: Default values are used when creating new assays from this template. "
             "You can override these values when creating individual assays."
         )
-        note_label.setStyleSheet("color: #7f8c8d; padding: 8px; font-style: italic;")
+        set_ui_role(note_label, "muted")
+        note_label.setStyleSheet("padding: 8px; font-style: italic;")
         note_label.setWordWrap(True)
         layout.addWidget(note_label)
 
@@ -386,17 +389,20 @@ class TemplateEditorDialog(QDialog):
 
         if not json_text.strip():
             self.validation_label.setText("JSON is empty")
-            self.validation_label.setStyleSheet("color: #e74c3c; padding: 4px;")
+            set_ui_role(self.validation_label, "error")
+            self.validation_label.setStyleSheet("padding: 4px;")
             return False
 
         try:
             json.loads(json_text)
             self.validation_label.setText("✓ Valid JSON")
-            self.validation_label.setStyleSheet("color: #27ae60; padding: 4px;")
+            set_ui_role(self.validation_label, "success")
+            self.validation_label.setStyleSheet("padding: 4px;")
             return True
         except json.JSONDecodeError as e:
             self.validation_label.setText(f"✗ JSON Error: {e}")
-            self.validation_label.setStyleSheet("color: #e74c3c; padding: 4px;")
+            set_ui_role(self.validation_label, "error")
+            self.validation_label.setStyleSheet("padding: 4px;")
             return False
 
     def _format_json(self):

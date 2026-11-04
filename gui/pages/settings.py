@@ -3,10 +3,13 @@ Settings page for ISA-JSON Data Steward GUI.
 """
 
 import json
+import os
 from pathlib import Path
 
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QFormLayout,
@@ -14,26 +17,74 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QSizePolicy,
     QSpinBox,
     QWidget,
 )
 
+from utils.logging_config import get_logger
+
 from ..agent_tools.ids import set_test_id
 from ..widgets.collapsible_group_box import CollapsibleGroupBox
-from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
+from ..widgets.common import ActionButton, DangerButton, PrimaryButton, SectionHeader, set_ui_role
 from ..widgets.path_picker import PathPicker
 from ..widgets.url_line_edit import UrlLineEdit
 from .base_page import ScrollablePage
 
+logger = get_logger(__name__)
+
+
+def _settings_config_path() -> Path:
+    """Return the path of the settings config file.
+
+    Honors the ``ISA_STEWARD_CONFIG_PATH`` environment variable (read on every
+    call so tests can isolate reads/writes), falling back to the repo-relative
+    ``config/settings.json``.  Both the load and the explicit-save write go
+    through this helper (U-02).
+    """
+    env_path = os.environ.get("ISA_STEWARD_CONFIG_PATH")
+    if env_path:
+        return Path(env_path)
+    return Path(__file__).parent.parent.parent / "config" / "settings.json"
+
+
+_CHECKBOX_ROW_HEIGHT = 22
+
+
+def _wrap_checkbox_field(checkbox: QCheckBox) -> QWidget:
+    """Wrap a checkbox field in a left-aligned, fixed-height row (U-15).
+
+    A bare checkbox in a ``QFormLayout`` field cell stretches to the full
+    column width and sits at its ~15px natural height (the sweep's
+    "full-width 15px-tall checkbox rows").  The wrapper gives every checkbox
+    row a consistent 22px height and keeps the checkbox at the row's left
+    edge.
+    """
+    container = QWidget()
+    row = QHBoxLayout(container)
+    row.setContentsMargins(0, 0, 0, 0)
+    row.setSpacing(0)
+    container.setFixedHeight(_CHECKBOX_ROW_HEIGHT)
+    checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    row.addWidget(checkbox, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+    row.addStretch()
+    return container
+
 
 class SettingsPage(ScrollablePage):
     """Settings page for application configuration."""
+
+    # U-02: settings persist ONLY through the explicit Save button, so the
+    # auto-save tick must never claim "Auto-saved" for this page (U-07).
+    auto_save_persists = False
 
     def __init__(self, main_window):
         super().__init__(main_window)
         self.main_window = main_window
         self._restart_required = False
         self._raw_config = {}
+        self._config_load_failed = False
+        self._form_layouts: list[QFormLayout] = []
         self.setup_settings_ui()
 
     def setup_settings_ui(self):
@@ -68,22 +119,72 @@ class SettingsPage(ScrollablePage):
         # Save/Reset buttons
         self._setup_action_buttons()
 
+        # U-15: uniform label-column width so field columns line up across
+        # sections (each QFormLayout otherwise sizes its label column to its
+        # own longest label -- sweep evidence: Appearance x=350 vs x=385..444).
+        self._align_form_columns()
+
     def _load_config_from_file(self):
-        """Load configuration from config/settings.json."""
+        """Load configuration from the settings config file.
+
+        On failure the ``_config_load_failed`` flag is raised and
+        :meth:`_on_save_settings` refuses to write: a Save backed by an empty
+        ``_raw_config`` would silently drop the unmanaged top-level sections
+        (e.g. ``application``) from the config file (U-02/U-12 config-loss
+        edge).  Navigating back to the page (``on_enter``) reloads and clears
+        the flag once the file parses again.
+        """
         try:
-            config_path = Path(__file__).parent.parent.parent / "config" / "settings.json"
+            config_path = _settings_config_path()
             with open(config_path, "r", encoding="utf-8") as f:
                 self._raw_config = json.load(f)
+            self._config_load_failed = False
         except Exception as e:
-            print(f"Error loading config: {e}")
+            logger.error(f"Error loading config: {e}")
             self._raw_config = {}
+            self._config_load_failed = True
+
+    def _make_form_layout(self) -> QFormLayout:
+        """Create a section form layout with the U-15 polish settings.
+
+        The plan's pinned calls: left-aligned labels, left-aligned form rows
+        and all non-fixed fields grow.  Layouts are registered for the
+        cross-section column alignment pass (:meth:`_align_form_columns`).
+        """
+        layout = QFormLayout()
+        layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        layout.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
+        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self._form_layouts.append(layout)
+        return layout
+
+    def _align_form_columns(self):
+        """Give every section label column one uniform width (U-15).
+
+        QFormLayout sizes each form's label column to its own longest label,
+        so the field columns started at different x per section.  Setting
+        every label's minimum width to the widest label's natural width lines
+        the field columns up across all sections.
+        """
+        labels: list[QLabel] = []
+        for form in self._form_layouts:
+            for row in range(form.rowCount()):
+                item = form.itemAt(row, QFormLayout.ItemRole.LabelRole)
+                label = item.widget() if item is not None else None
+                if isinstance(label, QLabel):
+                    labels.append(label)
+        if not labels:
+            return
+        column_width = max(label.sizeHint().width() for label in labels)
+        for label in labels:
+            label.setMinimumWidth(column_width)
 
     def _setup_appearance_section(self):
         """Set up appearance settings section."""
         self.add_widget(SectionHeader("Appearance"))
 
         appearance_group = CollapsibleGroupBox("Appearance Settings")
-        appearance_layout = QFormLayout()
+        appearance_layout = self._make_form_layout()
 
         # Theme
         self.theme_combo = QComboBox()
@@ -120,7 +221,7 @@ class SettingsPage(ScrollablePage):
     def _setup_window_section(self):
         """Set up window settings section."""
         window_group = CollapsibleGroupBox("Window Settings")
-        window_layout = QFormLayout()
+        window_layout = self._make_form_layout()
 
         # Window Width
         self.window_width_spin = QSpinBox()
@@ -128,7 +229,7 @@ class SettingsPage(ScrollablePage):
         self.window_width_spin.setRange(800, 2560)
         self.window_width_spin.setSuffix(" px")
         self.window_width_spin.setValue(self._raw_config.get("gui", {}).get("window_width", 1200))
-        self.window_width_spin.valueChanged.connect(self._mark_restart_required)
+        self.window_width_spin.valueChanged.connect(self._on_window_dim_changed)
         window_layout.addRow("Window Width:", self.window_width_spin)
 
         # Window Height
@@ -137,7 +238,7 @@ class SettingsPage(ScrollablePage):
         self.window_height_spin.setRange(600, 1440)
         self.window_height_spin.setSuffix(" px")
         self.window_height_spin.setValue(self._raw_config.get("gui", {}).get("window_height", 800))
-        self.window_height_spin.valueChanged.connect(self._mark_restart_required)
+        self.window_height_spin.valueChanged.connect(self._on_window_dim_changed)
         window_layout.addRow("Window Height:", self.window_height_spin)
 
         # Min Window Width
@@ -148,7 +249,7 @@ class SettingsPage(ScrollablePage):
         self.min_window_width_spin.setValue(
             self._raw_config.get("gui", {}).get("min_window_width", 800)
         )
-        self.min_window_width_spin.valueChanged.connect(self._mark_restart_required)
+        self.min_window_width_spin.valueChanged.connect(self._on_window_dim_changed)
         window_layout.addRow("Min Window Width:", self.min_window_width_spin)
 
         # Min Window Height
@@ -159,13 +260,11 @@ class SettingsPage(ScrollablePage):
         self.min_window_height_spin.setValue(
             self._raw_config.get("gui", {}).get("min_window_height", 600)
         )
-        self.min_window_height_spin.valueChanged.connect(self._mark_restart_required)
+        self.min_window_height_spin.valueChanged.connect(self._on_window_dim_changed)
         window_layout.addRow("Min Window Height:", self.min_window_height_spin)
 
-        # Restart required indicator
-        restart_label = QLabel("⚠️ Requires application restart")
-        restart_label.setStyleSheet("color: #f39c12; font-size: 10px;")
-        window_layout.addRow("", restart_label)
+        # U-07: window dims apply live (_on_window_dim_changed) -- no restart
+        # indicator here; the single dynamic hint lives in the page footer.
 
         window_group.add_layout(window_layout)
         self.add_widget(window_group)
@@ -173,7 +272,7 @@ class SettingsPage(ScrollablePage):
     def _setup_data_management_section(self):
         """Set up data management settings section."""
         data_group = CollapsibleGroupBox("Data Management")
-        data_layout = QFormLayout()
+        data_layout = self._make_form_layout()
 
         # Auto-Save Interval
         self.autosave_interval_spin = QSpinBox()
@@ -183,7 +282,7 @@ class SettingsPage(ScrollablePage):
         self.autosave_interval_spin.setValue(
             self._raw_config.get("gui", {}).get("auto_save_interval", 300)
         )
-        self.autosave_interval_spin.valueChanged.connect(self._mark_restart_required)
+        self.autosave_interval_spin.valueChanged.connect(self._on_autosave_interval_changed)
         data_layout.addRow("Auto-Save Interval:", self.autosave_interval_spin)
 
         # Backup Count
@@ -192,7 +291,8 @@ class SettingsPage(ScrollablePage):
         self.backup_count_spin.setRange(0, 50)
         self.backup_count_spin.setSuffix(" backups")
         self.backup_count_spin.setValue(self._raw_config.get("gui", {}).get("backup_count", 5))
-        self.backup_count_spin.valueChanged.connect(self._mark_restart_required)
+        # U-07 audit: backup settings have no startup reader -- they take
+        # effect at their next read, so no restart flag.
         data_layout.addRow("Backup Count:", self.backup_count_spin)
 
         # Backup on Save
@@ -201,8 +301,7 @@ class SettingsPage(ScrollablePage):
         self.backup_on_save_check.setChecked(
             self._raw_config.get("gui", {}).get("backup_on_save", True)
         )
-        self.backup_on_save_check.stateChanged.connect(self._mark_restart_required)
-        data_layout.addRow("Backup on Save:", self.backup_on_save_check)
+        data_layout.addRow("Backup on Save:", _wrap_checkbox_field(self.backup_on_save_check))
 
         data_group.add_layout(data_layout)
         self.add_widget(data_group)
@@ -212,7 +311,7 @@ class SettingsPage(ScrollablePage):
         dirs_config = self._raw_config.get("directories", {})
 
         dirs_group = CollapsibleGroupBox("Directory Configuration")
-        dirs_layout = QFormLayout()
+        dirs_layout = self._make_form_layout()
 
         # Base Path
         self.base_path_picker = PathPicker()
@@ -273,10 +372,9 @@ class SettingsPage(ScrollablePage):
         self.docs_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Docs Root:", self.docs_root_edit)
 
-        # Restart required indicator
-        restart_label = QLabel("⚠️ Requires application restart")
-        restart_label.setStyleSheet("color: #f39c12; font-size: 10px;")
-        dirs_layout.addRow("", restart_label)
+        # U-07: directory fields genuinely feed DirectoryManager construction
+        # at startup, so they keep the restart flag; the single dynamic hint
+        # lives in the page footer instead of per-section labels.
 
         dirs_group.add_layout(dirs_layout)
         self.add_widget(dirs_group)
@@ -286,7 +384,7 @@ class SettingsPage(ScrollablePage):
         urls_config = self._raw_config.get("urls", {})
 
         urls_group = CollapsibleGroupBox("URL Configuration")
-        urls_layout = QFormLayout()
+        urls_layout = self._make_form_layout()
 
         # Base URL
         self.base_url_edit = UrlLineEdit()
@@ -354,10 +452,9 @@ class SettingsPage(ScrollablePage):
         self.process_url_template_edit.textChanged.connect(self._mark_restart_required)
         urls_layout.addRow("Process URL Template:", self.process_url_template_edit)
 
-        # Restart required indicator
-        restart_label = QLabel("⚠️ Requires application restart")
-        restart_label.setStyleSheet("color: #f39c12; font-size: 10px;")
-        urls_layout.addRow("", restart_label)
+        # U-07: URL config is baked into exports via MaterialManager's
+        # cached base URL, so URL changes keep the restart flag (plan:
+        # "possibly URL templates if export caches them" -- they do).
 
         urls_group.add_layout(urls_layout)
         self.add_widget(urls_group)
@@ -367,13 +464,15 @@ class SettingsPage(ScrollablePage):
         validation_config = self._raw_config.get("validation", {})
 
         validation_group = CollapsibleGroupBox("Validation Settings")
-        validation_layout = QFormLayout()
+        validation_layout = self._make_form_layout()
 
         # Validate on Save
         self.validate_on_save_check = QCheckBox()
         set_test_id(self.validate_on_save_check, "page.settings.validateOnSaveCheck")
         self.validate_on_save_check.setChecked(validation_config.get("validate_on_save", True))
-        validation_layout.addRow("Validate on Save:", self.validate_on_save_check)
+        validation_layout.addRow(
+            "Validate on Save:", _wrap_checkbox_field(self.validate_on_save_check)
+        )
 
         # Validate Required Fields
         self.validate_required_fields_check = QCheckBox()
@@ -381,7 +480,10 @@ class SettingsPage(ScrollablePage):
         self.validate_required_fields_check.setChecked(
             validation_config.get("validate_required_fields", True)
         )
-        validation_layout.addRow("Validate Required Fields:", self.validate_required_fields_check)
+        validation_layout.addRow(
+            "Validate Required Fields:",
+            _wrap_checkbox_field(self.validate_required_fields_check),
+        )
 
         # Validate Ontology Terms
         self.validate_ontology_terms_check = QCheckBox()
@@ -391,13 +493,18 @@ class SettingsPage(ScrollablePage):
         self.validate_ontology_terms_check.setChecked(
             validation_config.get("validate_ontology_terms", True)
         )
-        validation_layout.addRow("Validate Ontology Terms:", self.validate_ontology_terms_check)
+        validation_layout.addRow(
+            "Validate Ontology Terms:",
+            _wrap_checkbox_field(self.validate_ontology_terms_check),
+        )
 
         # Validate Units
         self.validate_units_check = QCheckBox()
         set_test_id(self.validate_units_check, "page.settings.validateUnitsCheck")
         self.validate_units_check.setChecked(validation_config.get("validate_units", True))
-        validation_layout.addRow("Validate Units:", self.validate_units_check)
+        validation_layout.addRow(
+            "Validate Units:", _wrap_checkbox_field(self.validate_units_check)
+        )
 
         # Validate Date Formats
         self.validate_date_formats_check = QCheckBox()
@@ -405,7 +512,9 @@ class SettingsPage(ScrollablePage):
         self.validate_date_formats_check.setChecked(
             validation_config.get("validate_date_formats", True)
         )
-        validation_layout.addRow("Validate Date Formats:", self.validate_date_formats_check)
+        validation_layout.addRow(
+            "Validate Date Formats:", _wrap_checkbox_field(self.validate_date_formats_check)
+        )
 
         # Warn on Missing Metadata
         self.warn_on_missing_metadata_check = QCheckBox()
@@ -415,7 +524,10 @@ class SettingsPage(ScrollablePage):
         self.warn_on_missing_metadata_check.setChecked(
             validation_config.get("warn_on_missing_metadata", True)
         )
-        validation_layout.addRow("Warn on Missing Metadata:", self.warn_on_missing_metadata_check)
+        validation_layout.addRow(
+            "Warn on Missing Metadata:",
+            _wrap_checkbox_field(self.warn_on_missing_metadata_check),
+        )
 
         validation_group.add_layout(validation_layout)
         self.add_widget(validation_group)
@@ -425,7 +537,7 @@ class SettingsPage(ScrollablePage):
         export_config = self._raw_config.get("export", {})
 
         export_group = CollapsibleGroupBox("Export Settings")
-        export_layout = QFormLayout()
+        export_layout = self._make_form_layout()
 
         # Default Export Format
         self.export_format_combo = QComboBox()
@@ -438,7 +550,7 @@ class SettingsPage(ScrollablePage):
         self.include_raw_data_check = QCheckBox()
         set_test_id(self.include_raw_data_check, "page.settings.includeRawDataCheck")
         self.include_raw_data_check.setChecked(export_config.get("include_raw_data", False))
-        export_layout.addRow("Include Raw Data:", self.include_raw_data_check)
+        export_layout.addRow("Include Raw Data:", _wrap_checkbox_field(self.include_raw_data_check))
 
         # Include Processed Data
         self.include_processed_data_check = QCheckBox()
@@ -446,19 +558,25 @@ class SettingsPage(ScrollablePage):
         self.include_processed_data_check.setChecked(
             export_config.get("include_processed_data", True)
         )
-        export_layout.addRow("Include Processed Data:", self.include_processed_data_check)
+        export_layout.addRow(
+            "Include Processed Data:", _wrap_checkbox_field(self.include_processed_data_check)
+        )
 
         # Include Assay Data
         self.include_assay_data_check = QCheckBox()
         set_test_id(self.include_assay_data_check, "page.settings.includeAssayDataCheck")
         self.include_assay_data_check.setChecked(export_config.get("include_assay_data", True))
-        export_layout.addRow("Include Assay Data:", self.include_assay_data_check)
+        export_layout.addRow(
+            "Include Assay Data:", _wrap_checkbox_field(self.include_assay_data_check)
+        )
 
         # Include Protocols
         self.include_protocols_check = QCheckBox()
         set_test_id(self.include_protocols_check, "page.settings.includeProtocolsCheck")
         self.include_protocols_check.setChecked(export_config.get("include_protocols", True))
-        export_layout.addRow("Include Protocols:", self.include_protocols_check)
+        export_layout.addRow(
+            "Include Protocols:", _wrap_checkbox_field(self.include_protocols_check)
+        )
 
         export_group.add_layout(export_layout)
         self.add_widget(export_group)
@@ -468,25 +586,30 @@ class SettingsPage(ScrollablePage):
         vc_config = self._raw_config.get("version_control", {})
 
         vc_group = CollapsibleGroupBox("Version Control Settings")
-        vc_layout = QFormLayout()
+        vc_layout = self._make_form_layout()
 
         # Enable Version Control
         self.enable_version_control_check = QCheckBox()
         set_test_id(self.enable_version_control_check, "page.settings.enableVersionControlCheck")
         self.enable_version_control_check.setChecked(vc_config.get("enabled", True))
-        vc_layout.addRow("Enable Version Control:", self.enable_version_control_check)
+        vc_layout.addRow(
+            "Enable Version Control:", _wrap_checkbox_field(self.enable_version_control_check)
+        )
 
         # Auto-Version on Save
         self.auto_version_on_save_check = QCheckBox()
         set_test_id(self.auto_version_on_save_check, "page.settings.autoVersionOnSaveCheck")
         self.auto_version_on_save_check.setChecked(vc_config.get("auto_version_on_save", True))
-        vc_layout.addRow("Auto-Version on Save:", self.auto_version_on_save_check)
+        vc_layout.addRow(
+            "Auto-Version on Save:", _wrap_checkbox_field(self.auto_version_on_save_check)
+        )
 
         # Version Prefix
+        # U-07 audit: version-control fields have no startup reader -- they
+        # take effect at their next read, so no restart flag.
         self.version_prefix_edit = QLineEdit()
         set_test_id(self.version_prefix_edit, "page.settings.versionPrefixField")
         self.version_prefix_edit.setText(vc_config.get("version_prefix", "v"))
-        self.version_prefix_edit.textChanged.connect(self._mark_restart_required)
         vc_layout.addRow("Version Prefix:", self.version_prefix_edit)
 
         # Max Versions
@@ -495,40 +618,106 @@ class SettingsPage(ScrollablePage):
         self.max_versions_spin.setRange(0, 100)
         self.max_versions_spin.setSpecialValueText("Unlimited")
         self.max_versions_spin.setValue(vc_config.get("max_versions", 10))
-        self.max_versions_spin.valueChanged.connect(self._mark_restart_required)
         vc_layout.addRow("Max Versions:", self.max_versions_spin)
 
         # Compress Old Versions
         self.compress_old_versions_check = QCheckBox()
         set_test_id(self.compress_old_versions_check, "page.settings.compressOldVersionsCheck")
         self.compress_old_versions_check.setChecked(vc_config.get("compress_old_versions", False))
-        vc_layout.addRow("Compress Old Versions:", self.compress_old_versions_check)
+        vc_layout.addRow(
+            "Compress Old Versions:", _wrap_checkbox_field(self.compress_old_versions_check)
+        )
 
         vc_group.add_layout(vc_layout)
         self.add_widget(vc_group)
 
     def _setup_action_buttons(self):
-        """Set up save and reset buttons."""
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
+        """Set up the fixed footer action row (U-07).
 
-        # Reset to Defaults button
-        reset_btn = ActionButton("Reset to Defaults", test_id="page.settings.resetButton")
+        Save/Reset live in a footer OUTSIDE the scroll area so they are
+        always reachable without scrolling (the old in-form row sat at
+        y≈1804 in a 774px viewport).  The restart hint and the "Restart
+        Now" button appear only while a restart is pending.
+        """
+        footer = QWidget()
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(0, 4, 0, 4)
+        footer_layout.setSpacing(8)
+
+        # Single dynamic "restart needed" hint (U-07), themed via the
+        # warning uiRole (no inline colors).
+        self.restart_hint = QLabel("⚠ Restart required for directory/URL changes")
+        set_test_id(self.restart_hint, "page.settings.restartHintLabel")
+        set_ui_role(self.restart_hint, "warning")
+        self.restart_hint.setVisible(False)
+        footer_layout.addWidget(self.restart_hint)
+
+        footer_layout.addStretch()
+
+        # Reset to Defaults button (U-14: destructive -> DangerButton)
+        reset_btn = DangerButton("Reset to Defaults", test_id="page.settings.resetButton")
         reset_btn.clicked.connect(self._on_reset_to_defaults)
-        button_layout.addWidget(reset_btn)
+        footer_layout.addWidget(reset_btn)
 
         # Save Settings button
         save_btn = PrimaryButton("Save Settings", test_id="page.settings.saveButton")
         save_btn.clicked.connect(self._on_save_settings)
-        button_layout.addWidget(save_btn)
+        footer_layout.addWidget(save_btn)
 
-        button_widget = QWidget()
-        button_widget.setLayout(button_layout)
-        self.add_widget(button_widget)
+        # Restart Now button (U-07): explicit, non-modal restart affordance
+        self.restart_btn = ActionButton("Restart Now", test_id="page.settings.restartButton")
+        self.restart_btn.clicked.connect(self._on_restart_now)
+        self.restart_btn.setVisible(False)
+        footer_layout.addWidget(self.restart_btn)
+
+        self.add_footer(footer)
+
+    def _set_restart_pending_visible(self, visible: bool):
+        """Show/hide the restart hint and Restart Now button together."""
+        self.restart_hint.setVisible(visible)
+        self.restart_btn.setVisible(visible)
 
     def _mark_restart_required(self):
-        """Mark that restart is required."""
+        """Mark that a restart is required (U-07, narrowed wiring).
+
+        Only values genuinely read once at startup flag here: directory
+        roots (they feed ``DirectoryManager`` construction and the startup
+        template-index pass) and URL config (baked into exports through
+        ``MaterialManager``).  Cheap settings apply live instead (window
+        dims, auto-save interval, theme, font); backup and version-control
+        fields have no startup reader and take effect at their next read.
+        """
         self._restart_required = True
+        self._set_restart_pending_visible(True)
+
+    def _on_window_dim_changed(self, _value=None):
+        """Apply window sizing settings live (U-07: no restart needed)."""
+        self.main_window.setMinimumSize(
+            self.min_window_width_spin.value(), self.min_window_height_spin.value()
+        )
+        self.main_window.resize(self.window_width_spin.value(), self.window_height_spin.value())
+
+    def _on_autosave_interval_changed(self, value: int):
+        """Re-arm the auto-save timer live (U-07: no restart needed)."""
+        self.main_window.auto_save_timer.stop()
+        if value > 0:
+            self.main_window.auto_save_timer.start(value * 1000)
+
+    def _on_restart_now(self):
+        """Handle the Restart Now button (U-07).
+
+        Shutdown is scheduled through the event loop and delegates to the
+        normal close path.  There is deliberately no interpreter exit call
+        here: ``gui/main.py`` owns the process exit code, and exiting from
+        inside a slot would abort the Qt event loop unsafely (the old
+        Yes-path quit the application and exited the interpreter inline).
+        """
+        self.main_window.status_bar.show_message("Restarting application…", 2000)
+        QTimer.singleShot(0, self._perform_restart)
+
+    def _perform_restart(self):
+        self.main_window.close()
+        QApplication.quit()
 
     def _on_theme_changed(self, theme: str):
         """Handle theme change."""
@@ -541,7 +730,21 @@ class SettingsPage(ScrollablePage):
         self.main_window.app.setFont(font)
 
     def _on_save_settings(self):
-        """Handle save settings button click."""
+        """Handle save settings button click.
+
+        This button is the ONLY persistence path for settings (U-02):
+        :meth:`save_data` is a no-op, so closing the window or an auto-save
+        tick never rewrites the config file.
+        """
+        # U-02/U-12 guard: never write from a failed load -- the config on
+        # disk must not lose the sections this form does not manage.
+        if self._config_load_failed:
+            self.main_window.status_bar.show_message(
+                "Settings not saved: configuration failed to load; "
+                "restore the settings file and reopen Settings before saving.",
+                8000,
+            )
+            return
         try:
             # Validate settings
             if not self._validate_settings():
@@ -610,8 +813,8 @@ class SettingsPage(ScrollablePage):
                 "compress_old_versions": self.compress_old_versions_check.isChecked(),
             }
 
-            # Save to config file
-            config_path = Path(__file__).parent.parent.parent / "config" / "settings.json"
+            # Save to config file (path injectable via ISA_STEWARD_CONFIG_PATH)
+            config_path = _settings_config_path()
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(updated_config, f, indent=2)
 
@@ -622,25 +825,18 @@ class SettingsPage(ScrollablePage):
             )
             self.main_window.app.settings.setValue("gui/font_size", self.font_size_spin.value())
 
-            # Show restart prompt if needed
             if self._restart_required:
-                reply = QMessageBox.question(
-                    self,
-                    "Restart Required",
-                    "Some settings require application restart to take effect. Restart now?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                # U-07: non-modal status message + explicit Restart Now
+                # button -- never a blocking QMessageBox and never an
+                # interpreter exit from inside a slot.  The flag stays set:
+                # the restart is still pending until the app actually
+                # restarts.
+                self._set_restart_pending_visible(True)
+                self.main_window.status_bar.show_message(
+                    "Settings saved — restart to apply directory/URL changes", 8000
                 )
-                if reply == QMessageBox.StandardButton.Yes:
-                    # Restart application
-                    import sys
-
-                    from PyQt6.QtWidgets import QApplication
-
-                    QApplication.quit()
-                    sys.exit(0)
-
-            self.main_window.status_bar.show_message("Settings saved!", 3000)
-            self._restart_required = False
+            else:
+                self.main_window.status_bar.show_message("Settings saved!", 3000)
 
         except Exception as e:
             QMessageBox.critical(
@@ -751,5 +947,13 @@ class SettingsPage(ScrollablePage):
         pass
 
     def save_data(self):
-        """Save page data."""
-        self._on_save_settings()
+        """Save page data.
+
+        Intentionally a no-op (U-02): settings persist ONLY through the
+        explicit "Save Settings" button (:meth:`_on_save_settings`).  The
+        page-lifecycle hooks -- ``MainWindow.closeEvent`` and the auto-save
+        timer -- must never rewrite the config as a side effect (the old
+        behaviour silently rewrote ``config/settings.json`` on close and could
+        pop a blocking restart modal at shutdown).
+        """
+        return

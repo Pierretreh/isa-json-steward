@@ -25,13 +25,16 @@ from PyQt6.QtWidgets import (
 
 from ..agent_tools.ids import set_test_id
 from ..dialogs.material_dialog import MaterialDialog
-from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
+from ..widgets.common import ActionButton, DangerButton, PrimaryButton, SectionHeader, set_ui_role
 from .base_page import ScrollablePage
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.isa_json_exporter import ISAJsonExporter  # noqa: E402
 from utils.isa_json_preview_helpers import ISAJsonPreviewHelper  # noqa: E402
+from utils.logging_config import get_logger  # noqa: E402
 from utils.material_manager import MaterialManager  # noqa: E402
+
+logger = get_logger(__name__)
 
 
 class MaterialsPage(ScrollablePage):
@@ -81,17 +84,14 @@ class MaterialsPage(ScrollablePage):
         self.table.setHorizontalHeaderLabels(
             ["Name", "Type", "ID", "Characteristics", "Derives From"]
         )
+        # U-08: content columns size to their content (full header text or a
+        # clean "…" instead of mid-word clipping) and the last column
+        # stretches, so the table never forces horizontal scrolling.
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
-        self.table.setColumnWidth(0, 200)
-        self.table.setColumnWidth(1, 120)
-        self.table.setColumnWidth(2, 150)
-        self.table.setColumnWidth(3, 250)
-        self.table.setColumnWidth(4, 150)
+        for col in range(4):
+            header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        header.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -102,6 +102,18 @@ class MaterialsPage(ScrollablePage):
         self.set_expanding(self.table)
         left_layout.addWidget(self.table)
 
+        # Empty-state hint (U-13 pattern from images.py): muted placeholder,
+        # mutually exclusive with the table.  Shown whenever the table would
+        # render zero rows and explaining why, so an empty study never looks
+        # like a display bug.
+        self.empty_placeholder = QLabel("")
+        set_test_id(self.empty_placeholder, "page.materials.emptyStateLabel")
+        set_ui_role(self.empty_placeholder, "muted")
+        self.empty_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_placeholder.setWordWrap(True)
+        self.set_expanding(self.empty_placeholder)
+        left_layout.addWidget(self.empty_placeholder)
+
         # Right panel: Material details preview
         right_panel = QFrame()
         right_layout = QVBoxLayout(right_panel)
@@ -109,14 +121,10 @@ class MaterialsPage(ScrollablePage):
 
         # Details card
         details_group = QFrame()
-        details_group.setStyleSheet("""
-            QFrame {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                padding: 12px;
-            }
-        """)
+        # U-03: theme colors come from the uiRole="panel" QSS rule; only box
+        # metrics stay inline.
+        set_ui_role(details_group, "panel")
+        details_group.setStyleSheet("border-radius: 8px; padding: 12px;")
         details_layout = QVBoxLayout(details_group)
 
         details_header = QLabel("Material Details")
@@ -129,12 +137,11 @@ class MaterialsPage(ScrollablePage):
             QTextBrowser {
                 background-color: transparent;
                 border: none;
-                color: #333;
                 font-size: 12px;
             }
         """)
         self.details_browser.setHtml(
-            '<span style="color: #666;">Select a material to view details</span>'
+            '<span>Select a material to view details</span>'
         )
         details_layout.addWidget(self.details_browser)
 
@@ -162,7 +169,8 @@ class MaterialsPage(ScrollablePage):
         edit_btn.clicked.connect(self._on_edit_material)
         buttons_layout.addWidget(edit_btn)
 
-        delete_btn = ActionButton("Delete Selected")
+        # U-14: destructive action -> DangerButton (testId/label unchanged).
+        delete_btn = DangerButton("Delete Selected")
         set_test_id(delete_btn, "page.materials.deleteButton")
         delete_btn.clicked.connect(self._on_delete_material)
         buttons_layout.addWidget(delete_btn)
@@ -176,16 +184,61 @@ class MaterialsPage(ScrollablePage):
 
         self.add_layout(buttons_layout)
 
+        # U-11: keep references for selection/study gating; Edit/Delete start
+        # disabled until a row is selected, Add until a study is loaded.
+        self.add_btn = add_btn
+        self.edit_btn = edit_btn
+        self.delete_btn = delete_btn
+        self._update_action_states()
+        self._update_empty_state(0)
+
+    def _update_action_states(self):
+        """Enable/disable action buttons per selection/study state (U-11).
+
+        Edit/Delete require a selected row; Add requires a loaded study.
+        The QMessageBox guards in the handlers stay as defensive fallbacks
+        but are unreachable through the normal click path.
+        """
+        has_selection = bool(self.table.selectionModel().selectedRows())
+        self.edit_btn.setEnabled(has_selection)
+        self.delete_btn.setEnabled(has_selection)
+        self.add_btn.setEnabled(bool(self.main_window.current_study))
+
+    def _update_empty_state(self, visible_count: int):
+        """Toggle the U-13-style empty-state hint against the materials table.
+
+        The placeholder is mutually exclusive with the table: it is shown
+        whenever the table would render zero rows and explains why (no
+        study selected / no materials in the study / the filter matched
+        nothing).
+
+        Args:
+            visible_count: Number of rows the table is about to show.
+        """
+        if not self.main_window.current_study:
+            text = "Select a study to view its materials"
+        elif not self.materials:
+            text = "No materials in this study"
+        else:
+            text = "No materials match the current filter"
+        self.empty_placeholder.setText(text)
+
+        empty = visible_count == 0
+        self.empty_placeholder.setVisible(empty)
+        self.table.setVisible(not empty)
+
     def refresh(self):
         """Refresh the materials table."""
         self.table.setRowCount(0)
         self.materials = []
         self.preview_helper = None
+        self._update_action_states()
 
         # Reset details panel
         self.details_browser.setHtml(
-            '<span style="color: #666;">Select a material to view details</span>'
+            '<span>Select a material to view details</span>'
         )
+        self._update_empty_state(0)
 
         # Check if study is selected
         if not self.main_window.current_study:
@@ -201,7 +254,7 @@ class MaterialsPage(ScrollablePage):
         try:
             self.preview_helper = ISAJsonPreviewHelper(study_data)
         except Exception as e:
-            print(f"[MaterialsPage] Error building preview helper: {e}")
+            logger.error(f"[MaterialsPage] Error building preview helper: {e}")
 
         # Always reinitialize material manager to pick up the latest study data
         # (the study_data dict is replaced when a new study is selected)
@@ -255,6 +308,9 @@ class MaterialsPage(ScrollablePage):
             if len(derives_from) > 3:
                 derives_text += f" (+{len(derives_from) - 3} more)"
             self.table.setItem(row, 4, QTableWidgetItem(derives_text))
+
+        self._update_empty_state(len(filtered_materials))
+        self._update_action_states()
 
     def _collect_assay_materials(self, study_data: dict) -> list:
         """
@@ -345,10 +401,11 @@ class MaterialsPage(ScrollablePage):
 
     def _on_selection_changed(self):
         """Handle table selection change - update the details preview."""
+        self._update_action_states()
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
             self.details_browser.setHtml(
-                '<span style="color: #666;">Select a material to view details</span>'
+                '<span>Select a material to view details</span>'
             )
             return
 
@@ -360,7 +417,7 @@ class MaterialsPage(ScrollablePage):
             self._update_material_preview(material)
         else:
             self.details_browser.setHtml(
-                '<span style="color: #666;">Select a material to view details</span>'
+                '<span>Select a material to view details</span>'
             )
 
     def _update_material_preview(self, material: dict):
@@ -383,11 +440,11 @@ class MaterialsPage(ScrollablePage):
                 f'<b style="font-size: 14px;">{ISAJsonPreviewHelper._escape(name)}</b><br>'
             )
             html_parts.append(
-                f'<span style="color: #666;">Type:</span> {ISAJsonPreviewHelper._escape(mat_type)}<br>'  # noqa: E501
+                f'<span>Type:</span> {ISAJsonPreviewHelper._escape(mat_type)}<br>'  # noqa: E501
             )
             if mat_id:
                 html_parts.append(
-                    f'<span style="color: #666;">ID:</span> <code>{ISAJsonPreviewHelper._escape(mat_id)}</code>'  # noqa: E501
+                    f'<span>ID:</span> <code>{ISAJsonPreviewHelper._escape(mat_id)}</code>'  # noqa: E501
                 )
             self.details_browser.setHtml("\n".join(html_parts))
 

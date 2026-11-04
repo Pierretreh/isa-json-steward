@@ -13,6 +13,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QComboBox,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -22,10 +23,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from utils.logging_config import get_logger
+
 from ..agent_tools.ids import set_test_id
 from ..dialogs.template_editor import TemplateEditorDialog
-from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
+from ..widgets.common import ActionButton, PrimaryButton, SectionHeader, set_ui_role
 from .base_page import ScrollablePage
+
+logger = get_logger(__name__)
 
 
 class TemplatesPage(ScrollablePage):
@@ -145,6 +150,16 @@ class TemplatesPage(ScrollablePage):
         self.set_expanding(self.template_list)
         list_layout.addWidget(self.template_list)
 
+        # U-13: empty-state placeholder (muted via the theme QSS uiRole rule),
+        # shown while the list is empty and hidden once populated.
+        self.list_placeholder = QLabel("No templates found — use Create Template")
+        set_test_id(self.list_placeholder, "page.templates.listPlaceholder")
+        set_ui_role(self.list_placeholder, "muted")
+        self.list_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.list_placeholder.setWordWrap(True)
+        self.set_expanding(self.list_placeholder)
+        list_layout.addWidget(self.list_placeholder)
+
         list_widget = QWidget()
         list_widget.setLayout(list_layout)
         splitter.addWidget(list_widget)
@@ -156,11 +171,22 @@ class TemplatesPage(ScrollablePage):
         preview_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         preview_layout.addWidget(preview_label)
 
-        self.preview_label = QLabel("Select a template to view preview")
+        # Preview content label (rich text when a template is selected).
+        self.preview_label = QLabel()
         self.preview_label.setWordWrap(True)
-        self.preview_label.setStyleSheet("color: #7f8c8d; padding: 16px;")
+        set_ui_role(self.preview_label, "muted")
+        self.preview_label.setStyleSheet("padding: 16px;")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignTop)
         preview_layout.addWidget(self.preview_label)
+
+        # U-13: centered empty-state placeholder for the preview pane.
+        self.preview_placeholder = QLabel("Select a template to preview")
+        set_test_id(self.preview_placeholder, "page.templates.previewPlaceholder")
+        set_ui_role(self.preview_placeholder, "muted")
+        self.preview_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_placeholder.setWordWrap(True)
+        self.set_expanding(self.preview_placeholder)
+        preview_layout.addWidget(self.preview_placeholder)
 
         preview_widget = QWidget()
         preview_widget.setLayout(preview_layout)
@@ -174,41 +200,77 @@ class TemplatesPage(ScrollablePage):
         self.set_expanding(splitter)
         self.add_widget(splitter)
 
-        # Load initial templates after UI is fully set up
-        self._load_templates("assay")
-
         # Buttons
-        buttons_layout = QHBoxLayout()
+        # U-08: a 2-column grid keeps the row's minimum width under the
+        # content viewport (a single row of four buttons forced a
+        # horizontal scrollbar with the theme QSS applied).
+        buttons_layout = QGridLayout()
+        buttons_layout.setSpacing(12)
 
         create_btn = PrimaryButton("Create Template")
         set_test_id(create_btn, "page.templates.createButton")
         create_btn.clicked.connect(self._on_create_template)
-        buttons_layout.addWidget(create_btn)
+        buttons_layout.addWidget(create_btn, 0, 0)
 
         edit_btn = ActionButton("Edit Selected")
         set_test_id(edit_btn, "page.templates.editButton")
         edit_btn.clicked.connect(self._on_edit_template)
-        buttons_layout.addWidget(edit_btn)
+        buttons_layout.addWidget(edit_btn, 0, 1)
 
         import_btn = ActionButton("Import Template")
         set_test_id(import_btn, "page.templates.importButton")
         import_btn.clicked.connect(self._on_import_template)
-        buttons_layout.addWidget(import_btn)
+        buttons_layout.addWidget(import_btn, 1, 0)
 
         export_btn = ActionButton("Export Selected")
         set_test_id(export_btn, "page.templates.exportButton")
         export_btn.clicked.connect(self._on_export_template)
-        buttons_layout.addWidget(export_btn)
-
-        buttons_layout.addStretch()
+        buttons_layout.addWidget(export_btn, 1, 1)
 
         self.add_layout(buttons_layout)
+
+        # U-11: Edit/Export start disabled until a template is selected.
+        self.edit_btn = edit_btn
+        self.export_btn = export_btn
+        self._update_action_states()
+
+        # Load initial templates after UI is fully set up
+        self._load_templates("assay")
+
+    def _update_action_states(self):
+        """Enable/disable action buttons per current selection (U-11)."""
+        has_selection = bool(self.template_list.selectedItems())
+        self.edit_btn.setEnabled(has_selection)
+        self.export_btn.setEnabled(has_selection)
+
+    def _update_empty_state(self):
+        """Toggle the U-13 empty-state placeholder against the template list.
+
+        The placeholder and the list are mutually exclusive: the placeholder
+        shows while the list is empty and hides once populated.
+        """
+        has_items = self.template_list.count() > 0
+        self.template_list.setVisible(has_items)
+        self.list_placeholder.setVisible(not has_items)
+
+    def _set_preview_empty(self):
+        """Show the preview-pane empty-state placeholder (U-13)."""
+        self.current_template_data = None
+        self.preview_label.clear()
+        self.preview_label.setVisible(False)
+        self.preview_placeholder.setVisible(True)
+
+    def _set_preview_content(self):
+        """Show the preview content label and hide the placeholder (U-13)."""
+        self.preview_placeholder.setVisible(False)
+        self.preview_label.setVisible(True)
 
     def _load_templates(self, template_type: str):
         """Load templates of the specified type."""
         self.template_list.clear()
-        self.current_template_data = None
-        self.preview_label.setText("Select a template to view preview")
+        self._set_preview_empty()
+        self._update_action_states()
+        self._update_empty_state()  # U-13: empty list shows its placeholder
 
         base_path = self.main_window.get_templates_root()
 
@@ -240,11 +302,12 @@ class TemplatesPage(ScrollablePage):
                 item.setToolTip(description)
                 self.template_list.addItem(item)
             except Exception as e:
-                print(f"Error loading template {json_file}: {e}")
+                logger.warning(f"Error loading template {json_file}: {e}")
 
         self.main_window.status_bar.show_message(
             f"Loaded {self.template_list.count()} {template_type} templates"
         )
+        self._update_empty_state()  # U-13: populated list hides its placeholder
 
     def _on_type_changed(self, template_type: str):
         """Handle template type change."""
@@ -255,11 +318,11 @@ class TemplatesPage(ScrollablePage):
 
     def _on_template_selected(self):
         """Handle template selection change."""
+        self._update_action_states()
         selected_items = self.template_list.selectedItems()
 
         if not selected_items:
-            self.preview_label.setText("Select a template to view preview")
-            self.current_template_data = None
+            self._set_preview_empty()
             return
 
         item = selected_items[0]
@@ -339,6 +402,7 @@ class TemplatesPage(ScrollablePage):
                 "</i></p>"
             )
 
+        self._set_preview_content()
         self.preview_label.setText(preview_html)
 
     def _on_create_template(self):

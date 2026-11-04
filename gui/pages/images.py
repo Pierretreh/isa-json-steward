@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 
 from ..agent_tools.ids import set_test_id
 from ..dialogs.image_converter import ImageConverterDialog
-from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
+from ..widgets.common import ActionButton, PrimaryButton, SectionHeader, set_ui_role
 from .base_page import ScrollablePage
 
 
@@ -53,6 +53,16 @@ class ImagesPage(ScrollablePage):
         self.set_expanding(self.raw_list)
         raw_layout.addWidget(self.raw_list)
 
+        # U-13: empty-state placeholder (muted via the theme QSS uiRole rule),
+        # shown while the list is empty and hidden once populated.
+        self.raw_placeholder = QLabel("No raw images — select a study, then use Import Image")
+        set_test_id(self.raw_placeholder, "page.images.rawListPlaceholder")
+        set_ui_role(self.raw_placeholder, "muted")
+        self.raw_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.raw_placeholder.setWordWrap(True)
+        self.set_expanding(self.raw_placeholder)
+        raw_layout.addWidget(self.raw_placeholder)
+
         raw_widget = QWidget()  # type: ignore
         raw_widget.setLayout(raw_layout)
         splitter.addWidget(raw_widget)
@@ -70,6 +80,15 @@ class ImagesPage(ScrollablePage):
         self.processed_list.itemDoubleClicked.connect(self._on_processed_image_selected)
         self.set_expanding(self.processed_list)
         processed_layout.addWidget(self.processed_list)
+
+        # U-13: empty-state placeholder (muted via the theme QSS uiRole rule).
+        self.processed_placeholder = QLabel("No processed images yet")
+        set_test_id(self.processed_placeholder, "page.images.processedListPlaceholder")
+        set_ui_role(self.processed_placeholder, "muted")
+        self.processed_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.processed_placeholder.setWordWrap(True)
+        self.set_expanding(self.processed_placeholder)
+        processed_layout.addWidget(self.processed_placeholder)
 
         processed_widget = QWidget()  # type: ignore
         processed_widget.setLayout(processed_layout)
@@ -104,10 +123,45 @@ class ImagesPage(ScrollablePage):
 
         self.add_layout(buttons_layout)
 
+        # U-11: keep references for selection/study gating; Convert starts
+        # disabled until a raw image is selected, Import until a study loads.
+        self.import_btn = import_btn
+        self.convert_btn = convert_btn
+        self.raw_list.itemSelectionChanged.connect(self._update_action_states)
+        self._update_action_states()
+        self._update_empty_states()
+
+    def _update_action_states(self):
+        """Enable/disable action buttons per selection/study state (U-11).
+
+        Convert requires a selected raw image; Import requires a loaded
+        study.  The QMessageBox guards in the handlers stay as defensive
+        fallbacks but are unreachable through the normal click path.
+        """
+        self.convert_btn.setEnabled(bool(self.raw_list.selectedItems()))
+        self.import_btn.setEnabled(bool(self.main_window.current_study))
+
+    def _update_empty_states(self):
+        """Toggle the U-13 empty-state placeholders against the lists.
+
+        Each placeholder is mutually exclusive with its list: the
+        placeholder is shown while the list is empty and hidden once the
+        list has items.
+        """
+        has_raw = self.raw_list.count() > 0
+        self.raw_list.setVisible(has_raw)
+        self.raw_placeholder.setVisible(not has_raw)
+
+        has_processed = self.processed_list.count() > 0
+        self.processed_list.setVisible(has_processed)
+        self.processed_placeholder.setVisible(not has_processed)
+
     def refresh(self):
         """Refresh the image lists."""
         self.raw_list.clear()
         self.processed_list.clear()
+        self._update_action_states()
+        self._update_empty_states()  # U-13: empty lists show their placeholders
 
         # Load images if a study is selected
         if not self.main_window.current_study:
@@ -155,6 +209,8 @@ class ImagesPage(ScrollablePage):
         self.main_window.status_bar.show_message(
             f"Loaded {self.raw_list.count()} raw images, {self.processed_list.count()} TIFFs"
         )
+        self._update_action_states()
+        self._update_empty_states()  # U-13: populated lists hide their placeholders
 
     def _is_image_file(self, path: Path) -> bool:
         """Check if a file is an image."""

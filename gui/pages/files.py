@@ -27,12 +27,15 @@ from PyQt6.QtWidgets import (
 )
 
 from ..agent_tools.ids import set_test_id
-from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
+from ..widgets.common import ActionButton, DangerButton, PrimaryButton, SectionHeader, set_ui_role
 from .base_page import ScrollablePage
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.file_manager import FileManager  # noqa: E402
 from utils.isa_json_preview_helpers import ISAJsonPreviewHelper  # noqa: E402
+from utils.logging_config import get_logger  # noqa: E402
+
+logger = get_logger(__name__)
 
 
 class FilesPage(ScrollablePage):
@@ -94,21 +97,19 @@ class FilesPage(ScrollablePage):
         self.file_tree = QTreeWidget()
         set_test_id(self.file_tree, "page.files.fileTree")
         self.file_tree.setHeaderLabels(["File", "Type", "Entity", "Size", "Status"])
+        # U-08: content columns size to their content (full header text or a
+        # clean "…" instead of mid-word clipping) and the last column
+        # stretches to fill the panel.
         file_tree_header = self.file_tree.header()
-        file_tree_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        file_tree_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-        file_tree_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        file_tree_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
-        file_tree_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
-        self.file_tree.setColumnWidth(0, 250)
-        self.file_tree.setColumnWidth(1, 80)
-        self.file_tree.setColumnWidth(2, 150)
-        self.file_tree.setColumnWidth(3, 80)
-        self.file_tree.setColumnWidth(4, 100)
+        for col in range(4):
+            file_tree_header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        file_tree_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        file_tree_header.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.file_tree.setAlternatingRowColors(True)
         self.file_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
         self.file_tree.itemDoubleClicked.connect(self._on_file_double_clicked)
         self.file_tree.itemClicked.connect(self._on_file_clicked)
+        self.file_tree.itemSelectionChanged.connect(self._update_action_states)
         self.file_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.file_tree.customContextMenuRequested.connect(self._show_context_menu)
         self.set_expanding(self.file_tree)
@@ -122,14 +123,10 @@ class FilesPage(ScrollablePage):
 
         # File details (using QTextBrowser for rich HTML)
         details_group = QFrame()
-        details_group.setStyleSheet("""
-            QFrame {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                padding: 12px;
-            }
-        """)
+        # U-03: theme colors come from the uiRole="panel" QSS rule; only box
+        # metrics stay inline.
+        set_ui_role(details_group, "panel")
+        details_group.setStyleSheet("border-radius: 8px; padding: 12px;")
         details_layout = QVBoxLayout(details_group)
 
         details_label = QLabel("File Details")
@@ -142,12 +139,11 @@ class FilesPage(ScrollablePage):
             QTextBrowser {
                 background-color: transparent;
                 border: none;
-                color: #333;
                 font-size: 12px;
             }
         """)
         self.details_browser.setHtml(
-            '<span style="color: #666;">Select a file to view details</span>'
+            '<span>Select a file to view details</span>'
         )
         details_layout.addWidget(self.details_browser)
 
@@ -155,14 +151,8 @@ class FilesPage(ScrollablePage):
 
         # Preview area (image preview + ISA-JSON metadata)
         preview_group = QFrame()
-        preview_group.setStyleSheet("""
-            QFrame {
-                background-color: #ffffff;
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                padding: 12px;
-            }
-        """)
+        set_ui_role(preview_group, "panel")
+        preview_group.setStyleSheet("border-radius: 8px; padding: 12px;")
         preview_layout = QVBoxLayout(preview_group)
 
         preview_label = QLabel("Preview")
@@ -172,7 +162,8 @@ class FilesPage(ScrollablePage):
         self.preview_label = QLabel("No preview available")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setMinimumHeight(200)
-        self.preview_label.setStyleSheet("color: #999; border: 1px dashed #ccc;")
+        set_ui_role(self.preview_label, "muted")
+        self.preview_label.setStyleSheet("border: 1px dashed #ccc;")
         preview_layout.addWidget(self.preview_label)
 
         # ISA-JSON metadata browser (shown below image preview)
@@ -182,11 +173,10 @@ class FilesPage(ScrollablePage):
             QTextBrowser {
                 background-color: transparent;
                 border: none;
-                color: #333;
                 font-size: 12px;
             }
         """)
-        self.metadata_browser.setHtml('<span style="color: #999;">No metadata available</span>')
+        self.metadata_browser.setHtml('<span>No metadata available</span>')
         preview_layout.addWidget(self.metadata_browser)
 
         right_layout.addWidget(preview_group)
@@ -213,7 +203,8 @@ class FilesPage(ScrollablePage):
         export_btn.clicked.connect(self._on_export_file)
         buttons_layout.addWidget(export_btn)
 
-        delete_btn = ActionButton("Delete Selected")
+        # U-14: destructive action -> DangerButton (testId/label unchanged).
+        delete_btn = DangerButton("Delete Selected")
         set_test_id(delete_btn, "page.files.deleteButton")
         delete_btn.clicked.connect(self._on_delete_files)
         buttons_layout.addWidget(delete_btn)
@@ -222,14 +213,30 @@ class FilesPage(ScrollablePage):
 
         self.add_layout(buttons_layout)
 
+        # U-11: Export/Delete start disabled until a tree item is selected.
+        self.export_btn = export_btn
+        self.delete_btn = delete_btn
+        self._update_action_states()
+
+    def _update_action_states(self):
+        """Enable/disable action buttons per current selection (U-11).
+
+        The QMessageBox guards in the handlers stay as defensive fallbacks
+        but are unreachable through the normal click path.
+        """
+        has_selection = bool(self.file_tree.selectedItems())
+        self.export_btn.setEnabled(has_selection)
+        self.delete_btn.setEnabled(has_selection)
+
     def refresh(self):
         """Refresh the file list."""
         if not self.main_window.current_study:
             self.file_tree.clear()
-            self.details_browser.setHtml('<span style="color: #666;">No study selected</span>')
+            self.details_browser.setHtml('<span>No study selected</span>')
             self.preview_label.setText("No preview available")
             self.preview_label.clear()
-            self.metadata_browser.setHtml('<span style="color: #999;">No metadata available</span>')
+            self.metadata_browser.setHtml('<span>No metadata available</span>')
+            self._update_action_states()
             return
 
         investigation_id = self.main_window.current_investigation or "inv_1"
@@ -263,7 +270,7 @@ class FilesPage(ScrollablePage):
                     if df_name:
                         self._isa_datafiles_by_name[df_name] = {"datafile": df, "assay": assay}
         except Exception as e:
-            print(f"[FilesPage] Error building ISA-JSON lookup: {e}")
+            logger.error(f"[FilesPage] Error building ISA-JSON lookup: {e}")
 
     def _populate_file_tree(self):
         """Populate the file tree with current files."""
@@ -348,6 +355,7 @@ class FilesPage(ScrollablePage):
 
         # Update statistics
         self._update_statistics()
+        self._update_action_states()
 
     def _format_file_size(self, size_bytes: int) -> str:
         """
@@ -379,8 +387,8 @@ class FilesPage(ScrollablePage):
         stats = self.file_manager.get_file_statistics(investigation_id, study_id)
 
         # Update status bar or display somewhere
-        # For now, just print to console
-        print(f"File Statistics: {stats}")
+        # Debug-level diagnostics (U-12: log, never bare print)
+        logger.debug(f"File Statistics: {stats}")
 
     def _on_filter_changed(self, text: str):
         """Handle filter change."""
@@ -424,36 +432,36 @@ class FilesPage(ScrollablePage):
         upload_date = file_meta.get("upload_date", "")
 
         html_parts.append(
-            f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Name:</td><td style="padding: 2px 0;"><b>{ISAJsonPreviewHelper._escape(original_filename)}</b></td></tr>'  # noqa: E501
+            f'<tr><td style="padding: 2px 8px 2px 0;">Name:</td><td style="padding: 2px 0;"><b>{ISAJsonPreviewHelper._escape(original_filename)}</b></td></tr>'  # noqa: E501
         )
         html_parts.append(
-            f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Type:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(file_type)}</td></tr>'  # noqa: E501
+            f'<tr><td style="padding: 2px 8px 2px 0;">Type:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(file_type)}</td></tr>'  # noqa: E501
         )
         html_parts.append(
-            f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Entity:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(entity_type)} - {ISAJsonPreviewHelper._escape(entity_id)}</td></tr>'  # noqa: E501
+            f'<tr><td style="padding: 2px 8px 2px 0;">Entity:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(entity_type)} - {ISAJsonPreviewHelper._escape(entity_id)}</td></tr>'  # noqa: E501
         )
         if attachment:
             html_parts.append(
-                f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Attachment:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(attachment)}</td></tr>'  # noqa: E501
+                f'<tr><td style="padding: 2px 8px 2px 0;">Attachment:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(attachment)}</td></tr>'  # noqa: E501
             )
         html_parts.append(
-            f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Size:</td><td style="padding: 2px 0;">{size}</td></tr>'  # noqa: E501
+            f'<tr><td style="padding: 2px 8px 2px 0;">Size:</td><td style="padding: 2px 0;">{size}</td></tr>'  # noqa: E501
         )
         if upload_date:
             html_parts.append(
-                f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Uploaded:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(upload_date)}</td></tr>'  # noqa: E501
+                f'<tr><td style="padding: 2px 8px 2px 0;">Uploaded:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(upload_date)}</td></tr>'  # noqa: E501
             )
 
         # Conversion details
         if file_meta.get("converted_path"):
             html_parts.append(
-                f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Original Format:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(file_meta.get("original_format", ""))}</td></tr>'  # noqa: E501
+                f'<tr><td style="padding: 2px 8px 2px 0;">Original Format:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(file_meta.get("original_format", ""))}</td></tr>'  # noqa: E501
             )
             html_parts.append(
-                f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Converted Format:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(file_meta.get("converted_format", ""))}</td></tr>'  # noqa: E501
+                f'<tr><td style="padding: 2px 8px 2px 0;">Converted Format:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(file_meta.get("converted_format", ""))}</td></tr>'  # noqa: E501
             )
             html_parts.append(
-                f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Conversion Status:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(file_meta.get("conversion_status", ""))}</td></tr>'  # noqa: E501
+                f'<tr><td style="padding: 2px 8px 2px 0;">Conversion Status:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(file_meta.get("conversion_status", ""))}</td></tr>'  # noqa: E501
             )
 
         # ISA-JSON metadata (from dataFiles in assay)
@@ -470,31 +478,31 @@ class FilesPage(ScrollablePage):
 
             if isa_type:
                 html_parts.append(
-                    f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">ISA Type:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(isa_type)}</td></tr>'  # noqa: E501
+                    f'<tr><td style="padding: 2px 8px 2px 0;">ISA Type:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(isa_type)}</td></tr>'  # noqa: E501
                 )
             if isa_id:
                 html_parts.append(
-                    f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">ISA ID:</td><td style="padding: 2px 0;"><code style="font-size: 10px;">{ISAJsonPreviewHelper._escape(isa_id)}</code></td></tr>'  # noqa: E501
+                    f'<tr><td style="padding: 2px 8px 2px 0;">ISA ID:</td><td style="padding: 2px 0;"><code style="font-size: 10px;">{ISAJsonPreviewHelper._escape(isa_id)}</code></td></tr>'  # noqa: E501
                 )
             if trace_db:
                 html_parts.append(
-                    f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">TraceDB Path:</td><td style="padding: 2px 0;"><code style="font-size: 10px;">{ISAJsonPreviewHelper._escape(trace_db)}</code></td></tr>'  # noqa: E501
+                    f'<tr><td style="padding: 2px 8px 2px 0;">TraceDB Path:</td><td style="padding: 2px 0;"><code style="font-size: 10px;">{ISAJsonPreviewHelper._escape(trace_db)}</code></td></tr>'  # noqa: E501
                 )
             if derived_from:
                 if derived_from == "unassigned":
                     html_parts.append(
-                        '<tr><td style="padding: 2px 8px 2px 0; color: #666;">Sample:</td><td style="padding: 2px 0; color: #999;">unassigned</td></tr>'  # noqa: E501
+                        '<tr><td style="padding: 2px 8px 2px 0;">Sample:</td><td style="padding: 2px 0;">unassigned</td></tr>'  # noqa: E501
                     )
                 else:
                     sample_name = self.preview_helper.resolve_material_name(derived_from)
                     html_parts.append(
-                        f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Sample:</td><td style="padding: 2px 0;"><b>{ISAJsonPreviewHelper._escape(sample_name)}</b></td></tr>'  # noqa: E501
+                        f'<tr><td style="padding: 2px 8px 2px 0;">Sample:</td><td style="padding: 2px 0;"><b>{ISAJsonPreviewHelper._escape(sample_name)}</b></td></tr>'  # noqa: E501
                     )
 
             # Assay info
             assay_name = self.preview_helper._get_assay_display_name(isa_assay)
             html_parts.append(
-                f'<tr><td style="padding: 2px 8px 2px 0; color: #666;">Assay:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(assay_name)}</td></tr>'  # noqa: E501
+                f'<tr><td style="padding: 2px 8px 2px 0;">Assay:</td><td style="padding: 2px 0;">{ISAJsonPreviewHelper._escape(assay_name)}</td></tr>'  # noqa: E501
             )
 
         html_parts.append("</table>")
@@ -537,13 +545,15 @@ class FilesPage(ScrollablePage):
                             Qt.TransformationMode.SmoothTransformation,
                         )
                         self.preview_label.setPixmap(scaled_pixmap)
+                        set_ui_role(self.preview_label, None)
                         self.preview_label.setStyleSheet("")
                         image_shown = True
 
         if not image_shown:
             self.preview_label.setText("No image preview")
             self.preview_label.clear()
-            self.preview_label.setStyleSheet("color: #999; border: 1px dashed #ccc;")
+            set_ui_role(self.preview_label, "muted")
+            self.preview_label.setStyleSheet("border: 1px dashed #ccc;")
 
         # Show ISA-JSON metadata in the metadata browser
         isa_match = self._isa_datafiles_by_name.get(original_filename)
@@ -554,7 +564,7 @@ class FilesPage(ScrollablePage):
             self.metadata_browser.setHtml(metadata_html)
         else:
             self.metadata_browser.setHtml(
-                '<span style="color: #999;">No ISA-JSON metadata available for this file</span>'
+                '<span>No ISA-JSON metadata available for this file</span>'
             )
 
     def _show_context_menu(self, position):

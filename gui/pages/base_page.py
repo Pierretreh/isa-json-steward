@@ -2,8 +2,8 @@
 Base class for all pages in the ISA-JSON Data Steward GUI.
 """
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QScrollArea, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QHBoxLayout, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 
 
 class BasePage(QWidget):
@@ -12,9 +12,19 @@ class BasePage(QWidget):
     # Signal emitted when page data changes (for auto-save)
     dataChanged = pyqtSignal()
 
+    # Whether ``save_data()`` actually persists page data.  Pages with
+    # manual-only persistence (SettingsPage, U-02) set this False so the
+    # auto-save tick never claims "Auto-saved" for a no-op save (U-07).
+    auto_save_persists: bool = True
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("contentPage")
+        # U-03: QWidget subclasses do not paint QSS backgrounds without this
+        # attribute -- it makes the ``QWidget#contentPage`` background rule
+        # real on every page (belt-and-braces alongside the scroll-viewport
+        # descendant rules in the theme stylesheets).
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setup_ui()
 
     def setup_ui(self):
@@ -79,9 +89,21 @@ class ScrollablePage(BasePage):
         self.scroll_area.setWidget(self.content_widget)
         main_layout.addWidget(self.scroll_area)
 
+        # Fixed footer row BELOW the scroll area (U-07): always-visible home
+        # for action buttons that must stay reachable without scrolling
+        # (e.g. the Settings page's Save/Reset/Restart buttons).
+        self._footer_layout = QHBoxLayout()
+        self._footer_layout.setContentsMargins(20, 8, 20, 8)
+        self._footer_layout.setSpacing(8)
+        main_layout.addLayout(self._footer_layout)
+
     def add_widget(self, widget):
         """Add a widget to the content layout."""
         self.content_layout.addWidget(widget)
+
+    def add_footer(self, widget):
+        """Add a widget to the fixed footer row outside the scroll area (U-07)."""
+        self._footer_layout.addWidget(widget)
 
     def add_layout(self, layout):
         """Add a layout to the content layout."""

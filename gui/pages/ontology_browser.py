@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..agent_tools.ids import set_test_id
-from ..widgets.common import ActionButton, SectionHeader
+from ..widgets.common import ActionButton, SectionHeader, set_ui_role
 from ..widgets.graph_widget import GraphWidget
 from .base_page import ScrollablePage
 
@@ -120,13 +120,15 @@ class OntologyBrowserPage(ScrollablePage):
         # Set expanding size policy
         self.set_expanding(self.tree)
 
-        # Configure header resize modes - Interactive for user-adjustable columns
+        # U-08: content column sizes to its content (full header text or a
+        # clean "…" instead of mid-word clipping) and the last visible
+        # column stretches to fill the panel (column 2 is hidden).
         header = self.tree.header()
         if header is not None:
-            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-            self.tree.setColumnWidth(0, 350)
-            self.tree.setColumnWidth(1, 120)
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+            header.setTextElideMode(Qt.TextElideMode.ElideRight)
 
         # Details panel
         details_layout = QVBoxLayout()
@@ -137,12 +139,14 @@ class OntologyBrowserPage(ScrollablePage):
 
         self.term_name = QLabel("Select a term to view details")
         self.term_name.setWordWrap(True)
-        self.term_name.setStyleSheet("color: #7f8c8d; padding: 8px; font-weight: bold;")
+        set_ui_role(self.term_name, "muted")
+        self.term_name.setStyleSheet("padding: 8px; font-weight: bold;")
         details_layout.addWidget(self.term_name)
 
         self.term_uri = QLabel("")
         self.term_uri.setWordWrap(True)
-        self.term_uri.setStyleSheet("color: #7f8c8d; padding: 8px; font-size: 10px;")
+        set_ui_role(self.term_uri, "muted")
+        self.term_uri.setStyleSheet("padding: 8px; font-size: 10px;")
         details_layout.addWidget(self.term_uri)
 
         self.term_description = QTextEdit()
@@ -227,7 +231,8 @@ class OntologyBrowserPage(ScrollablePage):
     def _create_legend_widget(self) -> QWidget:
         """Create a compact vertical legend panel that scales with width."""
         legend = QWidget()
-        legend.setMinimumWidth(100)
+        # U-08: no minimum width -- the legend must never force the page
+        # wider than the viewport; the max keeps it compact when space allows.
         legend.setMaximumWidth(300)
         legend.setStyleSheet("""
             QWidget {
@@ -377,6 +382,7 @@ class OntologyBrowserPage(ScrollablePage):
             from utils.config_loader import get_profile
 
             ns_uri = get_profile().get_namespace()
+            term_count = 0
             for s in self.ontology_graph.subjects(RDF.type, OWL.Class):
                 s_str = str(s)
 
@@ -417,9 +423,18 @@ class OntologyBrowserPage(ScrollablePage):
                         "uri": s_str,
                         "category": category,
                     }
+                    term_count += 1
 
             self.tree.expandAll()
-            self.main_window.status_bar.show_message("Ontology loaded successfully")
+            # Honest status: report the real outcome instead of a blanket
+            # "loaded successfully" (an empty graph looked like success).
+            if len(self.ontology_graph) == 0:
+                searched = ", ".join(str(p) for p in om.search_paths)
+                self.main_window.status_bar.show_message(
+                    f"No ontology found (searched: {searched})"
+                )
+            else:
+                self.main_window.status_bar.show_message(f"Ontology loaded: {term_count} terms")
 
             # Load graph with all categories by default
             self._load_graph_data("All")

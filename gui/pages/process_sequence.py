@@ -34,15 +34,18 @@ from PyQt6.QtWidgets import (
 
 from ..agent_tools.ids import set_test_id
 from ..dialogs.material_selection_dialog import MaterialSelectionDialog
-from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
+from ..widgets.common import ActionButton, DangerButton, PrimaryButton, SectionHeader, set_ui_role
 from ..widgets.file_attachment_widget import FileAttachmentWidget
 from .base_page import ScrollablePage
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.isa_json_exporter import ISAJsonExporter  # noqa: E402
+from utils.logging_config import get_logger  # noqa: E402
 from utils.material_handover_validator import MaterialHandoverValidator  # noqa: E402
 from utils.material_manager import MaterialManager  # noqa: E402
 from utils.process_sequence_manager import ProcessSequenceManager  # noqa: E402
+
+logger = get_logger(__name__)
 
 
 class DraggableTreeWidget(QTreeWidget):
@@ -116,7 +119,8 @@ class ProcessSequencePage(ScrollablePage):
         add_btn.clicked.connect(self._on_add_process)
         buttons_layout.addWidget(add_btn)
 
-        remove_btn = ActionButton("Remove", test_id="page.process_sequence.removeProcessButton")
+        # U-14: destructive action -> DangerButton (testId/label unchanged).
+        remove_btn = DangerButton("Remove", test_id="page.process_sequence.removeProcessButton")
         remove_btn.clicked.connect(self._on_remove_process)
         buttons_layout.addWidget(remove_btn)
 
@@ -132,16 +136,29 @@ class ProcessSequencePage(ScrollablePage):
         self.tree.itemSelectionChanged.connect(self._on_process_selected)
         self.tree.itemMoved.connect(self._on_process_moved)
 
-        # Configure header resize modes - Interactive for user-adjustable columns
+        # U-08: content columns size to their content (full header text or a
+        # clean "…" instead of mid-word clipping) and the last column
+        # stretches to fill the panel.
         header = self.tree.header()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        self.tree.setColumnWidth(0, 300)
-        self.tree.setColumnWidth(1, 120)
-        self.tree.setColumnWidth(2, 150)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setTextElideMode(Qt.TextElideMode.ElideRight)
 
         left_layout.addWidget(self.tree)
+
+        # Empty-state hint (U-13 pattern from images.py): muted placeholder,
+        # mutually exclusive with the process tree.  Shown when a study is
+        # loaded but its (merged study + assay) process sequence is empty,
+        # so an empty sequence never looks like a display bug.
+        self.empty_placeholder = QLabel("No processes in this study")
+        set_test_id(self.empty_placeholder, "page.process_sequence.emptyStateLabel")
+        set_ui_role(self.empty_placeholder, "muted")
+        self.empty_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_placeholder.setWordWrap(True)
+        left_layout.addWidget(self.empty_placeholder)
+        self.empty_placeholder.setVisible(False)
+
         splitter.addWidget(left_panel)
 
         # Right panel: Process details
@@ -266,6 +283,15 @@ class ProcessSequencePage(ScrollablePage):
 
         self.add_layout(bottom_layout)
 
+        # U-11: keep references for selection/study gating; Remove/Save/
+        # Validate start disabled until a process is selected, Add until a
+        # study is loaded (ProcessSequenceManager exists).
+        self.add_btn = add_btn
+        self.remove_btn = remove_btn
+        self.save_btn = save_btn
+        self.validate_btn = validate_btn
+        self._update_action_states()
+
     def _load_protocols(self):
         """Load protocol templates from templates directory."""
         self.tree.clear()
@@ -277,6 +303,7 @@ class ProcessSequencePage(ScrollablePage):
         if not protocol_dir.exists():
             self.main_window.status_bar.show_message("Protocol templates directory not found")
             self._load_sample_protocols()
+            self._update_empty_state()
             return
 
         # Group protocols by section (built dynamically from loaded data)
@@ -298,7 +325,7 @@ class ProcessSequencePage(ScrollablePage):
                 )
                 self.protocols[name] = protocol_data
             except Exception as e:
-                print(f"Error loading protocol {json_file}: {e}")
+                logger.warning(f"Error loading protocol {json_file}: {e}")
 
         # Build tree from process sequence if available
         self._load_process_sequence()
@@ -319,12 +346,27 @@ class ProcessSequencePage(ScrollablePage):
                         0, Qt.ItemDataRole.UserRole, {"type": "template", "data": protocol["data"]}
                     )
 
+        self._update_empty_state()
         self.main_window.status_bar.show_message(f"Loaded {len(self.protocols)} protocol templates")
+
+    def _update_empty_state(self):
+        """Toggle the U-13-style empty-state hint against the process tree.
+
+        The placeholder is mutually exclusive with the tree: it is shown
+        when a study is loaded but its merged process sequence (study-level
+        + assay-level) is empty.  When no study is loaded the tree keeps
+        showing the protocol templates instead.
+        """
+        study_loaded = self.process_manager is not None and bool(self.main_window.current_study)
+        empty = study_loaded and self.tree.topLevelItemCount() == 0
+        self.empty_placeholder.setVisible(empty)
+        self.tree.setVisible(not empty)
 
     def _load_process_sequence(self):
         """Load existing process sequence from study data."""
         study_data = self.main_window.get_study_data()
         if not study_data:
+            self._update_empty_state()
             return
 
         # Extract process_sequence from studies[0]['processSequence']
@@ -543,6 +585,8 @@ class ProcessSequencePage(ScrollablePage):
 
                 self.process_tree_items[self.process_manager._get_process_id(process)] = item
 
+        self._update_empty_state()
+
     @staticmethod
     def _process_info_count(process: dict) -> int:
         """Return a heuristic count of information richness in *process*.
@@ -585,6 +629,20 @@ class ProcessSequencePage(ScrollablePage):
             return str(protocol_data["section"])
         return "Protocols"
 
+    def _update_action_states(self):
+        """Enable/disable action buttons per selection/study state (U-11).
+
+        Remove/Save/Validate require a selected process; Add requires a
+        loaded study (a ``ProcessSequenceManager``).  The QMessageBox
+        guards in the handlers stay as defensive fallbacks but are
+        unreachable through the normal click path.
+        """
+        has_process = self.current_process is not None
+        self.remove_btn.setEnabled(has_process)
+        self.save_btn.setEnabled(has_process)
+        self.validate_btn.setEnabled(has_process)
+        self.add_btn.setEnabled(self.process_manager is not None)
+
     def _on_process_selected(self):
         """Handle process selection change."""
         selected = self.tree.selectedItems()
@@ -592,6 +650,7 @@ class ProcessSequencePage(ScrollablePage):
         if not selected:
             self._clear_process_details()
             self.current_process = None
+            self._update_action_states()
             return
 
         item = selected[0]
@@ -600,12 +659,14 @@ class ProcessSequencePage(ScrollablePage):
         if item_data.get("type") == "template":
             # Template selected - prompt to add as process
             self._on_add_process_from_template(item_data["data"])
+            self._update_action_states()
             return
 
         # Process selected
         process = item_data["data"]
         self.current_process = process
         self._load_process_details(process)
+        self._update_action_states()
 
     def _load_process_details(self, process: dict):
         """Load process details into the right panel."""
@@ -866,6 +927,7 @@ class ProcessSequencePage(ScrollablePage):
         self.file_attachment_widget.expected_attachments = []
         self.file_attachment_widget.attached_files = []
         self.file_attachment_widget.setup_ui()
+        self._update_action_states()
 
     def _on_add_process(self):
         """Handle add process button click."""
@@ -1209,9 +1271,13 @@ class ProcessSequencePage(ScrollablePage):
 
             self.process_tree_items[process.get("id", "")] = item
 
+        self._update_empty_state()
+        self._update_action_states()
+
     def on_enter(self):
         """Called when the page is shown."""
         self._load_protocols()
+        self._update_action_states()
 
     def on_exit(self):
         """Called when the page is hidden."""
@@ -1229,6 +1295,7 @@ class ProcessSequencePage(ScrollablePage):
         if self.process_manager:
             # Refresh process tree to reflect any changes
             self._refresh_process_tree()
+        self._update_action_states()
 
     def resizeEvent(self, event: Optional[QResizeEvent]):
         """Handle window resize to adjust parameters scroll area height."""

@@ -19,7 +19,11 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from utils.logging_config import get_logger
+
 from ..agent_tools.ids import set_test_id
+
+logger = get_logger(__name__)
 
 
 class StudyWizard(QDialog):
@@ -241,7 +245,7 @@ class StudyWizard(QDialog):
                 }
                 sequence_file_path = seq_file  # Store for copying
             except Exception as e:
-                print(f"Warning: Could not read sequence file: {e}")
+                logger.warning(f"Warning: Could not read sequence file: {e}")
 
         return {
             "investigation_id": self.inv_combo.currentText(),

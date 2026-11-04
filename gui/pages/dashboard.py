@@ -4,10 +4,17 @@ Dashboard page for the ISA-JSON Data Steward GUI.
 
 from pathlib import Path
 
-from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QGridLayout, QLabel, QVBoxLayout, QWidget
 
 from ..agent_tools.ids import set_test_id
-from ..widgets.common import ActionButton, CardWidget, InfoCard, PrimaryButton, SectionHeader
+from ..widgets.common import (
+    ActionButton,
+    CardWidget,
+    InfoCard,
+    PrimaryButton,
+    SectionHeader,
+    set_ui_role,
+)
 from .base_page import ScrollablePage
 
 
@@ -23,11 +30,11 @@ class DashboardPage(ScrollablePage):
         """Set up the dashboard UI."""
         # Welcome section
         welcome_label = QLabel("Dashboard")
+        # U-03: no hardcoded color -- the theme QSS label color applies.
         welcome_label.setStyleSheet("""
             QLabel {
                 font-size: 24px;
                 font-weight: bold;
-                color: #2c3e50;
                 padding: 10px 0;
             }
         """)
@@ -54,33 +61,36 @@ class DashboardPage(ScrollablePage):
         # Quick actions
         self.add_widget(SectionHeader("Quick Actions"))
 
-        actions_layout = QHBoxLayout()
+        # U-08: a 3-column grid keeps the row's minimum width under the
+        # default content viewport (a single row of five buttons forced a
+        # horizontal scrollbar at the plan's 938px probe width).
+        actions_layout = QGridLayout()
         actions_layout.setSpacing(12)
 
         create_inv_btn = PrimaryButton("Create New Investigation")
         set_test_id(create_inv_btn, "page.dashboard.createInvestigationButton")
         create_inv_btn.clicked.connect(self._on_create_investigation)
-        actions_layout.addWidget(create_inv_btn)
+        actions_layout.addWidget(create_inv_btn, 0, 0)
 
         create_study_btn = PrimaryButton("Create New Study")
         set_test_id(create_study_btn, "page.dashboard.createStudyButton")
         create_study_btn.clicked.connect(self._on_create_study)
-        actions_layout.addWidget(create_study_btn)
+        actions_layout.addWidget(create_study_btn, 0, 1)
 
         open_study_btn = ActionButton("Open Recent Study")
         set_test_id(open_study_btn, "page.dashboard.openRecentStudyButton")
         open_study_btn.clicked.connect(self._on_open_recent)
-        actions_layout.addWidget(open_study_btn)
-
-        browse_ontology_btn = ActionButton("Browse Ontology")
-        set_test_id(browse_ontology_btn, "page.dashboard.browseOntologyButton")
-        browse_ontology_btn.clicked.connect(self._on_browse_ontology)
-        actions_layout.addWidget(browse_ontology_btn)
+        actions_layout.addWidget(open_study_btn, 0, 2)
 
         batch_btn = PrimaryButton("Run Batch Pipeline")
         set_test_id(batch_btn, "page.dashboard.runBatchButton")
         batch_btn.clicked.connect(self._on_run_batch_pipeline)
-        actions_layout.addWidget(batch_btn)
+        actions_layout.addWidget(batch_btn, 1, 0)
+
+        browse_ontology_btn = ActionButton("Browse Ontology")
+        set_test_id(browse_ontology_btn, "page.dashboard.browseOntologyButton")
+        browse_ontology_btn.clicked.connect(self._on_browse_ontology)
+        actions_layout.addWidget(browse_ontology_btn, 1, 1)
 
         actions_widget = QWidget()
         actions_widget.setLayout(actions_layout)
@@ -93,11 +103,13 @@ class DashboardPage(ScrollablePage):
         context_layout = QVBoxLayout(context_card)
 
         self.investigation_label = QLabel("No investigation selected")
-        self.investigation_label.setStyleSheet("color: #7f8c8d; padding: 4px;")
+        set_ui_role(self.investigation_label, "muted")
+        self.investigation_label.setStyleSheet("padding: 4px;")
         context_layout.addWidget(self.investigation_label)
 
         self.study_label = QLabel("No study selected")
-        self.study_label.setStyleSheet("color: #7f8c8d; padding: 4px;")
+        set_ui_role(self.study_label, "muted")
+        self.study_label.setStyleSheet("padding: 4px;")
         context_layout.addWidget(self.study_label)
 
         self.add_widget(context_card)
@@ -179,12 +191,12 @@ class DashboardPage(ScrollablePage):
 
         if inv_id:
             self.investigation_label.setText(f"Investigation: {inv_id}")
-            self.investigation_label.setStyleSheet(
-                "color: #2c3e50; padding: 4px; font-weight: bold;"
-            )
+            set_ui_role(self.investigation_label, None)
+            self.investigation_label.setStyleSheet("padding: 4px; font-weight: bold;")
         else:
             self.investigation_label.setText("No investigation selected")
-            self.investigation_label.setStyleSheet("color: #7f8c8d; padding: 4px;")
+            set_ui_role(self.investigation_label, "muted")
+            self.investigation_label.setStyleSheet("padding: 4px;")
 
         if study_id:
             study_name = study_id
@@ -199,10 +211,12 @@ class DashboardPage(ScrollablePage):
                     study_name = sd.get("title") or sd.get("study_name") or study_name
 
             self.study_label.setText(f"Study: {study_name}")
-            self.study_label.setStyleSheet("color: #2c3e50; padding: 4px; font-weight: bold;")
+            set_ui_role(self.study_label, None)
+            self.study_label.setStyleSheet("padding: 4px; font-weight: bold;")
         else:
             self.study_label.setText("No study selected")
-            self.study_label.setStyleSheet("color: #7f8c8d; padding: 4px;")
+            set_ui_role(self.study_label, "muted")
+            self.study_label.setStyleSheet("padding: 4px;")
 
     def _is_image_file(self, path: Path) -> bool:
         """Check if a file is an image."""

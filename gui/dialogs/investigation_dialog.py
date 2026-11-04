@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..agent_tools.ids import set_test_id
+from ..widgets.common import set_ui_role
 
 
 class InvestigationDialog(QDialog):
@@ -41,7 +42,8 @@ class InvestigationDialog(QDialog):
             "It groups related studies under a single research project."
         )
         info_label.setWordWrap(True)
-        info_label.setStyleSheet("color: #666; margin-bottom: 8px;")
+        set_ui_role(info_label, "muted")
+        info_label.setStyleSheet("margin-bottom: 8px;")
         layout.addWidget(info_label)
 
         # Investigation details group

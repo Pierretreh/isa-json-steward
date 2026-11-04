@@ -11,7 +11,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QFrame,
-    QHBoxLayout,
+    QGridLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
 from ..agent_tools.ids import set_test_id
 from ..dialogs.investigation_dialog import InvestigationDialog
 from ..dialogs.study_wizard import StudyWizard
-from ..widgets.common import ActionButton, PrimaryButton, SectionHeader
+from ..widgets.common import ActionButton, DangerButton, PrimaryButton, SectionHeader, set_ui_role
 from .base_page import ScrollablePage
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -71,14 +71,14 @@ class StudiesPage(ScrollablePage):
 
         self.set_expanding(self.tree)
 
-        # Configure header resize modes - Interactive for user-adjustable columns
+        # U-08: content columns size to their content (full header text or a
+        # clean "…" instead of mid-word clipping) and the last column
+        # stretches to fill the panel.
         header = self.tree.header()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        self.tree.setColumnWidth(0, 300)
-        self.tree.setColumnWidth(1, 120)
-        self.tree.setColumnWidth(2, 200)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setTextElideMode(Qt.TextElideMode.ElideRight)
 
         left_layout.addWidget(self.tree)
 
@@ -88,14 +88,10 @@ class StudiesPage(ScrollablePage):
         right_layout.setContentsMargins(0, 0, 0, 0)
 
         details_group = QFrame()
-        details_group.setStyleSheet("""
-            QFrame {
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                padding: 12px;
-            }
-        """)
+        # U-03: theme colors come from the uiRole="panel" QSS rule; only box
+        # metrics stay inline.
+        set_ui_role(details_group, "panel")
+        details_group.setStyleSheet("border-radius: 8px; padding: 12px;")
         details_layout = QVBoxLayout(details_group)
 
         details_header = QLabel("Details")
@@ -108,12 +104,11 @@ class StudiesPage(ScrollablePage):
             QTextBrowser {
                 background-color: transparent;
                 border: none;
-                color: #333;
                 font-size: 12px;
             }
         """)
         self.details_browser.setHtml(
-            '<span style="color: #666;">Select an investigation or study to view details</span>'
+            '<span>Select an investigation or study to view details</span>'
         )
         details_layout.addWidget(self.details_browser)
 
@@ -129,34 +124,50 @@ class StudiesPage(ScrollablePage):
         self.add_widget(splitter)
 
         # Buttons
-        buttons_layout = QHBoxLayout()
+        # U-08: a 2-column grid keeps the row's minimum width under the
+        # content viewport (a single row of four buttons forced a
+        # horizontal scrollbar with the theme QSS applied).
+        buttons_layout = QGridLayout()
+        buttons_layout.setSpacing(12)
 
         refresh_btn = ActionButton("Refresh")
         set_test_id(refresh_btn, "page.studies.refreshButton")
         refresh_btn.clicked.connect(self.refresh)
-        buttons_layout.addWidget(refresh_btn)
+        buttons_layout.addWidget(refresh_btn, 1, 0)
 
         create_inv_btn = PrimaryButton("Create New Investigation")
         set_test_id(create_inv_btn, "page.studies.createInvestigationButton")
         create_inv_btn.clicked.connect(self._on_create_investigation)
-        buttons_layout.addWidget(create_inv_btn)
+        buttons_layout.addWidget(create_inv_btn, 0, 0)
 
         create_btn = PrimaryButton("Create New Study")
         set_test_id(create_btn, "page.studies.createStudyButton")
         create_btn.clicked.connect(self._on_create_study)
-        buttons_layout.addWidget(create_btn)
+        buttons_layout.addWidget(create_btn, 0, 1)
 
-        delete_btn = ActionButton("Delete Selected")
+        # U-14: destructive action -> DangerButton (testId/label unchanged).
+        delete_btn = DangerButton("Delete Selected")
         set_test_id(delete_btn, "page.studies.deleteButton")
         delete_btn.clicked.connect(self._on_delete)
-        buttons_layout.addWidget(delete_btn)
-
-        buttons_layout.addStretch()
+        buttons_layout.addWidget(delete_btn, 1, 1)
 
         self.add_layout(buttons_layout)
 
+        # U-11: Delete starts disabled until a tree item is selected.
+        self.delete_btn = delete_btn
+        self.tree.itemSelectionChanged.connect(self._update_action_states)
+        self._update_action_states()
+
         # Load data
         self.refresh()
+
+    def _update_action_states(self):
+        """Enable/disable action buttons per current selection (U-11).
+
+        The QMessageBox guard in ``_on_delete`` stays as a defensive
+        fallback but is unreachable through the normal click path.
+        """
+        self.delete_btn.setEnabled(bool(self.tree.selectedItems()))
 
     def refresh(self):
         """Refresh the investigations and studies list."""
@@ -221,6 +232,8 @@ class StudiesPage(ScrollablePage):
                     if study_item.text(2) == selected_data[2]:
                         study_item.setSelected(True)
                         break
+
+        self._update_action_states()
 
     def _on_create_investigation(self):
         """Handle create investigation button click."""
@@ -414,7 +427,7 @@ class StudiesPage(ScrollablePage):
         html_parts.append(
             f'<b style="font-size: 14px;">{ISAJsonPreviewHelper._escape(inv_id)}</b><br>'
         )
-        html_parts.append('<span style="color: #666;">Type:</span> Investigation<br>')
+        html_parts.append('<span>Type:</span> Investigation<br>')
 
         # Load investigation metadata if available
         try:
@@ -427,12 +440,12 @@ class StudiesPage(ScrollablePage):
                 description = inv_meta.get("description", "")
                 if title:
                     html_parts.append(
-                        f'<span style="color: #666;">Title:</span> '
+                        f'<span>Title:</span> '
                         f"{ISAJsonPreviewHelper._escape(title)}<br>"
                     )
                 if description:
                     html_parts.append(
-                        f'<span style="color: #666;">Description:</span> '
+                        f'<span>Description:</span> '
                         f"{ISAJsonPreviewHelper._escape(description)}<br>"
                     )
         except Exception:
@@ -471,7 +484,7 @@ class StudiesPage(ScrollablePage):
                     html_parts.append(f"<li>{display}</li>")
                 html_parts.append("</ul>")
             else:
-                html_parts.append('<span style="color: #999;">No studies found</span>')
+                html_parts.append('<span>No studies found</span>')
         except Exception as e:
             html_parts.append(
                 f'<span style="color: #dc3545;">Error: {ISAJsonPreviewHelper._escape(str(e))}</span>'  # noqa: E501
@@ -487,7 +500,7 @@ class StudiesPage(ScrollablePage):
             study_json_path = dm.get_study_json_path(inv_id, study_id)
             if not study_json_path.exists():
                 self.details_browser.setHtml(
-                    f'<span style="color: #999;">Study file not found: {ISAJsonPreviewHelper._escape(study_id)}</span>'  # noqa: E501
+                    f'<span>Study file not found: {ISAJsonPreviewHelper._escape(study_id)}</span>'  # noqa: E501
                 )
                 return
 

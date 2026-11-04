@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..agent_tools.ids import set_test_id
+from ..widgets.common import set_ui_role
 from ..widgets.file_attachment_widget import FileAttachmentWidget
 from .add_parameter_dialog import AddParameterDialog
 from .material_selection_dialog import MaterialSelectionDialog
@@ -45,6 +46,9 @@ from utils.config_loader import get_profile  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.constants import TemplateConstants  # noqa: E402
+from utils.logging_config import get_logger  # noqa: E402
+
+logger = get_logger(__name__)
 
 
 class AssayDialog(QDialog):
@@ -260,7 +264,8 @@ class AssayDialog(QDialog):
 
         # Add required indicator
         self.materials_required_label = QLabel("<span style='color: red;'>*</span> Required")
-        self.materials_required_label.setStyleSheet("color: red; font-weight: bold;")
+        set_ui_role(self.materials_required_label, "error")
+        self.materials_required_label.setStyleSheet("font-weight: bold;")
         inputs_header_layout.addWidget(self.materials_required_label)
         inputs_header_layout.addStretch()
 
@@ -518,7 +523,7 @@ class AssayDialog(QDialog):
                     # Extract description from template
                     new_description = template_data.get("description", "")
         except Exception as e:
-            print(f"Warning: Could not load template: {e}")
+            logger.warning(f"Warning: Could not load template: {e}")
 
         return new_parameter_definitions, new_expected_attachments, new_description
 
