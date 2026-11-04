@@ -77,6 +77,10 @@ class StubApp:
             app.setStyleSheet(style_path.read_text(encoding="utf-8"))
         self.settings.setValue("gui/theme", theme)
 
+    def setFont(self, font) -> None:  # noqa: N802 - mirrors QApplication API
+        """Accept a font like ``QApplication.setFont`` (headless-safe stub)."""
+        pass
+
 
 @pytest.fixture(scope="session")
 def qapp():
@@ -102,10 +106,12 @@ def stub_app():
 def main_window(qtbot, stub_app):
     """A real ``MainWindow``, registered with ``qtbot`` for auto close/cleanup.
 
-    Teardown navigates back to the dashboard and stops the auto-save timer
-    BEFORE ``qtbot`` closes the window: ``MainWindow.closeEvent`` auto-saves
-    the current page, and the settings page would open a modal QMessageBox
-    and rewrite ``config/settings.json`` (known hazard, see AGENTS.md).
+    Teardown stops the auto-save timer and navigates back to the dashboard
+    before ``qtbot`` closes the window.  This is belt-and-braces only: since
+    U-02 the product no longer depends on it -- ``SettingsPage.save_data()``
+    is a no-op (settings persist ONLY via the explicit Save button), so
+    ``MainWindow.closeEvent`` can neither rewrite ``config/settings.json``
+    nor open the restart modal at shutdown.
     """
     from gui.main_window import MainWindow
 

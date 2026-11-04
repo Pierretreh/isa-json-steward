@@ -566,3 +566,41 @@ class TestSingletonStrict:
         assert new.strict is True
         with pytest.raises(Exception, match="profile.json"):
             new.profile
+
+
+# ---------------------------------------------------------------------------
+# discover_profile_dir(): env var -> *-profile/ glob -> None (U-05 relocation)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestDiscoverProfileDir:
+    """``discover_profile_dir()`` (relocated from ``gui/main.py``, pure move)."""
+
+    def test_env_var_wins(self, tmp_path, monkeypatch):
+        from utils.config_loader import discover_profile_dir
+
+        profile = tmp_path / "env-profile"
+        (profile / "config").mkdir(parents=True)
+        monkeypatch.setenv("ISA_STEWARD_PROFILE", str(profile))
+        assert discover_profile_dir(tmp_path) == profile.resolve()
+
+    def test_env_var_must_name_a_directory(self, tmp_path, monkeypatch):
+        from utils.config_loader import discover_profile_dir
+
+        monkeypatch.setenv("ISA_STEWARD_PROFILE", str(tmp_path / "missing-dir"))
+        assert discover_profile_dir(tmp_path) is None
+
+    def test_glob_picks_sorted_first(self, tmp_path, monkeypatch):
+        from utils.config_loader import discover_profile_dir
+
+        monkeypatch.delenv("ISA_STEWARD_PROFILE", raising=False)
+        (tmp_path / "zeta-profile").mkdir()
+        (tmp_path / "alpha-profile").mkdir()
+        assert discover_profile_dir(tmp_path) == (tmp_path / "alpha-profile").resolve()
+
+    def test_returns_none_without_candidates(self, tmp_path, monkeypatch):
+        from utils.config_loader import discover_profile_dir
+
+        monkeypatch.delenv("ISA_STEWARD_PROFILE", raising=False)
+        assert discover_profile_dir(tmp_path) is None

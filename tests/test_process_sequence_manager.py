@@ -2,6 +2,8 @@
 Unit tests for ProcessSequenceManager.
 """
 
+from typing import Any, Dict
+
 import pytest
 
 from utils.process_sequence_manager import ProcessSequenceManager
@@ -613,3 +615,76 @@ class TestProcessSequenceManagerPureLogic:
         assert manager._get_next_process_counter("A") == 1
         assert manager._get_next_process_counter("B") == 1
         assert manager._get_next_process_counter("A") == 2
+
+
+@pytest.mark.unit
+class TestLoadProcessSequenceShapes:
+    """``_load_process_sequence`` must handle both study-data shapes.
+
+    ``_load_protocols`` already unwrapped ``studies[0]`` for the complete
+    ISA-JSON structure while ``_load_process_sequence`` only looked at the
+    top level, so direct manager use on a full ISA-JSON document returned
+    zero processes (masked in the GUI by page-level pre-extraction).
+    """
+
+    @staticmethod
+    def _full_isa_json():
+        return {
+            "@id": "#investigation/inv_1",
+            "identifier": "inv_1",
+            "studies": [
+                {
+                    "@id": "#study/study_1",
+                    "identifier": "study_1",
+                    "materials": {
+                        "sources": [{"@id": "#source_s1", "name": "S1"}],
+                        "samples": [],
+                        "otherMaterials": [],
+                    },
+                    "protocols": [{"@id": "#protocol/p1", "name": "protocol_1"}],
+                    "processSequence": [
+                        {
+                            "@id": "#process_p1",
+                            "name": "Test Process",
+                            "executesProtocol": {"@id": "#protocol/p1", "name": "protocol_1"},
+                            "inputs": [{"@id": "#source_s1"}],
+                            "outputs": [],
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def test_full_isa_json_unwraps_studies0(self):
+        """processSequence inside studies[0] is found (regression)."""
+        manager = ProcessSequenceManager(study_data=self._full_isa_json())
+        processes = manager.get_processes()
+        assert len(processes) == 1
+        assert processes[0]["name"] == "Test Process"
+
+    def test_full_isa_json_protocols_and_sequence_agree(self):
+        """protocols and processSequence come from the same study level."""
+        manager = ProcessSequenceManager(study_data=self._full_isa_json())
+        assert [p.get("name") for p in manager.protocols] == ["protocol_1"]
+        assert len(manager.get_processes()) == 1
+
+    def test_top_level_process_sequence_dict_still_works(self):
+        """The simple internal shape (process_sequence.processes) is unchanged."""
+        study_data = {
+            "materials": {"sources": [], "samples": [], "otherMaterials": []},
+            "process_sequence": {"processes": [{"id": "p1", "name": "Internal"}]},
+        }
+        manager = ProcessSequenceManager(study_data=study_data)
+        assert [p["name"] for p in manager.get_processes()] == ["Internal"]
+
+    def test_top_level_process_sequence_list_still_works(self):
+        """The camelCase top-level list shape is unchanged."""
+        study_data = {"processSequence": [{"@id": "#p1", "name": "List Shape"}]}
+        manager = ProcessSequenceManager(study_data=study_data)
+        assert [p["name"] for p in manager.get_processes()] == ["List Shape"]
+
+    def test_empty_document_returns_no_processes(self):
+        """A study with an empty processSequence yields zero processes."""
+        study_data = {"studies": [{"processSequence": [], "protocols": []}]}
+        manager = ProcessSequenceManager(study_data=study_data)
+        assert manager.get_processes() == []

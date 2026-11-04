@@ -253,3 +253,86 @@ class TestSetupLoggingFormat:
         formatter = _stream_handlers(_root())[0].formatter
         assert formatter is not None
         assert "CUSTOM" not in formatter._fmt  # noqa: SLF001
+
+
+@pytest.mark.unit
+class TestJsonlEventHandler:
+    """U-12: GUI log records flow into the JSONL event stream as ``kind=log``.
+
+    These are the "GUI log rows forwarded" bridge tests from
+    ``plans/gui-usability-fixes.md`` (U-12 suggested tests): the handler is
+    exercised directly with a stub event logger, so no Qt or file I/O is
+    needed here.
+    """
+
+    @staticmethod
+    def _handler_with_stub():
+        from utils.logging_config import JsonlEventHandler
+
+        class StubEventLogger:
+            def __init__(self):
+                self.rows = []
+
+            def log(self, kind, event, **kwargs):
+                row = {"kind": kind, "event": event, **kwargs}
+                self.rows.append(row)
+                return row
+
+        stub = StubEventLogger()
+        return JsonlEventHandler(event_logger=stub), stub
+
+    @staticmethod
+    def _record(name: str, level: int, message: str) -> logging.LogRecord:
+        return logging.LogRecord(
+            name=name,
+            level=level,
+            pathname=__file__,
+            lineno=1,
+            msg=message,
+            args=(),
+            exc_info=None,
+        )
+
+    def test_gui_warning_record_forwarded_as_log_row(self):
+        """A gui-module WARNING becomes kind=log / event=warning with detail."""
+        handler, stub = self._handler_with_stub()
+
+        handler.emit(
+            self._record(
+                "gui.pages.templates", logging.WARNING, "Error loading template bad.json: boom"
+            )
+        )
+
+        assert len(stub.rows) == 1
+        row = stub.rows[0]
+        assert row["kind"] == "log"
+        assert row["event"] == "warning"
+        assert row["detail"]["level"] == "WARNING"
+        assert row["detail"]["logger"] == "gui.pages.templates"
+        assert row["detail"]["message"] == "Error loading template bad.json: boom"
+
+    def test_error_record_maps_to_error_event(self):
+        """ERROR+ records map to the ``error`` event (JsonlEventHandler doc)."""
+        handler, stub = self._handler_with_stub()
+
+        handler.emit(
+            self._record("gui.pages.settings", logging.ERROR, "Error loading config: boom")
+        )
+
+        assert stub.rows[0]["kind"] == "log"
+        assert stub.rows[0]["event"] == "error"
+        assert stub.rows[0]["detail"]["level"] == "ERROR"
+
+    def test_gui_logger_warning_propagates_to_bridge(self):
+        """End-to-end propagation: a ``gui.*`` logger record reaches the bridge."""
+        handler, stub = self._handler_with_stub()
+        root = _root()
+        root.addHandler(handler)
+        try:
+            logging.getLogger("gui.pages.settings").warning("Error loading config: boom")
+        finally:
+            root.removeHandler(handler)
+
+        assert any(
+            row["detail"]["message"] == "Error loading config: boom" for row in stub.rows
+        )
