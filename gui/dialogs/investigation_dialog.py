@@ -27,7 +27,7 @@ class InvestigationDialog(QDialog):
     def __init__(self, parent=None, dm=None):
         super().__init__(parent)
         self.dm = dm
-        set_test_id(self, "dialog.investigation")
+        set_test_id(self, "dialog.investigation", accessible_name="Create Investigation dialog")
         self.setWindowTitle("Create New Investigation")
         self.setMinimumWidth(550)
         self.setup_ui()
@@ -51,17 +51,29 @@ class InvestigationDialog(QDialog):
         form = QFormLayout(details_group)
 
         self.id_edit = QLineEdit()
-        set_test_id(self.id_edit, "dialog.investigation.idField")
+        set_test_id(
+            self.id_edit,
+            "dialog.investigation.idField",
+            accessible_name="Investigation ID",
+        )
         self.id_edit.setPlaceholderText("e.g., inv_my_project (letters, numbers, underscores)")
         form.addRow("Investigation ID:", self.id_edit)
 
         self.title_edit = QLineEdit()
-        set_test_id(self.title_edit, "dialog.investigation.titleField")
+        set_test_id(
+            self.title_edit,
+            "dialog.investigation.titleField",
+            accessible_name="Investigation title",
+        )
         self.title_edit.setPlaceholderText("e.g., Protein Expression Study 2024")
         form.addRow("Title:", self.title_edit)
 
         self.description_edit = QTextEdit()
-        set_test_id(self.description_edit, "dialog.investigation.descriptionField")
+        set_test_id(
+            self.description_edit,
+            "dialog.investigation.descriptionField",
+            accessible_name="Investigation description",
+        )
         self.description_edit.setPlaceholderText("Brief description of the investigation...")
         self.description_edit.setMaximumHeight(100)
         form.addRow("Description:", self.description_edit)
@@ -73,12 +85,16 @@ class InvestigationDialog(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
-        set_test_id(cancel_btn, "dialog.investigation.cancelButton")
+        set_test_id(cancel_btn, "dialog.investigation.cancelButton", accessible_name="Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         create_btn = QPushButton("Create Investigation")
-        set_test_id(create_btn, "dialog.investigation.createButton")
+        set_test_id(
+            create_btn,
+            "dialog.investigation.createButton",
+            accessible_name="Create investigation",
+        )
         create_btn.setDefault(True)
         create_btn.clicked.connect(self._on_create)
         btn_layout.addWidget(create_btn)

@@ -21,7 +21,7 @@ class AddParameterDialog(QDialog):
     def __init__(self, parent=None, existing_params=None):
         super().__init__(parent)
         self.existing_params = existing_params or []
-        set_test_id(self, "dialog.addParameter")
+        set_test_id(self, "dialog.addParameter", accessible_name="Add Parameter dialog")
         self.setWindowTitle("Add Parameter")
         self.setMinimumWidth(400)
         self.setup_ui()
@@ -33,22 +33,38 @@ class AddParameterDialog(QDialog):
         form = QFormLayout()
 
         self.name_edit = QLineEdit()
-        set_test_id(self.name_edit, "dialog.addParameter.nameField")
+        set_test_id(
+            self.name_edit,
+            "dialog.addParameter.nameField",
+            accessible_name="Parameter name",
+        )
         self.name_edit.setPlaceholderText("Parameter name (e.g., temperature)")
         form.addRow("Parameter Name:", self.name_edit)
 
         self.description_edit = QLineEdit()
-        set_test_id(self.description_edit, "dialog.addParameter.descriptionField")
+        set_test_id(
+            self.description_edit,
+            "dialog.addParameter.descriptionField",
+            accessible_name="Parameter description",
+        )
         self.description_edit.setPlaceholderText("Description (optional)")
         form.addRow("Description:", self.description_edit)
 
         self.unit_edit = QLineEdit()
-        set_test_id(self.unit_edit, "dialog.addParameter.unitField")
+        set_test_id(
+            self.unit_edit,
+            "dialog.addParameter.unitField",
+            accessible_name="Parameter unit",
+        )
         self.unit_edit.setPlaceholderText("Unit (e.g., °C, minutes)")
         form.addRow("Unit:", self.unit_edit)
 
         self.value_edit = QLineEdit()
-        set_test_id(self.value_edit, "dialog.addParameter.valueField")
+        set_test_id(
+            self.value_edit,
+            "dialog.addParameter.valueField",
+            accessible_name="Default parameter value",
+        )
         self.value_edit.setPlaceholderText("Default value (optional)")
         form.addRow("Default Value:", self.value_edit)
 
@@ -59,12 +75,12 @@ class AddParameterDialog(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
-        set_test_id(cancel_btn, "dialog.addParameter.cancelButton")
+        set_test_id(cancel_btn, "dialog.addParameter.cancelButton", accessible_name="Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         add_btn = QPushButton("Add Parameter")
-        set_test_id(add_btn, "dialog.addParameter.addButton")
+        set_test_id(add_btn, "dialog.addParameter.addButton", accessible_name="Add parameter")
         add_btn.clicked.connect(self._on_add)
         btn_layout.addWidget(add_btn)
 

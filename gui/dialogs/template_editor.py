@@ -56,7 +56,7 @@ class TemplateEditorDialog(QDialog):
         self.template_type = template_type
         self.template_data: Dict[str, Any] = template_data or {}
         self._param_row_seq = 0  # Monotonic counter for dynamic row widget IDs
-        set_test_id(self, "dialog.templateEditor")
+        set_test_id(self, "dialog.templateEditor", accessible_name="Template editor dialog")
         self.setWindowTitle(f"Edit {template_type.capitalize()} Template")
         self.setMinimumSize(900, 700)
         self.setup_ui()
@@ -94,12 +94,12 @@ class TemplateEditorDialog(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
-        set_test_id(cancel_btn, "dialog.templateEditor.cancelButton")
+        set_test_id(cancel_btn, "dialog.templateEditor.cancelButton", accessible_name="Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         save_btn = QPushButton("Save")
-        set_test_id(save_btn, "dialog.templateEditor.saveButton")
+        set_test_id(save_btn, "dialog.templateEditor.saveButton", accessible_name="Save template")
         save_btn.clicked.connect(self._on_save)
         btn_layout.addWidget(save_btn)
 
@@ -117,13 +117,21 @@ class TemplateEditorDialog(QDialog):
         form = QFormLayout()
 
         self.name_edit = QLineEdit()
-        set_test_id(self.name_edit, "dialog.templateEditor.nameField")
+        set_test_id(
+            self.name_edit,
+            "dialog.templateEditor.nameField",
+            accessible_name="Template name",
+        )
         self.name_edit.setText(self.template_data.get("name", ""))
         self.name_edit.setPlaceholderText("Template name")
         form.addRow("Name:", self.name_edit)
 
         self.desc_edit = QTextEdit()
-        set_test_id(self.desc_edit, "dialog.templateEditor.descriptionField")
+        set_test_id(
+            self.desc_edit,
+            "dialog.templateEditor.descriptionField",
+            accessible_name="Template description",
+        )
         self.desc_edit.setPlainText(self.template_data.get("description", ""))
         self.desc_edit.setPlaceholderText("Template description...")
         self.desc_edit.setMaximumHeight(80)
@@ -143,7 +151,11 @@ class TemplateEditorDialog(QDialog):
 
         # JSON editor
         self.json_edit = QTextEdit()
-        set_test_id(self.json_edit, "dialog.templateEditor.jsonEditor")
+        set_test_id(
+            self.json_edit,
+            "dialog.templateEditor.jsonEditor",
+            accessible_name="Template JSON editor",
+        )
         self.json_edit.setPlainText(json.dumps(self.template_data, indent=2))
         self.json_edit.setPlaceholderText("Enter JSON data...")
         self.json_edit.setFont(QFont("Courier New", 10))
@@ -157,7 +169,12 @@ class TemplateEditorDialog(QDialog):
 
         # Format button
         format_btn = QPushButton("Format JSON")
-        set_test_id(format_btn, "dialog.templateEditor.formatButton")
+        set_test_id(
+            format_btn,
+            "dialog.templateEditor.formatButton",
+            accessible_name="Format template JSON",
+        )
+        format_btn.setAccessibleDescription("Reformat the template JSON with indentation")
         format_btn.clicked.connect(self._format_json)
         layout.addWidget(format_btn)
 
@@ -178,7 +195,11 @@ class TemplateEditorDialog(QDialog):
         header_layout.addStretch()
 
         add_param_btn = QPushButton("+ Add Parameter")
-        set_test_id(add_param_btn, "dialog.templateEditor.addParameterButton")
+        set_test_id(
+            add_param_btn,
+            "dialog.templateEditor.addParameterButton",
+            accessible_name="Add template parameter",
+        )
         add_param_btn.clicked.connect(self._on_add_parameter)
         header_layout.addWidget(add_param_btn)
 
@@ -186,7 +207,12 @@ class TemplateEditorDialog(QDialog):
 
         # Parameters table
         self.params_table = QTableWidget()
-        set_test_id(self.params_table, "dialog.templateEditor.parametersTable")
+        set_test_id(
+            self.params_table,
+            "dialog.templateEditor.parametersTable",
+            accessible_name="Template parameters table",
+        )
+        self.params_table.setAccessibleDescription("Parameters defined by the template")
         self.params_table.setColumnCount(5)
         self.params_table.setHorizontalHeaderLabels(
             ["Parameter Name", "Description", "Unit", "Default Value", "Actions"]
@@ -258,7 +284,13 @@ class TemplateEditorDialog(QDialog):
         unit_combo = QComboBox()
         seq = self._param_row_seq
         self._param_row_seq += 1
-        set_test_id(unit_combo, f"dialog.templateEditor.unitCombo_{seq}")
+        param_name = param_data.get("name", "") or f"parameter {seq}"
+        set_test_id(
+            unit_combo,
+            f"dialog.templateEditor.unitCombo_{seq}",
+            accessible_name=f"{param_name} unit",
+        )
+        unit_combo.setAccessibleDescription(f"Unit for the {param_name} parameter")
         unit_combo.setEditable(True)
         unit_combo.addItem("")  # Empty option
         for unit in sorted(self.NUMERIC_UNITS):
@@ -277,9 +309,14 @@ class TemplateEditorDialog(QDialog):
 
         # Remove button
         remove_btn = QToolButton()
-        set_test_id(remove_btn, f"dialog.templateEditor.removeButton_{seq}")
+        set_test_id(
+            remove_btn,
+            f"dialog.templateEditor.removeButton_{seq}",
+            accessible_name=f"Remove the {param_name} parameter",
+        )
         remove_btn.setText("×")
         remove_btn.setToolTip("Remove parameter")
+        remove_btn.setAccessibleDescription("Remove parameter")  # tooltips seed descriptions
         remove_btn.clicked.connect(lambda checked, r=row: self._on_remove_parameter(r))
         self.params_table.setCellWidget(row, 4, remove_btn)
 

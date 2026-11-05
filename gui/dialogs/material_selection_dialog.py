@@ -26,7 +26,7 @@ class MaterialSelectionDialog(QDialog):
         self.materials = materials or []
         self.multi_select = multi_select
         self.selected_materials = []
-        set_test_id(self, "dialog.materialSelection")
+        set_test_id(self, "dialog.materialSelection", accessible_name="Select Materials dialog")
         self.setWindowTitle(title)
         self.setMinimumSize(600, 500)
         self.setup_ui()
@@ -43,7 +43,11 @@ class MaterialSelectionDialog(QDialog):
         search_layout.addWidget(search_label)
 
         self.search_entry = QLineEdit()
-        set_test_id(self.search_entry, "dialog.materialSelection.searchField")
+        set_test_id(
+            self.search_entry,
+            "dialog.materialSelection.searchField",
+            accessible_name="Material search",
+        )
         self.search_entry.setPlaceholderText("Search materials...")
         self.search_entry.textChanged.connect(self._on_search_changed)
         search_layout.addWidget(self.search_entry)
@@ -52,12 +56,19 @@ class MaterialSelectionDialog(QDialog):
 
         # Material tree
         self.tree = QTreeWidget()
-        set_test_id(self.tree, "dialog.materialSelection.materialsTree")
+        set_test_id(
+            self.tree,
+            "dialog.materialSelection.materialsTree",
+            accessible_name="Materials tree",
+        )
+        self.tree.setAccessibleDescription("Materials available for selection")
         self.tree.setHeaderLabels(["Material", "Type", "ID"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setColumnWidth(0, 300)
         self.tree.setColumnWidth(1, 150)
         self.tree.setColumnHidden(2, True)  # Hide ID column
+        # N3 consistency: view-level elide keeps long item text at a clean "…"
+        self.tree.setTextElideMode(Qt.TextElideMode.ElideRight)
 
         if self.multi_select:
             self.tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
@@ -68,7 +79,11 @@ class MaterialSelectionDialog(QDialog):
 
         # Group by type checkbox
         self.group_by_type = QCheckBox("Group by material type")
-        set_test_id(self.group_by_type, "dialog.materialSelection.groupByTypeCheck")
+        set_test_id(
+            self.group_by_type,
+            "dialog.materialSelection.groupByTypeCheck",
+            accessible_name="Group by material type",
+        )
         self.group_by_type.setChecked(True)
         self.group_by_type.toggled.connect(self.load_materials)
         layout.addWidget(self.group_by_type)
@@ -80,10 +95,12 @@ class MaterialSelectionDialog(QDialog):
         set_test_id(
             buttons.button(QDialogButtonBox.StandardButton.Ok),
             "dialog.materialSelection.okButton",
+            accessible_name="OK",
         )
         set_test_id(
             buttons.button(QDialogButtonBox.StandardButton.Cancel),
             "dialog.materialSelection.cancelButton",
+            accessible_name="Cancel",
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)

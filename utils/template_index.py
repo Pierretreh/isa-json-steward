@@ -8,6 +8,10 @@ Scans the templates/ directory and generates:
 Assay and protocol templates get full metadata extracted.
 Material and device templates are listed at file level only.
 
+An absent template subdirectory is normal (a profile without a template
+kind) and is logged at DEBUG only (N7); genuine per-file parse failures
+stay at WARNING.
+
 Usage:
     from utils.template_index import write_template_index
     write_template_index(Path("templates"))
@@ -93,7 +97,8 @@ def scan_assay_templates(templates_root: Path) -> List[Dict]:
     assay_dir = templates_root / "assay_templates"
     results: List[Dict] = []
     if not assay_dir.exists():
-        logger.warning("Assay templates directory not found: %s", assay_dir)
+        # N7: a missing template kind is normal for a profile -- DEBUG only.
+        logger.debug("Assay templates directory not found: %s", assay_dir)
         return results
 
     for json_file in sorted(assay_dir.glob("*.json")):
@@ -112,7 +117,8 @@ def scan_protocol_templates(templates_root: Path) -> List[Dict]:
     protocol_dir = templates_root / "protocol_templates"
     results: List[Dict] = []
     if not protocol_dir.exists():
-        logger.warning("Protocol templates directory not found: %s", protocol_dir)
+        # N7: a missing template kind is normal for a profile -- DEBUG only.
+        logger.debug("Protocol templates directory not found: %s", protocol_dir)
         return results
 
     for json_file in sorted(protocol_dir.glob("*.json")):
@@ -131,7 +137,8 @@ def scan_material_templates(templates_root: Path) -> List[Dict]:
     material_dir = templates_root / "material_templates"
     results: List[Dict] = []
     if not material_dir.exists():
-        logger.warning("Material templates directory not found: %s", material_dir)
+        # N7: a missing template kind is normal for a profile -- DEBUG only.
+        logger.debug("Material templates directory not found: %s", material_dir)
         return results
 
     for json_file in sorted(material_dir.glob("*.json")):
@@ -150,7 +157,8 @@ def scan_device_templates(templates_root: Path) -> List[Dict]:
     device_dir = templates_root / "device_templates"
     results: List[Dict] = []
     if not device_dir.exists():
-        logger.warning("Device templates directory not found: %s", device_dir)
+        # N7: a missing template kind is normal for a profile -- DEBUG only.
+        logger.debug("Device templates directory not found: %s", device_dir)
         return results
 
     for json_file in sorted(device_dir.glob("*.json")):

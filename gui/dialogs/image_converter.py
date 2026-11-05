@@ -24,7 +24,7 @@ class ImageConverterDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        set_test_id(self, "dialog.imageConverter")
+        set_test_id(self, "dialog.imageConverter", accessible_name="Image converter dialog")
         self.setWindowTitle("Convert Image to TIFF")
         self.setMinimumWidth(500)
         self.setup_ui()
@@ -40,13 +40,21 @@ class ImageConverterDialog(QDialog):
         file_layout.addWidget(file_label)
 
         self.file_path_edit = QLineEdit()
-        set_test_id(self.file_path_edit, "dialog.imageConverter.filePathField")
+        set_test_id(
+            self.file_path_edit,
+            "dialog.imageConverter.filePathField",
+            accessible_name="Image file path",
+        )
         self.file_path_edit.setPlaceholderText("Select image file...")
         self.file_path_edit.setReadOnly(True)
         file_layout.addWidget(self.file_path_edit)
 
         browse_btn = QPushButton("Browse...")
-        set_test_id(browse_btn, "dialog.imageConverter.browseButton")
+        set_test_id(
+            browse_btn,
+            "dialog.imageConverter.browseButton",
+            accessible_name="Browse for an image file",
+        )
         browse_btn.clicked.connect(self._on_browse_file)
         file_layout.addWidget(browse_btn)
 
@@ -58,7 +66,11 @@ class ImageConverterDialog(QDialog):
         desc_layout.addWidget(desc_label)
 
         self.desc_edit = QLineEdit()
-        set_test_id(self.desc_edit, "dialog.imageConverter.descriptionField")
+        set_test_id(
+            self.desc_edit,
+            "dialog.imageConverter.descriptionField",
+            accessible_name="Image description",
+        )
         self.desc_edit.setPlaceholderText("Enter description...")
         desc_layout.addWidget(self.desc_edit)
 
@@ -75,12 +87,16 @@ class ImageConverterDialog(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
-        set_test_id(cancel_btn, "dialog.imageConverter.cancelButton")
+        set_test_id(cancel_btn, "dialog.imageConverter.cancelButton", accessible_name="Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         convert_btn = QPushButton("Convert")
-        set_test_id(convert_btn, "dialog.imageConverter.convertButton")
+        set_test_id(
+            convert_btn,
+            "dialog.imageConverter.convertButton",
+            accessible_name="Convert image to TIFF",
+        )
         convert_btn.clicked.connect(self._on_convert)
         btn_layout.addWidget(convert_btn)
 

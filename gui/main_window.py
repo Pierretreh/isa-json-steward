@@ -5,6 +5,7 @@ Main window for the ISA Data Steward GUI.
 import json
 
 # Import utilities
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -33,7 +34,7 @@ from utils.constants import UIConstants  # noqa: E402
 from utils.directory_manager import DirectoryManager  # noqa: E402
 from utils.logging_config import get_logger  # noqa: E402
 from utils.ontology_manager import OntologyManager  # noqa: E402
-from utils.template_index import write_template_index  # noqa: E402
+from utils.template_index import generate_template_index, write_template_index  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -100,14 +101,17 @@ class MainWindow(QMainWindow):
         # Content area
         self.content_stack = QStackedWidget()
         self.content_stack.setObjectName("contentArea")
-        set_test_id(self.content_stack, "window.main.contentStack")
+        set_test_id(self.content_stack, "window.main.contentStack", accessible_name="Page content")
+        self.content_stack.setAccessibleDescription(
+            "Stack of application pages; one page is visible at a time"
+        )
         main_layout.addWidget(self.content_stack)
 
         # Status bar
         self.status_bar = StatusBar()
         self.setStatusBar(self.status_bar)
 
-        set_test_id(self, "window.main")
+        set_test_id(self, "window.main", accessible_name="ISA-JSON Data Steward")
 
     def initialize_pages(self):
         """Initialize all pages."""
@@ -125,7 +129,11 @@ class MainWindow(QMainWindow):
 
         # Add to stack
         for page_id, page in self.pages.items():
-            set_test_id(page, f"page.{page_id}")
+            set_test_id(
+                page,
+                f"page.{page_id}",
+                accessible_name=f"{page_id.replace('_', ' ').capitalize()} page",
+            )
             self.content_stack.addWidget(page)
             page.dataChanged.connect(self._on_page_data_changed)
 
@@ -139,11 +147,33 @@ class MainWindow(QMainWindow):
             self.auto_save_timer.start(interval * 1000)  # Convert to milliseconds
 
     def _regenerate_template_index(self):
-        """Regenerate the template index files on GUI startup."""
+        """Build the template index on GUI startup (N6: in-memory by default).
+
+        Booting must not write into the profile's templates directory (the
+        profile may be read-only or VCS-tracked), so the scan runs entirely
+        in memory and only logs the counts.  File output
+        (``template_index.json`` + ``template_list.txt``) is opt-in via
+        ``ISA_STEWARD_TEMPLATE_INDEX_WRITE=1``; the tracked CLI script
+        ``scripts/generate_template_index.py`` is the explicit write path
+        and is unaffected by the env var.
+        """
         try:
             templates_root = self.get_templates_root()
-            write_template_index(templates_root)
-            logger.info("Template index regenerated successfully at %s", templates_root)
+            if os.environ.get("ISA_STEWARD_TEMPLATE_INDEX_WRITE") == "1":
+                write_template_index(templates_root)
+                logger.info("Template index regenerated successfully at %s", templates_root)
+            else:
+                index = generate_template_index(templates_root)
+                counts = index.get("counts", {})
+                logger.info(
+                    "Template index (in-memory) for %s: %d assay, %d protocol,"
+                    " %d material files, %d device files",
+                    templates_root,
+                    counts.get("assay", 0),
+                    counts.get("protocol", 0),
+                    counts.get("material_files", 0),
+                    counts.get("device_files", 0),
+                )
         except Exception as e:
             logger.warning("Failed to regenerate template index: %s", e)
 
@@ -169,7 +199,9 @@ class MainWindow(QMainWindow):
             try:
                 current_page.save_data()
                 if getattr(current_page, "auto_save_persists", True):
-                    self.status_bar.show_message("Auto-saved", timeout=UIConstants.AUTO_SAVE_TIMEOUT)
+                    self.status_bar.show_message(
+                        "Auto-saved", timeout=UIConstants.AUTO_SAVE_TIMEOUT
+                    )
                 else:
                     # U-07: never claim "Auto-saved" when the page's save_data()
                     # is a no-op (SettingsPage persists manually only, U-02).
@@ -198,12 +230,14 @@ class MainWindow(QMainWindow):
         self.sidebar.set_current_page(page_id)
         log_gui_event("navigate", detail={"page": page_id})
 
+        # Update status bar first: the page's own on_enter() status
+        # messages (e.g. the honest ontology load result) must win over
+        # the generic "View: ..." line instead of being overwritten.
+        self.status_bar.show_message(f"View: {page_id.replace('_', ' ').title()}")
+
         # Call on_enter for new page
         new_page.on_enter()
         log_gui_event("page_enter", widget=new_page)
-
-        # Update status bar
-        self.status_bar.show_message(f"View: {page_id.replace('_', ' ').title()}")
 
     @pyqtSlot()
     def _on_page_data_changed(self):

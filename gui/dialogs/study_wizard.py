@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 from utils.logging_config import get_logger
 
 from ..agent_tools.ids import set_test_id
+from ..widgets.common import set_ui_role
 
 logger = get_logger(__name__)
 
@@ -32,7 +33,7 @@ class StudyWizard(QDialog):
     def __init__(self, parent=None, dm=None):
         super().__init__(parent)
         self.dm = dm
-        set_test_id(self, "dialog.studyWizard")
+        set_test_id(self, "dialog.studyWizard", accessible_name="Create Study wizard")
         self.setWindowTitle("Create New Study")
         self.setMinimumWidth(500)
         self.setup_ui()
@@ -47,24 +48,35 @@ class StudyWizard(QDialog):
         inv_layout.addWidget(inv_label)
 
         self.inv_combo = QComboBox()
-        set_test_id(self.inv_combo, "dialog.studyWizard.investigationCombo")
+        set_test_id(
+            self.inv_combo,
+            "dialog.studyWizard.investigationCombo",
+            accessible_name="Investigation",
+        )
         investigations = self.dm.list_investigations() if self.dm else []
         self.inv_combo.addItems(investigations)
         inv_layout.addWidget(self.inv_combo)
 
         create_inv_btn = QPushButton("New...")
-        set_test_id(create_inv_btn, "dialog.studyWizard.createInvestigationButton")
+        set_test_id(
+            create_inv_btn,
+            "dialog.studyWizard.createInvestigationButton",
+            accessible_name="Create a new investigation",
+        )
         create_inv_btn.setToolTip("Create a new investigation")
+        create_inv_btn.setAccessibleDescription("Create a new investigation")  # tooltip-seeded
         create_inv_btn.clicked.connect(self._on_create_investigation)
         inv_layout.addWidget(create_inv_btn)
 
         layout.addLayout(inv_layout)
 
-        # Warning label shown when no investigations exist
+        # Warning label shown when no investigations exist (N2b: color comes
+        # from the warning uiRole in QSS; only the emphasis stays inline)
         self.no_inv_warning = QLabel(
             "⚠ No investigations found. Click 'New...' to create one before creating a study."
         )
-        self.no_inv_warning.setStyleSheet("color: #d35400; font-weight: bold;")
+        self.no_inv_warning.setStyleSheet("font-weight: bold;")
+        set_ui_role(self.no_inv_warning, "warning")
         self.no_inv_warning.setWordWrap(True)
         self.no_inv_warning.setVisible(len(investigations) == 0)
         layout.addWidget(self.no_inv_warning)
@@ -73,30 +85,46 @@ class StudyWizard(QDialog):
         form = QFormLayout()
 
         self.name_edit = QLineEdit()
-        set_test_id(self.name_edit, "dialog.studyWizard.nameField")
+        set_test_id(self.name_edit, "dialog.studyWizard.nameField", accessible_name="Study name")
         self.name_edit.setPlaceholderText("Study name")
         form.addRow("Study Name:", self.name_edit)
 
         self.strain_edit = QLineEdit()
-        set_test_id(self.strain_edit, "dialog.studyWizard.strainField")
+        set_test_id(
+            self.strain_edit,
+            "dialog.studyWizard.strainField",
+            accessible_name="Bacterial strain",
+        )
         self.strain_edit.setPlaceholderText("Bacterial strain")
         form.addRow("Strain:", self.strain_edit)
 
         self.plasmid_edit = QLineEdit()
-        set_test_id(self.plasmid_edit, "dialog.studyWizard.plasmidField")
+        set_test_id(
+            self.plasmid_edit,
+            "dialog.studyWizard.plasmidField",
+            accessible_name="Protein plasmid",
+        )
         self.plasmid_edit.setPlaceholderText("Protein plasmid")
         form.addRow("Plasmid:", self.plasmid_edit)
 
         # Sequence file
         seq_layout = QHBoxLayout()
         self.seq_path_edit = QLineEdit()
-        set_test_id(self.seq_path_edit, "dialog.studyWizard.sequencePathField")
+        set_test_id(
+            self.seq_path_edit,
+            "dialog.studyWizard.sequencePathField",
+            accessible_name="Sequence file path",
+        )
         self.seq_path_edit.setPlaceholderText("Select sequence file...")
         self.seq_path_edit.setReadOnly(True)
         seq_layout.addWidget(self.seq_path_edit)
 
         browse_btn = QPushButton("Browse...")
-        set_test_id(browse_btn, "dialog.studyWizard.browseButton")
+        set_test_id(
+            browse_btn,
+            "dialog.studyWizard.browseButton",
+            accessible_name="Browse for the sequence file",
+        )
         browse_btn.clicked.connect(self._on_browse_sequence)
         seq_layout.addWidget(browse_btn)
 
@@ -109,12 +137,12 @@ class StudyWizard(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("Cancel")
-        set_test_id(cancel_btn, "dialog.studyWizard.cancelButton")
+        set_test_id(cancel_btn, "dialog.studyWizard.cancelButton", accessible_name="Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         create_btn = QPushButton("Create")
-        set_test_id(create_btn, "dialog.studyWizard.createButton")
+        set_test_id(create_btn, "dialog.studyWizard.createButton", accessible_name="Create study")
         create_btn.clicked.connect(self._on_create)
         btn_layout.addWidget(create_btn)
 
