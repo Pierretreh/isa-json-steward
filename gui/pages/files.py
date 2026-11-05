@@ -63,7 +63,7 @@ class FilesPage(ScrollablePage):
         filter_layout.addWidget(filter_label)
 
         self.filter_combo = QComboBox()
-        set_test_id(self.filter_combo, "page.files.filterCombo")
+        set_test_id(self.filter_combo, "page.files.filterCombo", accessible_name="File type filter")
         self.filter_combo.addItems(["All Files", "Images", "Data", "Sequencing", "Reports"])
         self.filter_combo.currentTextChanged.connect(self._on_filter_changed)
         filter_layout.addWidget(self.filter_combo)
@@ -76,7 +76,7 @@ class FilesPage(ScrollablePage):
         filter_layout.addWidget(search_label)
 
         self.search_edit = QLineEdit()
-        set_test_id(self.search_edit, "page.files.searchField")
+        set_test_id(self.search_edit, "page.files.searchField", accessible_name="File search")
         self.search_edit.setPlaceholderText("Search files...")
         self.search_edit.textChanged.connect(self._on_search_changed)
         filter_layout.addWidget(self.search_edit)
@@ -95,7 +95,8 @@ class FilesPage(ScrollablePage):
 
         # File tree
         self.file_tree = QTreeWidget()
-        set_test_id(self.file_tree, "page.files.fileTree")
+        set_test_id(self.file_tree, "page.files.fileTree", accessible_name="Attached files tree")
+        self.file_tree.setAccessibleDescription("Files attached to studies, assays and processes")
         self.file_tree.setHeaderLabels(["File", "Type", "Entity", "Size", "Status"])
         # U-08: content columns size to their content (full header text or a
         # clean "…" instead of mid-word clipping) and the last column
@@ -105,6 +106,9 @@ class FilesPage(ScrollablePage):
             file_tree_header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         file_tree_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         file_tree_header.setTextElideMode(Qt.TextElideMode.ElideRight)
+        # N3 consistency: view-level elide governs item text (header-level
+        # mode elides header sections only).
+        self.file_tree.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.file_tree.setAlternatingRowColors(True)
         self.file_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
         self.file_tree.itemDoubleClicked.connect(self._on_file_double_clicked)
@@ -194,18 +198,18 @@ class FilesPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         refresh_btn = ActionButton("Refresh")
-        set_test_id(refresh_btn, "page.files.refreshButton")
+        set_test_id(refresh_btn, "page.files.refreshButton", accessible_name="Refresh file list")
         refresh_btn.clicked.connect(self._on_refresh)
         buttons_layout.addWidget(refresh_btn)
 
         export_btn = PrimaryButton("Export File")
-        set_test_id(export_btn, "page.files.exportButton")
+        set_test_id(export_btn, "page.files.exportButton", accessible_name="Export selected file")
         export_btn.clicked.connect(self._on_export_file)
         buttons_layout.addWidget(export_btn)
 
         # U-14: destructive action -> DangerButton (testId/label unchanged).
         delete_btn = DangerButton("Delete Selected")
-        set_test_id(delete_btn, "page.files.deleteButton")
+        set_test_id(delete_btn, "page.files.deleteButton", accessible_name="Delete selected file")
         delete_btn.clicked.connect(self._on_delete_files)
         buttons_layout.addWidget(delete_btn)
 

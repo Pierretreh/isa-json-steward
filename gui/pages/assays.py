@@ -209,7 +209,12 @@ class AssaysPage(ScrollablePage):
         template_layout.addWidget(template_label)
 
         self.template_combo = QComboBox()
-        set_test_id(self.template_combo, "page.assays.templateCombo")
+        set_test_id(
+            self.template_combo,
+            "page.assays.templateCombo",
+            accessible_name="Assay template",
+        )
+        self.template_combo.setAccessibleDescription("Template applied when adding a new assay")
         self.template_combo.addItems(
             [
                 "SDS-PAGE",
@@ -241,7 +246,8 @@ class AssaysPage(ScrollablePage):
         left_layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
-        set_test_id(self.table, "page.assays.assaysTable")
+        set_test_id(self.table, "page.assays.assaysTable", accessible_name="Assays table")
+        self.table.setAccessibleDescription("Assays of the current study")
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
             ["Assay Name", "Type", "Date", "Performer", "Materials", "Files"]
@@ -309,18 +315,18 @@ class AssaysPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         add_btn = PrimaryButton("Add Assay")
-        set_test_id(add_btn, "page.assays.addButton")
+        set_test_id(add_btn, "page.assays.addButton", accessible_name="Add assay")
         add_btn.clicked.connect(self._on_add_assay)
         buttons_layout.addWidget(add_btn)
 
         edit_btn = ActionButton("Edit Selected")
-        set_test_id(edit_btn, "page.assays.editButton")
+        set_test_id(edit_btn, "page.assays.editButton", accessible_name="Edit selected assay")
         edit_btn.clicked.connect(self._on_edit_assay)
         buttons_layout.addWidget(edit_btn)
 
         # U-14: destructive action -> DangerButton (testId/label unchanged).
         delete_btn = DangerButton("Delete Selected")
-        set_test_id(delete_btn, "page.assays.deleteButton")
+        set_test_id(delete_btn, "page.assays.deleteButton", accessible_name="Delete selected assay")
         delete_btn.clicked.connect(self._on_delete_assay)
         buttons_layout.addWidget(delete_btn)
 

@@ -4,7 +4,7 @@ Dashboard page for the ISA-JSON Data Steward GUI.
 
 from pathlib import Path
 
-from PyQt6.QtWidgets import QGridLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QGridLayout, QLabel, QWidget
 
 from ..agent_tools.ids import set_test_id
 from ..widgets.common import (
@@ -68,27 +68,47 @@ class DashboardPage(ScrollablePage):
         actions_layout.setSpacing(12)
 
         create_inv_btn = PrimaryButton("Create New Investigation")
-        set_test_id(create_inv_btn, "page.dashboard.createInvestigationButton")
+        set_test_id(
+            create_inv_btn,
+            "page.dashboard.createInvestigationButton",
+            accessible_name="Create a new investigation",
+        )
         create_inv_btn.clicked.connect(self._on_create_investigation)
         actions_layout.addWidget(create_inv_btn, 0, 0)
 
         create_study_btn = PrimaryButton("Create New Study")
-        set_test_id(create_study_btn, "page.dashboard.createStudyButton")
+        set_test_id(
+            create_study_btn,
+            "page.dashboard.createStudyButton",
+            accessible_name="Create a new study",
+        )
         create_study_btn.clicked.connect(self._on_create_study)
         actions_layout.addWidget(create_study_btn, 0, 1)
 
         open_study_btn = ActionButton("Open Recent Study")
-        set_test_id(open_study_btn, "page.dashboard.openRecentStudyButton")
+        set_test_id(
+            open_study_btn,
+            "page.dashboard.openRecentStudyButton",
+            accessible_name="Open the most recent study",
+        )
         open_study_btn.clicked.connect(self._on_open_recent)
         actions_layout.addWidget(open_study_btn, 0, 2)
 
         batch_btn = PrimaryButton("Run Batch Pipeline")
-        set_test_id(batch_btn, "page.dashboard.runBatchButton")
+        set_test_id(
+            batch_btn,
+            "page.dashboard.runBatchButton",
+            accessible_name="Run the batch pipeline",
+        )
         batch_btn.clicked.connect(self._on_run_batch_pipeline)
         actions_layout.addWidget(batch_btn, 1, 0)
 
         browse_ontology_btn = ActionButton("Browse Ontology")
-        set_test_id(browse_ontology_btn, "page.dashboard.browseOntologyButton")
+        set_test_id(
+            browse_ontology_btn,
+            "page.dashboard.browseOntologyButton",
+            accessible_name="Browse the ontology",
+        )
         browse_ontology_btn.clicked.connect(self._on_browse_ontology)
         actions_layout.addWidget(browse_ontology_btn, 1, 1)
 
@@ -100,7 +120,10 @@ class DashboardPage(ScrollablePage):
         self.add_widget(SectionHeader("Current Context"))
 
         context_card = CardWidget()
-        context_layout = QVBoxLayout(context_card)
+        # N8: reuse the layout CardWidget.setup_ui() already installs -- a
+        # second QVBoxLayout() here was refused by Qt ("QLayout: ... already
+        # has a layout"), so these labels never rendered.
+        context_layout = context_card.layout()
 
         self.investigation_label = QLabel("No investigation selected")
         set_ui_role(self.investigation_label, "muted")

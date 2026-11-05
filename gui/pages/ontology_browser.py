@@ -51,18 +51,26 @@ class OntologyBrowserPage(ScrollablePage):
         search_layout.addWidget(search_label)
 
         self.search_edit = QLineEdit()
-        set_test_id(self.search_edit, "page.ontology.searchField")
+        set_test_id(
+            self.search_edit,
+            "page.ontology.searchField",
+            accessible_name="Ontology term search",
+        )
         self.search_edit.setPlaceholderText("Search ontology terms...")
         self.search_edit.returnPressed.connect(self._on_search)
         search_layout.addWidget(self.search_edit)
 
         search_btn = ActionButton("Search")
-        set_test_id(search_btn, "page.ontology.searchButton")
+        set_test_id(search_btn, "page.ontology.searchButton", accessible_name="Search ontology")
         search_btn.clicked.connect(self._on_search)
         search_layout.addWidget(search_btn)
 
         clear_btn = ActionButton("Clear")
-        set_test_id(clear_btn, "page.ontology.clearButton")
+        set_test_id(
+            clear_btn,
+            "page.ontology.clearButton",
+            accessible_name="Clear the ontology search",
+        )
         clear_btn.clicked.connect(self._on_clear_search)
         search_layout.addWidget(clear_btn)
 
@@ -84,12 +92,20 @@ class OntologyBrowserPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         expand_all_btn = ActionButton("Expand All")
-        set_test_id(expand_all_btn, "page.ontology.expandAllButton")
+        set_test_id(
+            expand_all_btn,
+            "page.ontology.expandAllButton",
+            accessible_name="Expand all ontology terms",
+        )
         expand_all_btn.clicked.connect(self.tree.expandAll)
         buttons_layout.addWidget(expand_all_btn)
 
         collapse_all_btn = ActionButton("Collapse All")
-        set_test_id(collapse_all_btn, "page.ontology.collapseAllButton")
+        set_test_id(
+            collapse_all_btn,
+            "page.ontology.collapseAllButton",
+            accessible_name="Collapse all ontology terms",
+        )
         collapse_all_btn.clicked.connect(self.tree.collapseAll)
         buttons_layout.addWidget(collapse_all_btn)
 
@@ -108,7 +124,8 @@ class OntologyBrowserPage(ScrollablePage):
 
         # Tree widget for ontology hierarchy
         self.tree = QTreeWidget()
-        set_test_id(self.tree, "page.ontology.ontologyTree")
+        set_test_id(self.tree, "page.ontology.ontologyTree", accessible_name="Ontology terms tree")
+        self.tree.setAccessibleDescription("Ontology terms matching the search")
         self.tree.setHeaderLabels(["Term", "Type", "URI"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setMinimumHeight(400)
@@ -129,6 +146,9 @@ class OntologyBrowserPage(ScrollablePage):
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
             header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
             header.setTextElideMode(Qt.TextElideMode.ElideRight)
+        # N3 consistency: view-level elide governs item text (header-level
+        # mode elides header sections only).
+        self.tree.setTextElideMode(Qt.TextElideMode.ElideRight)
 
         # Details panel
         details_layout = QVBoxLayout()
@@ -150,7 +170,12 @@ class OntologyBrowserPage(ScrollablePage):
         details_layout.addWidget(self.term_uri)
 
         self.term_description = QTextEdit()
-        set_test_id(self.term_description, "page.ontology.termDescription")
+        set_test_id(
+            self.term_description,
+            "page.ontology.termDescription",
+            accessible_name="Selected term description",
+        )
+        self.term_description.setAccessibleDescription("Description of the selected ontology term")
         self.term_description.setReadOnly(True)
         self.term_description.setPlaceholderText("Description will appear here...")
         details_layout.addWidget(self.term_description)
@@ -180,6 +205,12 @@ class OntologyBrowserPage(ScrollablePage):
 
         # Graph widget
         self.graph_widget = GraphWidget()
+        # P2-3: container-level name only -- GraphWidget's QGraphicsScene canvas
+        # semantics are NOT exposed to accessibility (known gap, gui/AGENTS.md).
+        self.graph_widget.setAccessibleName("Ontology graph")
+        self.graph_widget.setAccessibleDescription(
+            "Interactive ontology graph; canvas items are not exposed to accessibility"
+        )
         self.graph_widget.node_selected.connect(self._on_graph_node_selected)
 
         # Category selector
@@ -189,7 +220,11 @@ class OntologyBrowserPage(ScrollablePage):
         top_bar.addWidget(category_label)
 
         self.category_combo = QComboBox()
-        set_test_id(self.category_combo, "page.ontology.categoryCombo")
+        set_test_id(
+            self.category_combo,
+            "page.ontology.categoryCombo",
+            accessible_name="Ontology category filter",
+        )
         self.category_combo.addItems(
             ["All", "Materials", "Processes", "Assays", "DataFiles", "Parameters", "External"]
         )
@@ -200,7 +235,8 @@ class OntologyBrowserPage(ScrollablePage):
         # Legend toggle
         self.legend_visible = True
         legend_btn = ActionButton("?")
-        set_test_id(legend_btn, "page.ontology.legendButton")
+        set_test_id(legend_btn, "page.ontology.legendButton", accessible_name="Toggle graph legend")
+        legend_btn.setAccessibleDescription("Show or hide the ontology graph legend")
         legend_btn.setFixedSize(24, 24)
         legend_btn.setToolTip("Toggle legend")
         legend_btn.setCheckable(True)

@@ -46,7 +46,8 @@ class ImagesPage(ScrollablePage):
         raw_layout.addWidget(raw_label)
 
         self.raw_list = QListWidget()
-        set_test_id(self.raw_list, "page.images.rawImagesList")
+        set_test_id(self.raw_list, "page.images.rawImagesList", accessible_name="Raw images list")
+        self.raw_list.setAccessibleDescription("Raw microscopy images of the current study")
         self.raw_list.setAlternatingRowColors(True)
         self.raw_list.setMinimumHeight(400)
         self.raw_list.itemDoubleClicked.connect(self._on_raw_image_selected)
@@ -56,7 +57,11 @@ class ImagesPage(ScrollablePage):
         # U-13: empty-state placeholder (muted via the theme QSS uiRole rule),
         # shown while the list is empty and hidden once populated.
         self.raw_placeholder = QLabel("No raw images — select a study, then use Import Image")
-        set_test_id(self.raw_placeholder, "page.images.rawListPlaceholder")
+        set_test_id(
+            self.raw_placeholder,
+            "page.images.rawListPlaceholder",
+            accessible_name="Raw images empty state",
+        )
         set_ui_role(self.raw_placeholder, "muted")
         self.raw_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.raw_placeholder.setWordWrap(True)
@@ -74,7 +79,12 @@ class ImagesPage(ScrollablePage):
         processed_layout.addWidget(processed_label)
 
         self.processed_list = QListWidget()
-        set_test_id(self.processed_list, "page.images.processedImagesList")
+        set_test_id(
+            self.processed_list,
+            "page.images.processedImagesList",
+            accessible_name="Processed images list",
+        )
+        self.processed_list.setAccessibleDescription("TIFF images converted from the raw images")
         self.processed_list.setAlternatingRowColors(True)
         self.processed_list.setMinimumHeight(400)
         self.processed_list.itemDoubleClicked.connect(self._on_processed_image_selected)
@@ -83,7 +93,11 @@ class ImagesPage(ScrollablePage):
 
         # U-13: empty-state placeholder (muted via the theme QSS uiRole rule).
         self.processed_placeholder = QLabel("No processed images yet")
-        set_test_id(self.processed_placeholder, "page.images.processedListPlaceholder")
+        set_test_id(
+            self.processed_placeholder,
+            "page.images.processedListPlaceholder",
+            accessible_name="Processed images empty state",
+        )
         set_ui_role(self.processed_placeholder, "muted")
         self.processed_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.processed_placeholder.setWordWrap(True)
@@ -105,17 +119,21 @@ class ImagesPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         import_btn = ActionButton("Import Image")
-        set_test_id(import_btn, "page.images.importButton")
+        set_test_id(import_btn, "page.images.importButton", accessible_name="Import image")
         import_btn.clicked.connect(self._on_import_image)
         buttons_layout.addWidget(import_btn)
 
         convert_btn = PrimaryButton("Convert to TIFF")
-        set_test_id(convert_btn, "page.images.convertButton")
+        set_test_id(
+            convert_btn,
+            "page.images.convertButton",
+            accessible_name="Convert image to TIFF",
+        )
         convert_btn.clicked.connect(self._on_convert)
         buttons_layout.addWidget(convert_btn)
 
         refresh_btn = ActionButton("Refresh")
-        set_test_id(refresh_btn, "page.images.refreshButton")
+        set_test_id(refresh_btn, "page.images.refreshButton", accessible_name="Refresh image lists")
         refresh_btn.clicked.connect(self._on_refresh)
         buttons_layout.addWidget(refresh_btn)
 

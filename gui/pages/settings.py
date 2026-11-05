@@ -188,7 +188,8 @@ class SettingsPage(ScrollablePage):
 
         # Theme
         self.theme_combo = QComboBox()
-        set_test_id(self.theme_combo, "page.settings.themeCombo")
+        set_test_id(self.theme_combo, "page.settings.themeCombo", accessible_name="Theme")
+        self.theme_combo.setAccessibleDescription("Application color theme: light or dark")
         self.theme_combo.addItems(["light", "dark"])
         self.theme_combo.setCurrentText(
             self.main_window.app.settings.value("gui/theme", "light", str)
@@ -198,7 +199,12 @@ class SettingsPage(ScrollablePage):
 
         # Font Family
         self.font_family_combo = QComboBox()
-        set_test_id(self.font_family_combo, "page.settings.fontFamilyCombo")
+        set_test_id(
+            self.font_family_combo,
+            "page.settings.fontFamilyCombo",
+            accessible_name="Font family",
+        )
+        self.font_family_combo.setAccessibleDescription("Font family used across the application")
         self.font_family_combo.addItems(
             ["Segoe UI", "Arial", "Helvetica", "Calibri", "Verdana", "Tahoma", "Times New Roman"]
         )
@@ -209,7 +215,8 @@ class SettingsPage(ScrollablePage):
 
         # Font Size
         self.font_size_spin = QSpinBox()
-        set_test_id(self.font_size_spin, "page.settings.fontSizeSpin")
+        set_test_id(self.font_size_spin, "page.settings.fontSizeSpin", accessible_name="Font size")
+        self.font_size_spin.setAccessibleDescription("Base font size in points (8 to 24)")
         self.font_size_spin.setRange(8, 24)
         self.font_size_spin.setValue(self.main_window.app.settings.value("gui/font_size", 10, int))
         self.font_size_spin.valueChanged.connect(self._on_font_size_changed)
@@ -225,7 +232,14 @@ class SettingsPage(ScrollablePage):
 
         # Window Width
         self.window_width_spin = QSpinBox()
-        set_test_id(self.window_width_spin, "page.settings.windowWidthSpin")
+        set_test_id(
+            self.window_width_spin,
+            "page.settings.windowWidthSpin",
+            accessible_name="Window width",
+        )
+        self.window_width_spin.setAccessibleDescription(
+            "Default window width in pixels (800 to 2560)"
+        )
         self.window_width_spin.setRange(800, 2560)
         self.window_width_spin.setSuffix(" px")
         self.window_width_spin.setValue(self._raw_config.get("gui", {}).get("window_width", 1200))
@@ -234,7 +248,14 @@ class SettingsPage(ScrollablePage):
 
         # Window Height
         self.window_height_spin = QSpinBox()
-        set_test_id(self.window_height_spin, "page.settings.windowHeightSpin")
+        set_test_id(
+            self.window_height_spin,
+            "page.settings.windowHeightSpin",
+            accessible_name="Window height",
+        )
+        self.window_height_spin.setAccessibleDescription(
+            "Default window height in pixels (600 to 1440)"
+        )
         self.window_height_spin.setRange(600, 1440)
         self.window_height_spin.setSuffix(" px")
         self.window_height_spin.setValue(self._raw_config.get("gui", {}).get("window_height", 800))
@@ -243,7 +264,14 @@ class SettingsPage(ScrollablePage):
 
         # Min Window Width
         self.min_window_width_spin = QSpinBox()
-        set_test_id(self.min_window_width_spin, "page.settings.minWindowWidthSpin")
+        set_test_id(
+            self.min_window_width_spin,
+            "page.settings.minWindowWidthSpin",
+            accessible_name="Minimum window width",
+        )
+        self.min_window_width_spin.setAccessibleDescription(
+            "Minimum window width in pixels (400 to 1200)"
+        )
         self.min_window_width_spin.setRange(400, 1200)
         self.min_window_width_spin.setSuffix(" px")
         self.min_window_width_spin.setValue(
@@ -254,7 +282,14 @@ class SettingsPage(ScrollablePage):
 
         # Min Window Height
         self.min_window_height_spin = QSpinBox()
-        set_test_id(self.min_window_height_spin, "page.settings.minWindowHeightSpin")
+        set_test_id(
+            self.min_window_height_spin,
+            "page.settings.minWindowHeightSpin",
+            accessible_name="Minimum window height",
+        )
+        self.min_window_height_spin.setAccessibleDescription(
+            "Minimum window height in pixels (300 to 900)"
+        )
         self.min_window_height_spin.setRange(300, 900)
         self.min_window_height_spin.setSuffix(" px")
         self.min_window_height_spin.setValue(
@@ -276,7 +311,14 @@ class SettingsPage(ScrollablePage):
 
         # Auto-Save Interval
         self.autosave_interval_spin = QSpinBox()
-        set_test_id(self.autosave_interval_spin, "page.settings.autoSaveIntervalSpin")
+        set_test_id(
+            self.autosave_interval_spin,
+            "page.settings.autoSaveIntervalSpin",
+            accessible_name="Auto-save interval",
+        )
+        self.autosave_interval_spin.setAccessibleDescription(
+            "Seconds between automatic saves (30 to 3600)"
+        )
         self.autosave_interval_spin.setRange(30, 3600)
         self.autosave_interval_spin.setSuffix(" seconds")
         self.autosave_interval_spin.setValue(
@@ -287,7 +329,14 @@ class SettingsPage(ScrollablePage):
 
         # Backup Count
         self.backup_count_spin = QSpinBox()
-        set_test_id(self.backup_count_spin, "page.settings.backupCountSpin")
+        set_test_id(
+            self.backup_count_spin,
+            "page.settings.backupCountSpin",
+            accessible_name="Backup count",
+        )
+        self.backup_count_spin.setAccessibleDescription(
+            "Number of configuration backups kept (0 to 50)"
+        )
         self.backup_count_spin.setRange(0, 50)
         self.backup_count_spin.setSuffix(" backups")
         self.backup_count_spin.setValue(self._raw_config.get("gui", {}).get("backup_count", 5))
@@ -297,7 +346,14 @@ class SettingsPage(ScrollablePage):
 
         # Backup on Save
         self.backup_on_save_check = QCheckBox()
-        set_test_id(self.backup_on_save_check, "page.settings.backupOnSaveCheck")
+        set_test_id(
+            self.backup_on_save_check,
+            "page.settings.backupOnSaveCheck",
+            accessible_name="Back up settings on save",
+        )
+        self.backup_on_save_check.setAccessibleDescription(
+            "Back up the configuration on every explicit save"
+        )
         self.backup_on_save_check.setChecked(
             self._raw_config.get("gui", {}).get("backup_on_save", True)
         )
@@ -315,7 +371,14 @@ class SettingsPage(ScrollablePage):
 
         # Base Path
         self.base_path_picker = PathPicker()
-        set_test_id(self.base_path_picker, "page.settings.basePathPicker")
+        set_test_id(
+            self.base_path_picker,
+            "page.settings.basePathPicker",
+            accessible_name="Base path",
+        )
+        self.base_path_picker.setAccessibleDescription(
+            "Root directory that study data is organized under"
+        )
         self.base_path_picker.set_path(dirs_config.get("base_path", "."))
         self.base_path_picker.set_placeholder_text("Select base directory...")
         self.base_path_picker.pathChanged.connect(self._mark_restart_required)
@@ -323,7 +386,14 @@ class SettingsPage(ScrollablePage):
 
         # Investigations Root
         self.investigations_root_edit = QLineEdit()
-        set_test_id(self.investigations_root_edit, "page.settings.investigationsRootField")
+        set_test_id(
+            self.investigations_root_edit,
+            "page.settings.investigationsRootField",
+            accessible_name="Investigations root",
+        )
+        self.investigations_root_edit.setAccessibleDescription(
+            "Directory that stores investigations"
+        )
         self.investigations_root_edit.setText(
             dirs_config.get("investigations_root", "investigations")
         )
@@ -332,42 +402,70 @@ class SettingsPage(ScrollablePage):
 
         # Templates Root
         self.templates_root_edit = QLineEdit()
-        set_test_id(self.templates_root_edit, "page.settings.templatesRootField")
+        set_test_id(
+            self.templates_root_edit,
+            "page.settings.templatesRootField",
+            accessible_name="Templates root",
+        )
+        self.templates_root_edit.setAccessibleDescription("Directory that stores templates")
         self.templates_root_edit.setText(dirs_config.get("templates_root", "templates"))
         self.templates_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Templates Root:", self.templates_root_edit)
 
         # Ontologies Root
         self.ontologies_root_edit = QLineEdit()
-        set_test_id(self.ontologies_root_edit, "page.settings.ontologiesRootField")
+        set_test_id(
+            self.ontologies_root_edit,
+            "page.settings.ontologiesRootField",
+            accessible_name="Ontologies root",
+        )
+        self.ontologies_root_edit.setAccessibleDescription("Directory that stores ontologies")
         self.ontologies_root_edit.setText(dirs_config.get("ontologies_root", "ontologies"))
         self.ontologies_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Ontologies Root:", self.ontologies_root_edit)
 
         # Exports Root
         self.exports_root_edit = QLineEdit()
-        set_test_id(self.exports_root_edit, "page.settings.exportsRootField")
+        set_test_id(
+            self.exports_root_edit,
+            "page.settings.exportsRootField",
+            accessible_name="Exports root",
+        )
+        self.exports_root_edit.setAccessibleDescription("Directory that exports are written to")
         self.exports_root_edit.setText(dirs_config.get("exports_root", "exports"))
         self.exports_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Exports Root:", self.exports_root_edit)
 
         # Archive Root
         self.archive_root_edit = QLineEdit()
-        set_test_id(self.archive_root_edit, "page.settings.archiveRootField")
+        set_test_id(
+            self.archive_root_edit,
+            "page.settings.archiveRootField",
+            accessible_name="Archive root",
+        )
+        self.archive_root_edit.setAccessibleDescription(
+            "Directory that archived investigations move to"
+        )
         self.archive_root_edit.setText(dirs_config.get("archive_root", "archive"))
         self.archive_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Archive Root:", self.archive_root_edit)
 
         # Config Root
         self.config_root_edit = QLineEdit()
-        set_test_id(self.config_root_edit, "page.settings.configRootField")
+        set_test_id(
+            self.config_root_edit,
+            "page.settings.configRootField",
+            accessible_name="Config root",
+        )
+        self.config_root_edit.setAccessibleDescription("Directory that stores configuration files")
         self.config_root_edit.setText(dirs_config.get("config_root", "config"))
         self.config_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Config Root:", self.config_root_edit)
 
         # Docs Root
         self.docs_root_edit = QLineEdit()
-        set_test_id(self.docs_root_edit, "page.settings.docsRootField")
+        set_test_id(self.docs_root_edit, "page.settings.docsRootField", accessible_name="Docs root")
+        self.docs_root_edit.setAccessibleDescription("Directory that stores documentation")
         self.docs_root_edit.setText(dirs_config.get("docs_root", "docs"))
         self.docs_root_edit.textChanged.connect(self._mark_restart_required)
         dirs_layout.addRow("Docs Root:", self.docs_root_edit)
@@ -388,7 +486,8 @@ class SettingsPage(ScrollablePage):
 
         # Base URL
         self.base_url_edit = UrlLineEdit()
-        set_test_id(self.base_url_edit, "page.settings.baseUrlField")
+        set_test_id(self.base_url_edit, "page.settings.baseUrlField", accessible_name="Base URL")
+        self.base_url_edit.setAccessibleDescription("Base URL used to build entity links")
         self.base_url_edit.set_url(
             urls_config.get("base_url", "https://example.org/investigations")
         )
@@ -399,7 +498,12 @@ class SettingsPage(ScrollablePage):
         # Investigation URL Template
         self.investigation_url_template_edit = QLineEdit()
         set_test_id(
-            self.investigation_url_template_edit, "page.settings.investigationUrlTemplateField"
+            self.investigation_url_template_edit,
+            "page.settings.investigationUrlTemplateField",
+            accessible_name="Investigation URL template",
+        )
+        self.investigation_url_template_edit.setAccessibleDescription(
+            "URL template for investigation links"
         )
         self.investigation_url_template_edit.setText(
             urls_config.get("investigation_url_template", "{base_url}/{investigation_id}")
@@ -410,7 +514,12 @@ class SettingsPage(ScrollablePage):
 
         # Study URL Template
         self.study_url_template_edit = QLineEdit()
-        set_test_id(self.study_url_template_edit, "page.settings.studyUrlTemplateField")
+        set_test_id(
+            self.study_url_template_edit,
+            "page.settings.studyUrlTemplateField",
+            accessible_name="Study URL template",
+        )
+        self.study_url_template_edit.setAccessibleDescription("URL template for study links")
         self.study_url_template_edit.setText(
             urls_config.get(
                 "study_url_template", "{base_url}/{investigation_id}/studies/{study_id}"
@@ -424,7 +533,12 @@ class SettingsPage(ScrollablePage):
 
         # Material URL Template
         self.material_url_template_edit = QLineEdit()
-        set_test_id(self.material_url_template_edit, "page.settings.materialUrlTemplateField")
+        set_test_id(
+            self.material_url_template_edit,
+            "page.settings.materialUrlTemplateField",
+            accessible_name="Material URL template",
+        )
+        self.material_url_template_edit.setAccessibleDescription("URL template for material links")
         self.material_url_template_edit.setText(
             urls_config.get(
                 "material_url_template",
@@ -439,7 +553,12 @@ class SettingsPage(ScrollablePage):
 
         # Process URL Template
         self.process_url_template_edit = QLineEdit()
-        set_test_id(self.process_url_template_edit, "page.settings.processUrlTemplateField")
+        set_test_id(
+            self.process_url_template_edit,
+            "page.settings.processUrlTemplateField",
+            accessible_name="Process URL template",
+        )
+        self.process_url_template_edit.setAccessibleDescription("URL template for process links")
         self.process_url_template_edit.setText(
             urls_config.get(
                 "process_url_template",
@@ -468,7 +587,14 @@ class SettingsPage(ScrollablePage):
 
         # Validate on Save
         self.validate_on_save_check = QCheckBox()
-        set_test_id(self.validate_on_save_check, "page.settings.validateOnSaveCheck")
+        set_test_id(
+            self.validate_on_save_check,
+            "page.settings.validateOnSaveCheck",
+            accessible_name="Validate on save",
+        )
+        self.validate_on_save_check.setAccessibleDescription(
+            "Validate the investigation before saving"
+        )
         self.validate_on_save_check.setChecked(validation_config.get("validate_on_save", True))
         validation_layout.addRow(
             "Validate on Save:", _wrap_checkbox_field(self.validate_on_save_check)
@@ -476,7 +602,14 @@ class SettingsPage(ScrollablePage):
 
         # Validate Required Fields
         self.validate_required_fields_check = QCheckBox()
-        set_test_id(self.validate_required_fields_check, "page.settings.validateRequiredFieldsCheck")
+        set_test_id(
+            self.validate_required_fields_check,
+            "page.settings.validateRequiredFieldsCheck",
+            accessible_name="Validate required fields",
+        )
+        self.validate_required_fields_check.setAccessibleDescription(
+            "Check that all required fields are filled in"
+        )
         self.validate_required_fields_check.setChecked(
             validation_config.get("validate_required_fields", True)
         )
@@ -488,7 +621,12 @@ class SettingsPage(ScrollablePage):
         # Validate Ontology Terms
         self.validate_ontology_terms_check = QCheckBox()
         set_test_id(
-            self.validate_ontology_terms_check, "page.settings.validateOntologyTermsCheck"
+            self.validate_ontology_terms_check,
+            "page.settings.validateOntologyTermsCheck",
+            accessible_name="Validate ontology terms",
+        )
+        self.validate_ontology_terms_check.setAccessibleDescription(
+            "Check ontology terms against the loaded ontologies"
         )
         self.validate_ontology_terms_check.setChecked(
             validation_config.get("validate_ontology_terms", True)
@@ -500,7 +638,12 @@ class SettingsPage(ScrollablePage):
 
         # Validate Units
         self.validate_units_check = QCheckBox()
-        set_test_id(self.validate_units_check, "page.settings.validateUnitsCheck")
+        set_test_id(
+            self.validate_units_check,
+            "page.settings.validateUnitsCheck",
+            accessible_name="Validate units",
+        )
+        self.validate_units_check.setAccessibleDescription("Check that units are recognized")
         self.validate_units_check.setChecked(validation_config.get("validate_units", True))
         validation_layout.addRow(
             "Validate Units:", _wrap_checkbox_field(self.validate_units_check)
@@ -508,7 +651,14 @@ class SettingsPage(ScrollablePage):
 
         # Validate Date Formats
         self.validate_date_formats_check = QCheckBox()
-        set_test_id(self.validate_date_formats_check, "page.settings.validateDateFormatsCheck")
+        set_test_id(
+            self.validate_date_formats_check,
+            "page.settings.validateDateFormatsCheck",
+            accessible_name="Validate date formats",
+        )
+        self.validate_date_formats_check.setAccessibleDescription(
+            "Check that dates use supported formats"
+        )
         self.validate_date_formats_check.setChecked(
             validation_config.get("validate_date_formats", True)
         )
@@ -519,7 +669,12 @@ class SettingsPage(ScrollablePage):
         # Warn on Missing Metadata
         self.warn_on_missing_metadata_check = QCheckBox()
         set_test_id(
-            self.warn_on_missing_metadata_check, "page.settings.warnOnMissingMetadataCheck"
+            self.warn_on_missing_metadata_check,
+            "page.settings.warnOnMissingMetadataCheck",
+            accessible_name="Warn on missing metadata",
+        )
+        self.warn_on_missing_metadata_check.setAccessibleDescription(
+            "Emit warnings for missing recommended metadata"
         )
         self.warn_on_missing_metadata_check.setChecked(
             validation_config.get("warn_on_missing_metadata", True)
@@ -541,20 +696,39 @@ class SettingsPage(ScrollablePage):
 
         # Default Export Format
         self.export_format_combo = QComboBox()
-        set_test_id(self.export_format_combo, "page.settings.exportFormatCombo")
+        set_test_id(
+            self.export_format_combo,
+            "page.settings.exportFormatCombo",
+            accessible_name="Export format",
+        )
+        self.export_format_combo.setAccessibleDescription(
+            "Format used when exporting: JSON, CSV, Excel or ISA-Tab"
+        )
         self.export_format_combo.addItems(["JSON", "CSV", "Excel", "ISA-Tab"])
         self.export_format_combo.setCurrentText(export_config.get("default_format", "JSON"))
         export_layout.addRow("Default Export Format:", self.export_format_combo)
 
         # Include Raw Data
         self.include_raw_data_check = QCheckBox()
-        set_test_id(self.include_raw_data_check, "page.settings.includeRawDataCheck")
+        set_test_id(
+            self.include_raw_data_check,
+            "page.settings.includeRawDataCheck",
+            accessible_name="Include raw data in exports",
+        )
+        self.include_raw_data_check.setAccessibleDescription("Include raw data files in exports")
         self.include_raw_data_check.setChecked(export_config.get("include_raw_data", False))
         export_layout.addRow("Include Raw Data:", _wrap_checkbox_field(self.include_raw_data_check))
 
         # Include Processed Data
         self.include_processed_data_check = QCheckBox()
-        set_test_id(self.include_processed_data_check, "page.settings.includeProcessedDataCheck")
+        set_test_id(
+            self.include_processed_data_check,
+            "page.settings.includeProcessedDataCheck",
+            accessible_name="Include processed data in exports",
+        )
+        self.include_processed_data_check.setAccessibleDescription(
+            "Include processed data files in exports"
+        )
         self.include_processed_data_check.setChecked(
             export_config.get("include_processed_data", True)
         )
@@ -564,7 +738,12 @@ class SettingsPage(ScrollablePage):
 
         # Include Assay Data
         self.include_assay_data_check = QCheckBox()
-        set_test_id(self.include_assay_data_check, "page.settings.includeAssayDataCheck")
+        set_test_id(
+            self.include_assay_data_check,
+            "page.settings.includeAssayDataCheck",
+            accessible_name="Include assay data in exports",
+        )
+        self.include_assay_data_check.setAccessibleDescription("Include assay data in exports")
         self.include_assay_data_check.setChecked(export_config.get("include_assay_data", True))
         export_layout.addRow(
             "Include Assay Data:", _wrap_checkbox_field(self.include_assay_data_check)
@@ -572,7 +751,12 @@ class SettingsPage(ScrollablePage):
 
         # Include Protocols
         self.include_protocols_check = QCheckBox()
-        set_test_id(self.include_protocols_check, "page.settings.includeProtocolsCheck")
+        set_test_id(
+            self.include_protocols_check,
+            "page.settings.includeProtocolsCheck",
+            accessible_name="Include protocols in exports",
+        )
+        self.include_protocols_check.setAccessibleDescription("Include protocols in exports")
         self.include_protocols_check.setChecked(export_config.get("include_protocols", True))
         export_layout.addRow(
             "Include Protocols:", _wrap_checkbox_field(self.include_protocols_check)
@@ -590,7 +774,14 @@ class SettingsPage(ScrollablePage):
 
         # Enable Version Control
         self.enable_version_control_check = QCheckBox()
-        set_test_id(self.enable_version_control_check, "page.settings.enableVersionControlCheck")
+        set_test_id(
+            self.enable_version_control_check,
+            "page.settings.enableVersionControlCheck",
+            accessible_name="Enable version control",
+        )
+        self.enable_version_control_check.setAccessibleDescription(
+            "Keep versioned copies of the configuration"
+        )
         self.enable_version_control_check.setChecked(vc_config.get("enabled", True))
         vc_layout.addRow(
             "Enable Version Control:", _wrap_checkbox_field(self.enable_version_control_check)
@@ -598,7 +789,14 @@ class SettingsPage(ScrollablePage):
 
         # Auto-Version on Save
         self.auto_version_on_save_check = QCheckBox()
-        set_test_id(self.auto_version_on_save_check, "page.settings.autoVersionOnSaveCheck")
+        set_test_id(
+            self.auto_version_on_save_check,
+            "page.settings.autoVersionOnSaveCheck",
+            accessible_name="Version configuration on save",
+        )
+        self.auto_version_on_save_check.setAccessibleDescription(
+            "Create a configuration version on every explicit save"
+        )
         self.auto_version_on_save_check.setChecked(vc_config.get("auto_version_on_save", True))
         vc_layout.addRow(
             "Auto-Version on Save:", _wrap_checkbox_field(self.auto_version_on_save_check)
@@ -608,13 +806,23 @@ class SettingsPage(ScrollablePage):
         # U-07 audit: version-control fields have no startup reader -- they
         # take effect at their next read, so no restart flag.
         self.version_prefix_edit = QLineEdit()
-        set_test_id(self.version_prefix_edit, "page.settings.versionPrefixField")
+        set_test_id(
+            self.version_prefix_edit,
+            "page.settings.versionPrefixField",
+            accessible_name="Version prefix",
+        )
+        self.version_prefix_edit.setAccessibleDescription("Prefix used for version names")
         self.version_prefix_edit.setText(vc_config.get("version_prefix", "v"))
         vc_layout.addRow("Version Prefix:", self.version_prefix_edit)
 
         # Max Versions
         self.max_versions_spin = QSpinBox()
-        set_test_id(self.max_versions_spin, "page.settings.maxVersionsSpin")
+        set_test_id(
+            self.max_versions_spin,
+            "page.settings.maxVersionsSpin",
+            accessible_name="Maximum versions kept",
+        )
+        self.max_versions_spin.setAccessibleDescription("Maximum number of versions kept")
         self.max_versions_spin.setRange(0, 100)
         self.max_versions_spin.setSpecialValueText("Unlimited")
         self.max_versions_spin.setValue(vc_config.get("max_versions", 10))
@@ -622,7 +830,14 @@ class SettingsPage(ScrollablePage):
 
         # Compress Old Versions
         self.compress_old_versions_check = QCheckBox()
-        set_test_id(self.compress_old_versions_check, "page.settings.compressOldVersionsCheck")
+        set_test_id(
+            self.compress_old_versions_check,
+            "page.settings.compressOldVersionsCheck",
+            accessible_name="Compress old versions",
+        )
+        self.compress_old_versions_check.setAccessibleDescription(
+            "Compress versions beyond the newest ones"
+        )
         self.compress_old_versions_check.setChecked(vc_config.get("compress_old_versions", False))
         vc_layout.addRow(
             "Compress Old Versions:", _wrap_checkbox_field(self.compress_old_versions_check)
@@ -647,7 +862,11 @@ class SettingsPage(ScrollablePage):
         # Single dynamic "restart needed" hint (U-07), themed via the
         # warning uiRole (no inline colors).
         self.restart_hint = QLabel("⚠ Restart required for directory/URL changes")
-        set_test_id(self.restart_hint, "page.settings.restartHintLabel")
+        set_test_id(
+            self.restart_hint,
+            "page.settings.restartHintLabel",
+            accessible_name="Restart hint",
+        )
         set_ui_role(self.restart_hint, "warning")
         self.restart_hint.setVisible(False)
         footer_layout.addWidget(self.restart_hint)
@@ -655,17 +874,33 @@ class SettingsPage(ScrollablePage):
         footer_layout.addStretch()
 
         # Reset to Defaults button (U-14: destructive -> DangerButton)
-        reset_btn = DangerButton("Reset to Defaults", test_id="page.settings.resetButton")
+        reset_btn = DangerButton(
+            "Reset to Defaults",
+            test_id="page.settings.resetButton",
+            accessible_name="Reset settings to defaults",
+        )
+        reset_btn.setAccessibleDescription("Discard changes and restore the default settings")
         reset_btn.clicked.connect(self._on_reset_to_defaults)
         footer_layout.addWidget(reset_btn)
 
         # Save Settings button
-        save_btn = PrimaryButton("Save Settings", test_id="page.settings.saveButton")
+        save_btn = PrimaryButton(
+            "Save Settings",
+            test_id="page.settings.saveButton",
+            accessible_name="Save settings",
+        )
         save_btn.clicked.connect(self._on_save_settings)
         footer_layout.addWidget(save_btn)
 
         # Restart Now button (U-07): explicit, non-modal restart affordance
-        self.restart_btn = ActionButton("Restart Now", test_id="page.settings.restartButton")
+        self.restart_btn = ActionButton(
+            "Restart Now",
+            test_id="page.settings.restartButton",
+            accessible_name="Restart now",
+        )
+        self.restart_btn.setAccessibleDescription(
+            "Restart the application to apply directory and URL changes"
+        )
         self.restart_btn.clicked.connect(self._on_restart_now)
         self.restart_btn.setVisible(False)
         footer_layout.addWidget(self.restart_btn)
@@ -817,6 +1052,9 @@ class SettingsPage(ScrollablePage):
             config_path = _settings_config_path()
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(updated_config, f, indent=2)
+                # N4: end with exactly one newline (POSIX text file -- keeps
+                # VCS diffs quiet on every explicit save).
+                f.write("\n")
 
             # Save appearance settings to QSettings
             self.main_window.app.settings.setValue("gui/theme", self.theme_combo.currentText())

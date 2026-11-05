@@ -145,8 +145,9 @@ QLabel#formLabel {
     font-size: 13px;
 }
 
-/* Form Fields */
-QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QTextEdit, QPlainTextEdit {
+/* Form Fields (N1: QDateEdit/QTimeEdit/QDateTimeEdit join the list -- they
+   previously matched no rule and fell back to the light default palette) */
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit, QDateTimeEdit, QTextEdit, QPlainTextEdit {
     border: 1px solid #3e3e42;
     border-radius: 4px;
     padding: 6px 8px;
@@ -155,7 +156,7 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QTextEdit, QPlainTextEdit {
     font-size: 13px;
 }
 
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextEdit:focus, QPlainTextEdit:focus {
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus, QTimeEdit:focus, QDateTimeEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
     border: 2px solid #0e639c;
     background-color: #252526;
 }
@@ -399,33 +400,42 @@ QProgressBar::chunk {
     border-radius: 3px;
 }
 
-/* Spin Box */
-QSpinBox::up-button, QDoubleSpinBox::up-button {
+/* Spin Box (N1: date/time edits share the spin chrome; N2 chip fix applied
+   here too -- transparent buttons so no palette-gray remnant survives) */
+QSpinBox::up-button, QDoubleSpinBox::up-button,
+QDateEdit::up-button, QTimeEdit::up-button, QDateTimeEdit::up-button {
     subcontrol-origin: border;
     subcontrol-position: top right;
     width: 16px;
     border: none;
     border-left: 1px solid #3e3e42;
+    background-color: transparent;
 }
 
-QSpinBox::down-button, QDoubleSpinBox::down-button {
+QSpinBox::down-button, QDoubleSpinBox::down-button,
+QDateEdit::down-button, QTimeEdit::down-button, QDateTimeEdit::down-button {
     subcontrol-origin: border;
     subcontrol-position: bottom right;
     width: 16px;
     border: none;
     border-left: 1px solid #3e3e42;
     border-top: 1px solid #3e3e42;
+    background-color: transparent;
 }
 
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
-QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover,
+QDateEdit::up-button:hover, QTimeEdit::up-button:hover, QDateTimeEdit::up-button:hover,
+QDateEdit::down-button:hover, QTimeEdit::down-button:hover, QDateTimeEdit::down-button:hover {
     background-color: #3e3e42;
 }
 
-/* Combo Box */
+/* Combo Box (N2: the drop-down chip needs its own background or it paints
+   the default palette's light gray over the dark field) */
 QComboBox::drop-down {
     border: none;
     width: 20px;
+    background-color: transparent;
 }
 
 QComboBox::down-arrow {
@@ -433,6 +443,39 @@ QComboBox::down-arrow {
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
     border-top: 5px solid #cccccc;
+}
+
+/* Date/Time edits with a calendar drop-down (N1): chip mirrors the combo
+   block, including the N2 transparent-background fix */
+QDateEdit::drop-down, QTimeEdit::drop-down, QDateTimeEdit::drop-down {
+    border: none;
+    width: 20px;
+    background-color: transparent;
+}
+
+QDateEdit::down-arrow, QTimeEdit::down-arrow, QDateTimeEdit::down-arrow {
+    image: none;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid #cccccc;
+}
+
+/* Tooltip & Menu (X-3: the last light-palette remnants in dark theme) */
+QToolTip {
+    background-color: #2d2d30;
+    color: #cccccc;
+    border: 1px solid #3e3e42;
+}
+
+QMenu {
+    background-color: #2d2d30;
+    color: #cccccc;
+    border: 1px solid #3e3e42;
+}
+
+QMenu::item:selected {
+    background-color: #0e639c;
+    color: #ffffff;
 }
 
 QComboBox QAbstractItemView {

@@ -115,12 +115,20 @@ class ProcessSequencePage(ScrollablePage):
         # Process sequence buttons
         buttons_layout = QHBoxLayout()
 
-        add_btn = PrimaryButton("Add Process", test_id="page.process_sequence.addProcessButton")
+        add_btn = PrimaryButton(
+            "Add Process",
+            test_id="page.process_sequence.addProcessButton",
+            accessible_name="Add process",
+        )
         add_btn.clicked.connect(self._on_add_process)
         buttons_layout.addWidget(add_btn)
 
         # U-14: destructive action -> DangerButton (testId/label unchanged).
-        remove_btn = DangerButton("Remove", test_id="page.process_sequence.removeProcessButton")
+        remove_btn = DangerButton(
+            "Remove",
+            test_id="page.process_sequence.removeProcessButton",
+            accessible_name="Remove selected process",
+        )
         remove_btn.clicked.connect(self._on_remove_process)
         buttons_layout.addWidget(remove_btn)
 
@@ -129,21 +137,47 @@ class ProcessSequencePage(ScrollablePage):
 
         # Process tree with drag-drop reordering
         self.tree = DraggableTreeWidget()
-        set_test_id(self.tree, "page.process_sequence.processTree")
+        set_test_id(
+            self.tree,
+            "page.process_sequence.processTree",
+            accessible_name="Process sequence tree",
+        )
+        self.tree.setAccessibleDescription("Processes of the study; drag rows to reorder")
         self.tree.setHeaderLabels(["Process", "Status", "Materials"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setMinimumHeight(400)
         self.tree.itemSelectionChanged.connect(self._on_process_selected)
         self.tree.itemMoved.connect(self._on_process_moved)
 
-        # U-08: content columns size to their content (full header text or a
-        # clean "…" instead of mid-word clipping) and the last column
-        # stretches to fill the panel.
+        # N3 (revises U-08): ResizeToContents grew columns past the viewport,
+        # clipping item text mid-glyph and forcing an internal horizontal
+        # scrollbar.  Interactive columns with pinned widths let the
+        # view-level elide engage ("Process" -> clean "…") and the last column
+        # stretches, so content genuinely fits and the scrollbar is off (U-08
+        # rule: never hide a scrollbar over content that still needs it).
+        # Header-level elide (header sections) is kept from U-08.
+        # NOTE: setStretchLastSection(False) explicitly -- QTreeView headers
+        # default it to True, and Qt documents it as an *alternative* to the
+        # per-section Stretch mode.  Left at the default, the last section
+        # only GROWS to the remaining space and never shrinks back, so an
+        # over-grown section forces the internal scrollbar right back
+        # (probe-verified).  Stretch mode alone re-fits the last column to
+        # "viewport - fixed columns" on every layout pass.
+        # Widths: the details panel beside this tree enforces a ~650px
+        # minimum, leaving the tree only ~289px of viewport -- the plan's
+        # example 260/120 columns cannot fit there (they force the internal
+        # scrollbar this item exists to remove), so columns 0/1 are pinned to
+        # fit: w0+w1 stays below the narrowest tree viewport (~236px).
         header = self.tree.header()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setStretchLastSection(False)
+        header.resizeSection(0, 140)  # Process
+        header.resizeSection(1, 70)  # Status
         header.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.tree.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         left_layout.addWidget(self.tree)
 
@@ -152,7 +186,11 @@ class ProcessSequencePage(ScrollablePage):
         # loaded but its (merged study + assay) process sequence is empty,
         # so an empty sequence never looks like a display bug.
         self.empty_placeholder = QLabel("No processes in this study")
-        set_test_id(self.empty_placeholder, "page.process_sequence.emptyStateLabel")
+        set_test_id(
+            self.empty_placeholder,
+            "page.process_sequence.emptyStateLabel",
+            accessible_name="Process list empty state",
+        )
         set_ui_role(self.empty_placeholder, "muted")
         self.empty_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_placeholder.setWordWrap(True)
@@ -207,12 +245,19 @@ class ProcessSequencePage(ScrollablePage):
         inputs_layout.addWidget(inputs_label)
 
         self.inputs_list = QListWidget()
-        set_test_id(self.inputs_list, "page.process_sequence.inputsList")
+        set_test_id(
+            self.inputs_list,
+            "page.process_sequence.inputsList",
+            accessible_name="Selected inputs list",
+        )
+        self.inputs_list.setAccessibleDescription("Input materials of the selected process")
         self.inputs_list.setMaximumHeight(100)
         inputs_layout.addWidget(self.inputs_list)
 
         select_inputs_btn = ActionButton(
-            "Select Inputs...", test_id="page.process_sequence.selectInputsButton"
+            "Select Inputs...",
+            test_id="page.process_sequence.selectInputsButton",
+            accessible_name="Select process inputs",
         )
         select_inputs_btn.clicked.connect(self._on_select_inputs)
         inputs_layout.addWidget(select_inputs_btn)
@@ -225,12 +270,19 @@ class ProcessSequencePage(ScrollablePage):
         outputs_layout.addWidget(outputs_label)
 
         self.outputs_list = QListWidget()
-        set_test_id(self.outputs_list, "page.process_sequence.outputsList")
+        set_test_id(
+            self.outputs_list,
+            "page.process_sequence.outputsList",
+            accessible_name="Selected outputs list",
+        )
+        self.outputs_list.setAccessibleDescription("Output materials of the selected process")
         self.outputs_list.setMaximumHeight(100)
         outputs_layout.addWidget(self.outputs_list)
 
         select_outputs_btn = ActionButton(
-            "Select Outputs...", test_id="page.process_sequence.selectOutputsButton"
+            "Select Outputs...",
+            test_id="page.process_sequence.selectOutputsButton",
+            accessible_name="Select process outputs",
         )
         select_outputs_btn.clicked.connect(self._on_select_outputs)
         outputs_layout.addWidget(select_outputs_btn)
@@ -245,7 +297,14 @@ class ProcessSequencePage(ScrollablePage):
 
         # Create file attachment widget
         self.file_attachment_widget = FileAttachmentWidget(parent=files_group)
-        set_test_id(self.file_attachment_widget, "page.process_sequence.fileAttachments")
+        set_test_id(
+            self.file_attachment_widget,
+            "page.process_sequence.fileAttachments",
+            accessible_name="File attachments",
+        )
+        self.file_attachment_widget.setAccessibleDescription(
+            "Files attached to the selected process"
+        )
         files_layout.addWidget(self.file_attachment_widget)
 
         files_group.setLayout(files_layout)
@@ -269,13 +328,20 @@ class ProcessSequencePage(ScrollablePage):
         # Bottom buttons
         bottom_layout = QHBoxLayout()
 
-        save_btn = PrimaryButton("Save Process", test_id="page.process_sequence.saveButton")
+        save_btn = PrimaryButton(
+            "Save Process",
+            test_id="page.process_sequence.saveButton",
+            accessible_name="Save process",
+        )
         save_btn.clicked.connect(self._on_save)
         bottom_layout.addWidget(save_btn)
 
         validate_btn = ActionButton(
-            "Validate Handover", test_id="page.process_sequence.validateButton"
+            "Validate Handover",
+            test_id="page.process_sequence.validateButton",
+            accessible_name="Validate handover",
         )
+        validate_btn.setAccessibleDescription("Check the input/output handover for consistency")
         validate_btn.clicked.connect(self._on_validate_handover)
         bottom_layout.addWidget(validate_btn)
 
@@ -758,7 +824,12 @@ class ProcessSequencePage(ScrollablePage):
     ):
         """Add a single parameter entry to the form."""
         entry = QLineEdit()
-        set_test_id(entry, f"page.process_sequence.parameterValueField_{self._param_field_seq}")
+        set_test_id(
+            entry,
+            f"page.process_sequence.parameterValueField_{self._param_field_seq}",
+            accessible_name=f"{param_name} value",
+        )
+        entry.setAccessibleDescription(description or f"Value for the {param_name} parameter")
         self._param_field_seq += 1
 
         if description:

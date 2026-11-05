@@ -124,7 +124,7 @@ class TemplatesPage(ScrollablePage):
         type_layout.addWidget(type_label)
 
         self.type_combo = QComboBox()
-        set_test_id(self.type_combo, "page.templates.typeCombo")
+        set_test_id(self.type_combo, "page.templates.typeCombo", accessible_name="Template type")
         self.type_combo.addItems(["Assay Templates", "Protocol Templates"])
         self.type_combo.currentTextChanged.connect(self._on_type_changed)
         type_layout.addWidget(self.type_combo)
@@ -143,7 +143,14 @@ class TemplatesPage(ScrollablePage):
         list_layout.addWidget(list_label)
 
         self.template_list = QListWidget()
-        set_test_id(self.template_list, "page.templates.templateList")
+        set_test_id(
+            self.template_list,
+            "page.templates.templateList",
+            accessible_name="Templates list",
+        )
+        self.template_list.setAccessibleDescription(
+            "Assay and protocol templates of the active profile"
+        )
         self.template_list.setAlternatingRowColors(True)
         self.template_list.setMinimumHeight(400)
         self.template_list.itemSelectionChanged.connect(self._on_template_selected)
@@ -153,7 +160,11 @@ class TemplatesPage(ScrollablePage):
         # U-13: empty-state placeholder (muted via the theme QSS uiRole rule),
         # shown while the list is empty and hidden once populated.
         self.list_placeholder = QLabel("No templates found — use Create Template")
-        set_test_id(self.list_placeholder, "page.templates.listPlaceholder")
+        set_test_id(
+            self.list_placeholder,
+            "page.templates.listPlaceholder",
+            accessible_name="Templates empty state",
+        )
         set_ui_role(self.list_placeholder, "muted")
         self.list_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.list_placeholder.setWordWrap(True)
@@ -181,7 +192,11 @@ class TemplatesPage(ScrollablePage):
 
         # U-13: centered empty-state placeholder for the preview pane.
         self.preview_placeholder = QLabel("Select a template to preview")
-        set_test_id(self.preview_placeholder, "page.templates.previewPlaceholder")
+        set_test_id(
+            self.preview_placeholder,
+            "page.templates.previewPlaceholder",
+            accessible_name="Template preview placeholder",
+        )
         set_ui_role(self.preview_placeholder, "muted")
         self.preview_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_placeholder.setWordWrap(True)
@@ -208,22 +223,26 @@ class TemplatesPage(ScrollablePage):
         buttons_layout.setSpacing(12)
 
         create_btn = PrimaryButton("Create Template")
-        set_test_id(create_btn, "page.templates.createButton")
+        set_test_id(create_btn, "page.templates.createButton", accessible_name="Create template")
         create_btn.clicked.connect(self._on_create_template)
         buttons_layout.addWidget(create_btn, 0, 0)
 
         edit_btn = ActionButton("Edit Selected")
-        set_test_id(edit_btn, "page.templates.editButton")
+        set_test_id(edit_btn, "page.templates.editButton", accessible_name="Edit selected template")
         edit_btn.clicked.connect(self._on_edit_template)
         buttons_layout.addWidget(edit_btn, 0, 1)
 
         import_btn = ActionButton("Import Template")
-        set_test_id(import_btn, "page.templates.importButton")
+        set_test_id(import_btn, "page.templates.importButton", accessible_name="Import template")
         import_btn.clicked.connect(self._on_import_template)
         buttons_layout.addWidget(import_btn, 1, 0)
 
         export_btn = ActionButton("Export Selected")
-        set_test_id(export_btn, "page.templates.exportButton")
+        set_test_id(
+            export_btn,
+            "page.templates.exportButton",
+            accessible_name="Export selected template",
+        )
         export_btn.clicked.connect(self._on_export_template)
         buttons_layout.addWidget(export_btn, 1, 1)
 

@@ -57,7 +57,8 @@ class StudiesPage(ScrollablePage):
         left_layout.setContentsMargins(0, 0, 0, 0)
 
         self.tree = QTreeWidget()
-        set_test_id(self.tree, "page.studies.studiesTree")
+        set_test_id(self.tree, "page.studies.studiesTree", accessible_name="Studies tree")
+        self.tree.setAccessibleDescription("Investigations and their studies")
         self.tree.setHeaderLabels(["Name", "Type", "ID"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setMinimumHeight(400)
@@ -71,14 +72,30 @@ class StudiesPage(ScrollablePage):
 
         self.set_expanding(self.tree)
 
-        # U-08: content columns size to their content (full header text or a
-        # clean "…" instead of mid-word clipping) and the last column
-        # stretches to fill the panel.
+        # N3 (revises U-08): ResizeToContents grew columns past the viewport,
+        # clipping item text mid-glyph and forcing an internal horizontal
+        # scrollbar.  Interactive columns with generous pinned widths let the
+        # view-level elide engage ("Name" -> clean "…") and the last column
+        # stretches, so content genuinely fits and the scrollbar is off (U-08
+        # rule: never hide a scrollbar over content that still needs it).
+        # Header-level elide (header sections) is kept from U-08.
+        # NOTE: setStretchLastSection(False) explicitly -- QTreeView headers
+        # default it to True, and Qt documents it as an *alternative* to the
+        # per-section Stretch mode.  Left at the default, the last section
+        # only GROWS to the remaining space and never shrinks back, so an
+        # over-grown section forces the internal scrollbar right back
+        # (probe-verified).  Stretch mode alone re-fits the last column to
+        # "viewport - fixed columns" on every layout pass.
         header = self.tree.header()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setStretchLastSection(False)
+        header.resizeSection(0, 260)  # Name
+        header.resizeSection(1, 120)  # Type
         header.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.tree.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         left_layout.addWidget(self.tree)
 
@@ -131,23 +148,39 @@ class StudiesPage(ScrollablePage):
         buttons_layout.setSpacing(12)
 
         refresh_btn = ActionButton("Refresh")
-        set_test_id(refresh_btn, "page.studies.refreshButton")
+        set_test_id(
+            refresh_btn,
+            "page.studies.refreshButton",
+            accessible_name="Refresh studies tree",
+        )
         refresh_btn.clicked.connect(self.refresh)
         buttons_layout.addWidget(refresh_btn, 1, 0)
 
         create_inv_btn = PrimaryButton("Create New Investigation")
-        set_test_id(create_inv_btn, "page.studies.createInvestigationButton")
+        set_test_id(
+            create_inv_btn,
+            "page.studies.createInvestigationButton",
+            accessible_name="Create a new investigation",
+        )
         create_inv_btn.clicked.connect(self._on_create_investigation)
         buttons_layout.addWidget(create_inv_btn, 0, 0)
 
         create_btn = PrimaryButton("Create New Study")
-        set_test_id(create_btn, "page.studies.createStudyButton")
+        set_test_id(
+            create_btn,
+            "page.studies.createStudyButton",
+            accessible_name="Create a new study",
+        )
         create_btn.clicked.connect(self._on_create_study)
         buttons_layout.addWidget(create_btn, 0, 1)
 
         # U-14: destructive action -> DangerButton (testId/label unchanged).
         delete_btn = DangerButton("Delete Selected")
-        set_test_id(delete_btn, "page.studies.deleteButton")
+        set_test_id(
+            delete_btn,
+            "page.studies.deleteButton",
+            accessible_name="Delete selected study",
+        )
         delete_btn.clicked.connect(self._on_delete)
         buttons_layout.addWidget(delete_btn, 1, 1)
 

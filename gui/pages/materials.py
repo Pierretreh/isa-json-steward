@@ -62,7 +62,11 @@ class MaterialsPage(ScrollablePage):
         filter_layout.addWidget(filter_label)
 
         self.type_filter = QComboBox()
-        set_test_id(self.type_filter, "page.materials.typeFilter")
+        set_test_id(
+            self.type_filter,
+            "page.materials.typeFilter",
+            accessible_name="Material type filter",
+        )
         self.type_filter.addItems(["All", "Sources", "Samples", "Other Materials"])
         self.type_filter.currentTextChanged.connect(self._on_filter_changed)
         filter_layout.addWidget(self.type_filter)
@@ -79,7 +83,8 @@ class MaterialsPage(ScrollablePage):
         left_layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
-        set_test_id(self.table, "page.materials.materialsTable")
+        set_test_id(self.table, "page.materials.materialsTable", accessible_name="Materials table")
+        self.table.setAccessibleDescription("Materials of the current study")
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(
             ["Name", "Type", "ID", "Characteristics", "Derives From"]
@@ -107,7 +112,11 @@ class MaterialsPage(ScrollablePage):
         # render zero rows and explaining why, so an empty study never looks
         # like a display bug.
         self.empty_placeholder = QLabel("")
-        set_test_id(self.empty_placeholder, "page.materials.emptyStateLabel")
+        set_test_id(
+            self.empty_placeholder,
+            "page.materials.emptyStateLabel",
+            accessible_name="Materials empty state",
+        )
         set_ui_role(self.empty_placeholder, "muted")
         self.empty_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_placeholder.setWordWrap(True)
@@ -160,23 +169,31 @@ class MaterialsPage(ScrollablePage):
         buttons_layout = QHBoxLayout()
 
         add_btn = PrimaryButton("Add Material")
-        set_test_id(add_btn, "page.materials.addButton")
+        set_test_id(add_btn, "page.materials.addButton", accessible_name="Add material")
         add_btn.clicked.connect(self._on_add_material)
         buttons_layout.addWidget(add_btn)
 
         edit_btn = ActionButton("Edit Selected")
-        set_test_id(edit_btn, "page.materials.editButton")
+        set_test_id(edit_btn, "page.materials.editButton", accessible_name="Edit selected material")
         edit_btn.clicked.connect(self._on_edit_material)
         buttons_layout.addWidget(edit_btn)
 
         # U-14: destructive action -> DangerButton (testId/label unchanged).
         delete_btn = DangerButton("Delete Selected")
-        set_test_id(delete_btn, "page.materials.deleteButton")
+        set_test_id(
+            delete_btn,
+            "page.materials.deleteButton",
+            accessible_name="Delete selected material",
+        )
         delete_btn.clicked.connect(self._on_delete_material)
         buttons_layout.addWidget(delete_btn)
 
         refresh_btn = ActionButton("Refresh")
-        set_test_id(refresh_btn, "page.materials.refreshButton")
+        set_test_id(
+            refresh_btn,
+            "page.materials.refreshButton",
+            accessible_name="Refresh materials table",
+        )
         refresh_btn.clicked.connect(self.refresh)
         buttons_layout.addWidget(refresh_btn)
 
