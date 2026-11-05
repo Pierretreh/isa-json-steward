@@ -97,6 +97,11 @@ desktop.ini
 # Generated data manifest (regenerable via: python scripts/generate_data_manifest.py)
 config/data_manifest.json
 
+# Agent-tool observability artifacts (gui/agent_tools) — never commit
+reports/*
+!reports/.gitkeep
+crash_reports/
+
 # Private project data (never commit to core repo)
 private-data/
 *-private/

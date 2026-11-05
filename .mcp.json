@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "isa-gui": {
+      "command": "python",
+      "args": ["-m", "gui.agent_tools", "mcp-serve"],
+      "env": { "QT_QPA_PLATFORM": "offscreen" },
+      "cwd": "."
+    }
+  }
+}
