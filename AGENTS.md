@@ -60,6 +60,14 @@ python -m gui.agent_tools get-state TEST_ID
 python -m gui.agent_tools mcp-serve
 ```
 
+Windows cmd note: pass env vars with the quoted form
+`set "QT_QPA_PLATFORM=offscreen"` — the unquoted `set VAR=value && …` form
+keeps a trailing space in the value, and Qt then aborts with a misleading
+"no Qt platform plugin could be initialized" dialog before anything runs.
+The test harness ([`tests/conftest.py`](tests/conftest.py)),
+[`gui/main.py`](gui/main.py) and `ensure_offscreen_platform()` strip such
+padding as defense in depth, but prefer the quoted form.
+
 Coverage is not gated in [`pytest.ini`](pytest.ini) `addopts` (E-1): the
 `--cov=utils --cov-fail-under=60` gate runs only in CI
 ([`.github/workflows/test.yml`](.github/workflows/test.yml)), so bare runs —
@@ -413,10 +421,14 @@ returning exactly the 7 tools of section 8.1.
   platform that owns a committed set (windows). Comparisons additionally
   gate on an environment-fingerprint sidecar (`fingerprint_<platform>.json`:
   platform + OS build + Qt/PyQt6 + font environment, schema
-  `isa-gui/baseline-fingerprint/1`): a mismatch skips locally and fails in
-  CI (`ISA_STEWARD_VISUAL_STRICT=1` forces a cross-env comparison), so
-  dev-box runs never false-alarm against runner-canonical baselines while CI
-  stays the meaningful gate. Platforms without a committed set skip the
+  `isa-gui/baseline-fingerprint/1`): a *recorded* mismatch skips locally and
+  fails in CI (`ISA_STEWARD_VISUAL_STRICT=1` forces a cross-env comparison),
+  so dev-box runs never false-alarm against runner-canonical baselines while
+  CI stays the meaningful gate. A set with **no recorded fingerprint** (the
+  documented transitional state for sets predating the sidecar) gets full
+  **legacy amnesty** — the comparison skips everywhere, CI included, until
+  the one-time `visual-baselines` dispatch refresh attaches the fingerprint
+  and activates the strict recorded-mismatch behavior. Platforms without a committed set skip the
   comparisons entirely — that is the by-design source of the per-job
   skip-count delta (the linux leg skips the 20 `test_page_matches_baseline`
   params; the windows leg runs them). Diff artifacts (expected/actual/diff
@@ -465,9 +477,11 @@ returning exactly the 7 tools of section 8.1.
   platform-keyed; capture on the platform whose set you refresh.
 - **CI:** the `test` matrix runs the visual tests and uploads
   `reports/visual_diff/` on failure. A comparison runs only where the
-  recorded fingerprint matches the current environment (skip locally / fail
-  in CI on mismatch, section 9); `ISA_STEWARD_VISUAL_STRICT=1` forces a
-  cross-env comparison. Runner-side diffs with an unchanged fingerprint are
+  recorded fingerprint matches the current environment (recorded mismatches
+  skip locally / fail in CI; legacy sets without a recorded fingerprint skip
+  everywhere until the dispatch refresh attaches one, section 9);
+  `ISA_STEWARD_VISUAL_STRICT=1` forces a cross-env comparison. Runner-side
+  diffs with an unchanged fingerprint are
   real drift; runner-image/Qt bumps flip the fingerprint and fail with one
   actionable message pointing back at the dispatch job.
 - **Determinism rules:** captures pin the window size (1280×800), disable

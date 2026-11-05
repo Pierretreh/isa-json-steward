@@ -3,6 +3,7 @@ Main entry point for the ISA Data Steward GUI.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -26,6 +27,15 @@ logger = get_logger(__name__)
 
 def main():
     """Main entry point."""
+    # Defense in depth: a whitespace-padded QT_QPA_PLATFORM (the classic
+    # cmd.exe `set VAR=value && ...` footgun) makes Qt fail to find the
+    # platform plugin and qFatal-abort with a misleading "no Qt platform
+    # plugin could be initialized" dialog at app construction.  Same
+    # normalization gui.agent_tools.runtime.ensure_offscreen_platform() does.
+    qpa_platform = os.environ.get("QT_QPA_PLATFORM", "")
+    if qpa_platform != qpa_platform.strip():
+        os.environ["QT_QPA_PLATFORM"] = qpa_platform.strip()
+
     parser = argparse.ArgumentParser(description="ISA Data Steward GUI")
     parser.add_argument(
         "--profile",

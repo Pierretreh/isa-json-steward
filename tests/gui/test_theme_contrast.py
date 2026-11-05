@@ -30,6 +30,12 @@ sample the exact ``#contentPage`` background, and foreground/background probes
 use the modal (most common) background color versus the farthest *frequent*
 color of a rendered region -- the QSS palette renders solid colors, so the
 probes are deterministic and never sample single anti-aliasing pixels.
+Exception: the date/time field text probe (:func:`_legible_text_pixels`) is
+frequency-blind on purpose -- thin Linux/fontconfig rasterization spreads a
+short string over many partial-coverage subpixel-AA colors, so no single
+color reaches a frequency floor even though the text renders legibly (the
+"farthest frequent color" heuristic false-failed QTimeEdit at 1.00:1 on the
+Linux runner while its QSS-pinned text was on screen).
 """
 
 import os
@@ -40,7 +46,7 @@ from pathlib import Path
 import pytest
 
 try:
-    from PyQt6.QtCore import QRect
+    from PyQt6.QtCore import QDate, QDateTime, QRect, QTime
     from PyQt6.QtTest import QTest
     from PyQt6.QtWidgets import (
         QApplication,
@@ -53,6 +59,9 @@ try:
         QListWidgetItem,
         QMenu,
         QSpinBox,
+        QStyle,
+        QStyleOptionComboBox,
+        QStyleOptionSpinBox,
         QTimeEdit,
         QTreeWidgetItem,
         QWidget,
@@ -139,6 +148,75 @@ def _chrome_strip(widget) -> QRect:
     silently sampled the wrong region when DPR != 1).
     """
     return _img_rect(QRect(widget.width() - 21, 2, 18, widget.height() - 4), widget)
+
+
+#: Legible-text acceptance floor for the date/time field probes.  A rendered
+#: glyph run clears 4.5:1 on far more pixels than this even under the
+#: thinnest observed rasterization (Linux/fontconfig LCD subpixel AA renders
+#: the short QTimeEdit string with ~65 such pixels; Windows grayscale AA with
+#: ~150-350), while a blank or background-colored field yields 0.
+MIN_LEGIBLE_TEXT_PIXELS = 12
+
+
+def _chrome_rects(widget) -> list:
+    """Chrome sub-control rects (spin buttons / drop-down) in image px.
+
+    Read from the widget's own style geometry -- the same
+    ``QStyle::subControlRect`` query Qt uses to place the chrome -- instead of
+    a hard-coded margin, so the probes follow the real chrome on every style
+    and font stack.
+    """
+    rects = []
+    style = widget.style()
+    opt = QStyleOptionSpinBox()
+    opt.initFrom(widget)
+    for sub in (QStyle.SubControl.SC_SpinBoxUp, QStyle.SubControl.SC_SpinBoxDown):
+        rect = style.subControlRect(QStyle.ComplexControl.CC_SpinBox, opt, sub, widget)
+        if rect.isValid() and rect.width() > 0 and rect.height() > 0:
+            rects.append(rect)
+    if getattr(widget, "calendarPopup", None) and widget.calendarPopup():
+        opt_combo = QStyleOptionComboBox()
+        opt_combo.initFrom(widget)
+        rect = style.subControlRect(
+            QStyle.ComplexControl.CC_ComboBox,
+            opt_combo,
+            QStyle.SubControl.SC_ComboBoxArrow,
+            widget,
+        )
+        if rect.isValid() and rect.width() > 0 and rect.height() > 0:
+            rects.append(rect)
+    return [_img_rect(rect, widget) for rect in rects]
+
+
+def _field_text_rect(widget) -> QRect:
+    """Field area (chrome excluded) of a spin-box-family editor, in image px.
+
+    Everything left of the style-computed chrome -- no assumed text
+    sub-region -- so the probe finds the text wherever the platform's font
+    metrics place it.  Falls back to the legacy 25 px cut only when the style
+    reports no chrome geometry at all.
+    """
+    chrome = _chrome_rects(widget)
+    cut = min((rect.left() for rect in chrome), default=widget.width() - 25)
+    return _img_rect(QRect(2, 2, max(1, cut - 4), widget.height() - 4), widget)
+
+
+def _legible_text_pixels(image, rect, bg, min_ratio: float = 4.5) -> int:
+    """Count pixels of *rect* at contrast >= *min_ratio* against ``bg``.
+
+    Frequency-blind by design: thin Linux/fontconfig rasterization spreads a
+    short text run over many partial-coverage subpixel-AA colors (no single
+    color survives a frequency floor), so legibility must be judged per
+    pixel, not per color cluster.  Chrome/frames and anti-aliasing fringes
+    sit far below 4.5:1 against the field surface and are never counted.
+    """
+    count = 0
+    for y in range(rect.top(), rect.bottom()):
+        for x in range(rect.left(), rect.right()):
+            pixel = image.pixelColor(x, y)
+            if _contrast((pixel.red(), pixel.green(), pixel.blue()), bg) >= min_ratio:
+                count += 1
+    return count
 
 
 def _drain_layout(widget=None, rounds: int = 5) -> None:
@@ -547,6 +625,17 @@ class TestDateEdits:
         edit = cls()
         qtbot.addWidget(edit)
         edit.setFixedSize(180, 32)
+        # Deterministic synthetic payload: the probe measures a known,
+        # non-empty display string regardless of the current clock or locale
+        # format (an empty display would make "no legible text" ambiguous
+        # between defect and fixture).
+        when = QDateTime(QDate(2001, 2, 3), QTime(12, 34, 56))
+        if cls is QDateEdit:
+            edit.setDate(when.date())
+        elif cls is QTimeEdit:
+            edit.setTime(when.time())
+        else:
+            edit.setDateTime(when)
         edit.show()
         QApplication.processEvents()
 
@@ -562,15 +651,27 @@ class TestDateEdits:
         img = _grab(edit)
         # Field surface must be a sanctioned theme surface (the N1 defect:
         # white field in dark theme) with legible text over it.  The text
-        # probe covers the field area only (right-edge chrome excluded) and is
-        # mapped to image pixels through _img_rect (DPR/font-metric robust).
-        field = _img_rect(QRect(2, 2, edit.width() - 25, edit.height() - 4), edit)
+        # probe covers the whole widget grab minus the style-computed chrome
+        # (no assumed text sub-region) and counts every pixel clearing 4.5:1
+        # against the field surface -- robust by construction against
+        # platform rasterization.  (The old "farthest frequent color" form
+        # false-failed QTimeEdit on the Linux runner at 1.00:1: fontconfig
+        # LCD subpixel AA spreads its short string over so many
+        # partial-coverage colors that none survived the frequency floor and
+        # the probe measured a background-like fringe instead of the text.)
+        field = _field_text_rect(edit)
         bg, fg, ratio = _region_contrast(img, field)
         assert _on_field_surface(bg, theme), (
             f"{cls.__name__} {theme}: field background {bg} is not a sanctioned "
             f"field surface {sorted(FIELD_SURFACES[theme])}"
         )
-        assert ratio >= 4.5, f"{cls.__name__} {theme}: text {fg} on {bg} = {ratio:.2f}:1"
+        legible = _legible_text_pixels(img, field, bg)
+        assert legible >= MIN_LEGIBLE_TEXT_PIXELS, (
+            f"{cls.__name__} {theme}: only {legible} legible text pixels"
+            f" (need >= {MIN_LEGIBLE_TEXT_PIXELS}) in {field.getRect()};"
+            f" farthest frequent color {fg} on {bg} = {ratio:.2f}:1"
+            " (the declared field text must render at >= 4.5:1)"
+        )
 
         # Right-edge chrome (drop-down chip / spin buttons) must not fall back
         # to the default palette's light gray (the N2 defect class).

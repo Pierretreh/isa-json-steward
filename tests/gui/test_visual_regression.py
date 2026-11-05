@@ -14,10 +14,13 @@ On failure the expected/actual/diff PNGs are written to
 ``reports/visual_diff/`` for agent/vision review.
 
 Comparisons only run in the environment the baselines were captured in
-(``fingerprint_<platform>.json``, see ``tests/gui/visual.py``): a mismatch
-skips locally and fails in CI (``ISA_STEWARD_VISUAL_STRICT=1`` forces a
-cross-env comparison).  Canonical baselines are captured ON the CI runners
-via the ``visual-baselines`` workflow_dispatch job -- see
+(``fingerprint_<platform>.json``, see ``tests/gui/visual.py``): a recorded
+mismatch skips locally and fails in CI, while a legacy set with no recorded
+fingerprint (the documented pre-fingerprint transitional state) is skipped
+everywhere under the legacy amnesty
+(``ISA_STEWARD_VISUAL_STRICT=1`` forces a cross-env comparison).
+Canonical baselines are captured ON the CI runners via the
+``visual-baselines`` workflow_dispatch job -- see
 ``tests/gui/baselines/README.md`` for the refresh flow.
 """
 

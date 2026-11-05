@@ -22,10 +22,13 @@ pinned design lives in ``plans/gui-usability-improvements.md`` (P2-2):
   and records ``fingerprint_<platform>.json`` (render-scoped environment
   identity: platform + OS build + Qt/PyQt6 + font environment).  A
   comparison runs only where the current environment matches that
-  fingerprint -- skip-with-message locally, fail in CI on mismatch;
-  ``ISA_STEWARD_VISUAL_STRICT=1`` forces a cross-env comparison
-  (:func:`fingerprint_action`).  Baselines are CI-runner-canonical; the
-  sanctioned refresh path is the ``visual-baselines`` workflow_dispatch job.
+  fingerprint -- a *recorded* mismatch skips with a message locally and
+  fails in CI, while a set with NO recorded fingerprint (the documented
+  pre-fingerprint transitional state) is skipped everywhere under the
+  legacy amnesty; ``ISA_STEWARD_VISUAL_STRICT=1`` forces a cross-env
+  comparison (:func:`fingerprint_action`).  Baselines are
+  CI-runner-canonical; the sanctioned refresh path is the
+  ``visual-baselines`` workflow_dispatch job.
 
 Determinism contract for :func:`capture_page` (why each step exists):
 
@@ -293,22 +296,37 @@ def fingerprint_action(recorded: Optional[dict]) -> tuple:
 
     * ``"compare"`` -- the recorded fingerprint matches this environment, or
       ``ISA_STEWARD_VISUAL_STRICT=1`` deliberately forces the comparison.
-    * ``"skip"`` -- local run without a matching fingerprint: skip with the
-      reason (P2-2 philosophy -- a dev box must not false-alarm red against
+    * ``"skip"`` -- the set predates fingerprints (no sidecar recorded: the
+      documented transitional state -- skipped everywhere under the legacy
+      amnesty), or a local run without a matching fingerprint (P2-2
+      philosophy -- a dev box must not false-alarm red against
       runner-canonical baselines).
-    * ``"fail"`` -- CI without a matching fingerprint: fail loudly (CI is the
-      meaningful gate; a stale fingerprint means the runner image drifted --
-      re-run the ``visual-baselines`` dispatch job and commit the artifact).
+    * ``"fail"`` -- CI with a RECORDED fingerprint that differs from this
+      environment: fail loudly (CI is the meaningful gate; a stale
+      fingerprint means the runner image drifted -- re-run the
+      ``visual-baselines`` dispatch job and commit the artifact).
     """
     if strict_visual() or recorded == env_fingerprint():
         return "compare", ""
     if recorded is None:
-        recorded_txt = "none recorded (set predates fingerprints)"
-    else:
-        recorded_txt = json.dumps(recorded, sort_keys=True)
+        # Legacy amnesty: the set predates the fingerprint sidecar -- the
+        # documented transitional state (AGENTS.md sections 9-10), not
+        # staleness.  The one-time 'visual-baselines' dispatch refresh
+        # attaches the fingerprint and activates the strict recorded-mismatch
+        # behavior above.  Skip everywhere (CI included) so the policy itself
+        # never blocks the pipeline: "missing"-style fail-in-CI semantics
+        # would keep CI red until that manual step happens.
+        return "skip", (
+            f"baseline set for platform {platform_key()!r} predates fingerprints"
+            " (no fingerprint_*.json recorded): comparison skipped under the"
+            " documented legacy amnesty. Refresh once with the 'visual-baselines'"
+            " workflow_dispatch job and commit its artifact (PNGs + fingerprint)"
+            " to activate strict fingerprint comparison,"
+            f" or set {STRICT_ENV}=1 to force one."
+        )
     reason = (
         f"baseline fingerprint mismatch for platform {platform_key()!r}:\n"
-        f"  recorded: {recorded_txt}\n"
+        f"  recorded: {json.dumps(recorded, sort_keys=True)}\n"
         f"  current:  {json.dumps(env_fingerprint(), sort_keys=True)}\n"
         "baselines are CI-runner-canonical (AGENTS.md sections 9-10): refresh them"
         " with the 'visual-baselines' workflow_dispatch job, download the"

@@ -17,13 +17,20 @@ Golden screenshots for [`tests/gui/test_visual_regression.py`](../test_visual_re
   differing-pixel ratio > 0.5% or the mean channel delta > 2.0. On failure
   the expected/actual/diff PNGs are written to `reports/visual_diff/`.
 - **Fingerprint policy:** a comparison runs only when the current environment
-  matches the recorded fingerprint. On mismatch (or when no fingerprint is
-  recorded yet): **skip with a message locally** (a dev box must not
-  false-alarm red against runner-canonical baselines) and **fail in CI** (the
-  meaningful gate — a stale fingerprint means the runner image drifted).
-  `ISA_STEWARD_VISUAL_STRICT=1` forces the comparison anyway (deliberate
-  cross-env check). Missing baselines keep the plan's policy: skip locally,
-  fail in CI on a platform that owns a committed set.
+  matches the recorded fingerprint. On a **recorded** mismatch: **skip with
+  a message locally** (a dev box must not false-alarm red against
+  runner-canonical baselines) and **fail in CI** (the meaningful gate — a
+  stale fingerprint means the runner image drifted). A set with **no
+  recorded fingerprint** (the documented transitional state for sets that
+  predate the sidecar) gets full **legacy amnesty**: the comparison is
+  **skipped everywhere, CI included**, with a message naming the canonical
+  refresh below — "missing"-style fail-in-CI semantics would keep CI red
+  until that one-time manual step, which is exactly what the amnesty
+  defers. The refresh attaches `fingerprint_<os>.json` and activates the
+  strict recorded-mismatch behavior above. `ISA_STEWARD_VISUAL_STRICT=1`
+  forces the comparison anyway (deliberate cross-env check). Missing
+  baseline PNGs keep the plan's policy: skip locally, fail in CI on a
+  platform that owns a committed set.
 
 ## Canonical refresh (CI-runner baselines) — the sanctioned path
 

@@ -15,6 +15,16 @@ from utils.file_manager import FileManager
 from utils.material_manager import MaterialManager
 from utils.process_sequence_manager import ProcessSequenceManager
 
+# Defense in depth (runs at conftest import, before pytest-qt or any test can
+# construct a QApplication): a whitespace-padded QT_QPA_PLATFORM -- the classic
+# cmd.exe `set VAR=value && ...` footgun -- makes Qt fail to find the platform
+# plugin and qFatal-abort ("no Qt platform plugin could be initialized") before
+# a single test runs.  Mirrors the stripping gui.agent_tools.runtime.
+# ensure_offscreen_platform() already does for CLI/MCP boots.
+_qpa_platform = os.environ.get("QT_QPA_PLATFORM", "")
+if _qpa_platform != _qpa_platform.strip():
+    os.environ["QT_QPA_PLATFORM"] = _qpa_platform.strip()
+
 
 def _discover_profile_dir() -> Optional[Path]:
     """Discover the profile directory for testing.
