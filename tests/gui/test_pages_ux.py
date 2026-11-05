@@ -681,3 +681,213 @@ class TestSettingsFormPolish:
                 form.fieldGrowthPolicy()
                 == QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
             )
+
+
+class TestDashboardCurrentContext:
+    """N8: the "Current Context" card labels render and populate.
+
+    The card used to get a SECOND QVBoxLayout (refused by Qt with a
+    "QLayout: ... already has a layout" warning), so the labels never
+    rendered.  The fix reuses the layout ``CardWidget`` already owns.
+    """
+
+    def test_current_context_labels_render_inside_card(self, main_window):
+        """Labels are visible with non-zero geometry inside the card (N8 acc. 2)."""
+        from gui.agent_tools.dump import dump_widget_tree
+
+        main_window._navigate_to_page("dashboard")
+        _process_events()
+        page = main_window.pages["dashboard"]
+
+        card = page.investigation_label.parentWidget()
+        assert card is page.study_label.parentWidget()
+        assert card.objectName() == "card"
+        for label in (page.investigation_label, page.study_label):
+            assert label.isVisible(), f"{label.text()!r} must render inside the card"
+            assert label.width() > 0 and label.height() > 0
+
+        def walk(node):
+            yield node
+            for child in node.get("children", []):
+                yield from walk(child)
+
+        nodes = [
+            n
+            for n in walk(dump_widget_tree(main_window)["root"])
+            if n.get("text") in ("No investigation selected", "No study selected")
+        ]
+        assert len(nodes) == 2
+        for node in nodes:
+            assert node["visible"] is True
+            assert node["geometry"]["width"] > 0
+            assert node["geometry"]["height"] > 0
+
+    def test_current_context_labels_populate_like_status_bar(self, main_window):
+        """refresh() shows the same investigation/study state as the status bar."""
+        main_window._navigate_to_page("dashboard")
+        _process_events()
+        page = main_window.pages["dashboard"]
+
+        main_window.set_investigation("inv_probe")
+        main_window.set_study("study_probe")
+        # Isolate from any study.json title lookup on disk.
+        main_window.study_data = None
+        page.refresh()
+
+        assert page.investigation_label.text() == "Investigation: inv_probe"
+        assert page.study_label.text() == "Study: study_probe"
+        # Same data, as shown by the status-bar context labels.
+        assert main_window.status_bar.investigation_label.text() == "Inv: inv_probe"
+        assert main_window.status_bar.study_label.text() == "Study: study_probe"
+
+    def test_boot_produces_no_qlayout_warning(self, qtbot, stub_app):
+        """N8 acceptance 1: no "QLayout: ... already has a layout" at boot."""
+        from PyQt6.QtCore import qInstallMessageHandler
+
+        from gui.main_window import MainWindow
+
+        messages = []
+
+        def handler(*args):
+            messages.append(str(args[-1]))
+
+        qInstallMessageHandler(handler)
+        try:
+            window = MainWindow(stub_app)
+            qtbot.addWidget(window)
+            window.show()
+            window._navigate_to_page("dashboard")
+            _process_events()
+        finally:
+            qInstallMessageHandler(None)
+
+        layout_warnings = [m for m in messages if "already has a layout" in m]
+        assert layout_warnings == [], f"unexpected QLayout warning(s): {layout_warnings}"
+
+
+class TestTreeTextElision:
+    """N3: tree item text elides cleanly; no internal horizontal scrollbar.
+
+    The U-08 fix set header-level elide modes only; item text needs the
+    view-level mode, and ResizeToContents columns grew past the viewport
+    (mid-glyph clipping + an internal horizontal scrollbar).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _theme_qss(self):
+        """Run under the shipped light QSS (the real boot state).
+
+        Theme stylesheets change widget metrics (fonts, padding), so the
+        fit check must include them -- and must not leak the QSS into later
+        tests (same pattern as ``TestNoHorizontalScroll``).
+        """
+        from PyQt6.QtWidgets import QApplication
+
+        styles = REPO_ROOT / "gui" / "resources" / "styles"
+        app = QApplication.instance()
+        previous = app.styleSheet()
+        app.setStyleSheet((styles / "light.qss").read_text(encoding="utf-8"))
+        yield
+        app.setStyleSheet(previous)
+
+    LONG_NAME = (
+        "Investigation with a very long display name that must elide "
+        "cleanly instead of clipping mid-glyph " + "x" * 80
+    )
+
+    TREE_CASES = [
+        ("studies", "page.studies.studiesTree", "Investigation"),
+        ("process_sequence", "page.process_sequence.processTree", "Completed"),
+    ]
+    TREE_IDS = [case[0] for case in TREE_CASES]
+
+    def _insert_long_row(self, tree, second_text):
+        from PyQt6.QtWidgets import QTreeWidgetItem
+
+        item = QTreeWidgetItem(tree)
+        item.setText(0, self.LONG_NAME)
+        item.setText(1, second_text)
+        item.setText(2, "probe-0001")
+        _process_events()
+
+    @pytest.mark.parametrize("page_id,tree_id,second_text", TREE_CASES, ids=TREE_IDS)
+    def test_long_item_text_elides_cleanly_at_default_size(
+        self, main_window, page_id, tree_id, second_text
+    ):
+        """Clean trailing "…" (never mid-glyph) + no internal scrollbar."""
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QHeaderView
+
+        main_window._navigate_to_page(page_id)
+        _process_events()
+        tree = _find(main_window, tree_id)
+        self._insert_long_row(tree, second_text)
+
+        # N3 mechanism: view-level elide governs item text (the header-level
+        # mode elides header sections only); Interactive columns let it
+        # engage instead of growing past the viewport.
+        assert tree.textElideMode() == Qt.TextElideMode.ElideRight
+        header = tree.header()
+        assert header.sectionResizeMode(0) == QHeaderView.ResizeMode.Interactive
+        assert header.sectionResizeMode(1) == QHeaderView.ResizeMode.Interactive
+
+        fm = tree.fontMetrics()
+        name_elided = fm.elidedText(
+            self.LONG_NAME, Qt.TextElideMode.ElideRight, header.sectionSize(0)
+        )
+        assert name_elided.endswith("…"), "long item text must elide with a clean suffix"
+        assert len(name_elided) < len(self.LONG_NAME)
+
+        second_elided = fm.elidedText(
+            second_text, Qt.TextElideMode.ElideRight, header.sectionSize(1)
+        )
+        if second_elided != second_text:
+            assert second_elided.endswith("…"), "column value must clip cleanly"
+            assert len(second_elided) < len(second_text)
+
+        assert tree.horizontalScrollBar().maximum() == 0, (
+            "tree content must fit via elide (no internal horizontal scrollbar)"
+        )
+
+    @pytest.mark.parametrize("page_id,tree_id,second_text", TREE_CASES, ids=TREE_IDS)
+    def test_no_internal_horizontal_scrollbar_at_938_content_width(
+        self, main_window, page_id, tree_id, second_text
+    ):
+        """N3 acceptance 2: fit at the U-08 938px content probe width."""
+        sidebar_w = main_window.sidebar.width()
+        main_window.setMinimumSize(0, 0)  # test-only: reach the plan's probe width
+        main_window.resize(938 + sidebar_w, 800)
+        _process_events()
+        assert main_window.content_stack.width() == 938
+
+        main_window._navigate_to_page(page_id)
+        _process_events()
+        tree = _find(main_window, tree_id)
+        self._insert_long_row(tree, second_text)
+
+        assert tree.horizontalScrollBar().maximum() == 0, (
+            f"{tree_id} forces an internal horizontal scrollbar at 938px content width"
+        )
+
+    def test_remaining_trees_use_view_level_elide(self, main_window, qtbot):
+        """N3 step 4 consistency: same view-level elide on the other trees."""
+        from PyQt6.QtCore import Qt
+
+        for page_id, attr in (("files", "file_tree"), ("ontology", "tree")):
+            tree = getattr(main_window.pages[page_id], attr)
+            assert tree.textElideMode() == Qt.TextElideMode.ElideRight, (
+                f"{page_id}.{attr} must elide item text"
+            )
+
+        from gui.dialogs.batch_processing import BatchProcessingDialog
+        from gui.dialogs.material_selection_dialog import MaterialSelectionDialog
+
+        material_dialog = MaterialSelectionDialog()
+        batch_dialog = BatchProcessingDialog()
+        try:
+            assert material_dialog.tree.textElideMode() == Qt.TextElideMode.ElideRight
+            assert batch_dialog.experiment_tree.textElideMode() == Qt.TextElideMode.ElideRight
+        finally:
+            material_dialog.deleteLater()
+            batch_dialog.deleteLater()
+            _process_events()

@@ -633,6 +633,12 @@ class TestGenerateTemplateIndex:
         assert index["counts"]["assay"] == 3
         assert [t["name"] for t in index["assay_templates"]] == ["Assay A", "Assay B", "Assay C"]
 
+    def test_generate_template_index_writes_no_files(self, populated_root):
+        """N6: generate_template_index() is a pure in-memory scan."""
+        generate_template_index(populated_root)
+        assert not (populated_root / "template_index.json").exists()
+        assert not (populated_root / "template_list.txt").exists()
+
 
 # ----------------------------------------------------------------------
 # write_template_index
@@ -712,3 +718,64 @@ class TestWriteTemplateIndex:
         assert loaded["counts"]["assay"] == 1
         list_text = (populated_root / "template_list.txt").read_text(encoding="utf-8")
         assert "stale content" not in list_text
+
+    def test_writes_files_without_optin_env(self, populated_root, monkeypatch):
+        """N6: write_template_index() always writes.
+
+        ``scripts/generate_template_index.py`` is the explicit write path
+        and must keep working without ``ISA_STEWARD_TEMPLATE_INDEX_WRITE``.
+        """
+        monkeypatch.delenv("ISA_STEWARD_TEMPLATE_INDEX_WRITE", raising=False)
+        write_template_index(populated_root)
+        assert (populated_root / "template_index.json").exists()
+        assert (populated_root / "template_list.txt").exists()
+
+
+# ----------------------------------------------------------------------
+# N7: log levels -- missing subdirs are DEBUG, parse failures stay WARNING
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestScanLogLevels:
+    """N7: an absent template subdirectory must not spam WARNING records."""
+
+    def test_missing_subdirs_log_debug_not_warning(self, tmp_path, caplog):
+        """A root without any template subdir logs one DEBUG record per
+        template kind and zero WARNING+ records."""
+        import logging
+
+        with caplog.at_level(logging.DEBUG, logger="utils.template_index"):
+            generate_template_index(tmp_path)
+
+        records = [r for r in caplog.records if r.name == "utils.template_index"]
+        debugs = [r for r in records if "templates directory not found" in r.getMessage()]
+        assert len(debugs) == 4  # assay, protocol, material, device
+        assert all(r.levelno == logging.DEBUG for r in debugs)
+        assert [r for r in records if r.levelno >= logging.WARNING] == []
+
+    @pytest.mark.parametrize(
+        "scanner, subdir, expected",
+        [
+            (scan_assay_templates, "assay_templates", "Error reading assay template"),
+            (scan_protocol_templates, "protocol_templates", "Error reading protocol template"),
+            (scan_material_templates, "material_templates", "Error reading material template"),
+            (scan_device_templates, "device_templates", "Error reading device template"),
+        ],
+    )
+    def test_malformed_template_file_still_warns(
+        self, templates_root, caplog, scanner, subdir, expected
+    ):
+        """Genuine per-file parse failures keep their WARNING level."""
+        import logging
+
+        (templates_root / subdir / "broken.json").write_text("{not json", encoding="utf-8")
+        with caplog.at_level(logging.DEBUG, logger="utils.template_index"):
+            scanner(templates_root)
+
+        warnings = [
+            r
+            for r in caplog.records
+            if r.name == "utils.template_index" and r.levelno >= logging.WARNING
+        ]
+        assert any(expected in r.getMessage() for r in warnings)

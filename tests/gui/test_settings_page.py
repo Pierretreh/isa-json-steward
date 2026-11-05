@@ -158,6 +158,41 @@ class TestSettingsExplicitSave:
         assert window.app.settings.value("gui/theme") == page.theme_combo.currentText()
         assert window.app.settings.value("gui/font_size") == page.font_size_spin.value()
 
+    def test_explicit_save_writes_exactly_one_trailing_newline(self, make_settings_window):
+        """N4: the saved file ends with exactly one \\n (VCS-friendly)."""
+        from gui.agent_tools.ids import find_by_test_id
+
+        window, config_path = make_settings_window()
+        window._navigate_to_page("settings")
+        page = window.pages["settings"]
+        page.validate_on_save_check.setChecked(not page.validate_on_save_check.isChecked())
+
+        save_btn = find_by_test_id(window, "page.settings.saveButton")
+        assert save_btn is not None
+        save_btn.click()
+
+        raw = config_path.read_bytes()
+        assert raw.endswith(b"\n"), "saved settings.json must end with a newline (N4)"
+        assert not raw.endswith(b"\n\n"), "exactly one trailing newline, not two"
+
+    def test_double_save_is_byte_stable(self, make_settings_window):
+        """N4: a second Save produces identical bytes (incl. the newline)."""
+        from gui.agent_tools.ids import find_by_test_id
+
+        window, config_path = make_settings_window()
+        window._navigate_to_page("settings")
+
+        save_btn = find_by_test_id(window, "page.settings.saveButton")
+        assert save_btn is not None
+        save_btn.click()
+        first = config_path.read_bytes()
+
+        save_btn.click()
+        second = config_path.read_bytes()
+
+        assert first == second, "double-save must be byte-stable"
+        assert first.endswith(b"\n")
+
 
 class TestSettingsConfigLoadFailure:
     """U-12 config-loss edge: a failed load must block Save."""

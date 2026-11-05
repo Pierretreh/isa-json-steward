@@ -1,4 +1,4 @@
-"""Batch-2 theme-contrast tests (U-03, U-04, U-09).
+"""Batch-2 theme-contrast tests (U-03, U-04, U-09) + Batch A1 (N1/N2/N2b/X-3).
 
 Acceptance coverage from ``plans/gui-usability-fixes.md`` (section 3):
 
@@ -13,6 +13,18 @@ Acceptance coverage from ``plans/gui-usability-fixes.md`` (section 3):
 - **U-09**: the sidebar title chip paints its own background (no
   white-on-white) and keeps >= 4.5:1 contrast in both themes.
 
+Acceptance coverage from ``plans/gui-usability-improvements.md`` (Batch A1):
+
+- **N1**: ``QDateEdit``/``QTimeEdit``/``QDateTimeEdit`` rules exist in both
+  theme files and the fields render themed (no light default-palette
+  fallback) with >= 4.5:1 text contrast and a non-palette right-edge chrome.
+- **N2**: ``QComboBox::drop-down`` carries a ``background-color`` so the chip
+  no longer paints the default palette's light gray over the dark field.
+- **N2b**: the study-wizard warning routes through the ``warning`` ``uiRole``
+  (no inline color literal) and keeps >= 4.5:1 contrast in both themes.
+- **X-3**: ``QToolTip``/``QMenu``/``QMenu::item:selected`` rules exist in both
+  theme files; menus render themed with >= 4.5:1 item text.
+
 Pixel probes follow the proven subtask-1 pattern: children are hidden to
 sample the exact ``#contentPage`` background, and foreground/background probes
 use the modal (most common) background color versus the farthest *frequent*
@@ -20,6 +32,7 @@ color of a rendered region -- the QSS palette renders solid colors, so the
 probes are deterministic and never sample single anti-aliasing pixels.
 """
 
+import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -28,11 +41,19 @@ import pytest
 
 try:
     from PyQt6.QtCore import QRect
+    from PyQt6.QtTest import QTest
     from PyQt6.QtWidgets import (
         QApplication,
+        QComboBox,
+        QDateEdit,
+        QDateTimeEdit,
+        QDoubleSpinBox,
         QFrame,
         QGroupBox,
         QListWidgetItem,
+        QMenu,
+        QSpinBox,
+        QTimeEdit,
         QTreeWidgetItem,
         QWidget,
     )
@@ -49,6 +70,16 @@ STYLES = REPO_ROOT / "gui" / "resources" / "styles"
 DARK_BG = (0x1E, 0x1E, 0x1E)
 LIGHT_BG = (0xFF, 0xFF, 0xFF)
 SIDEBAR_CHIPS = {"dark": (0x25, 0x25, 0x26), "light": (0x2C, 0x3E, 0x50)}
+# Batch A1: the sanctioned Form Fields surfaces (base + :focus variant) that
+# date/time/spin/combo fields and their right-edge chrome must render on, and
+# the QMenu surface.  A shown standalone widget renders either field variant
+# (offscreen platforms grant focus on show), so the probes accept both exact
+# tuples -- while still rejecting the default-palette light remnants.
+FIELD_SURFACES = {
+    "dark": {(0x3C, 0x3C, 0x3C), (0x25, 0x25, 0x26)},
+    "light": {(0xFF, 0xFF, 0xFF)},
+}
+MENU_BG = {"dark": (0x2D, 0x2D, 0x30), "light": (0xFF, 0xFF, 0xFF)}
 
 
 # ---------------------------------------------------------------------------
@@ -75,18 +106,71 @@ def _close(c1, c2, tol: int = 8) -> bool:
     return all(abs(a - b) <= tol for a, b in zip(c1, c2))
 
 
+def _on_field_surface(color, theme: str) -> bool:
+    """True when ``color`` is one of the theme's sanctioned field surfaces."""
+    return any(_close(color, surface, tol=12) for surface in FIELD_SURFACES[theme])
+
+
+def _img_rect(rect: QRect, widget) -> QRect:
+    """Map a logical widget-space rect onto ``grab()`` image pixels.
+
+    ``QWidget.grab().toImage()`` rasterizes in *device* pixels while
+    ``mapTo()``/``visualRect()`` report *logical* coordinates; at a device
+    pixel ratio != 1 (e.g. 150% Windows scaling with the ``windows``
+    platform) an unscaled probe rect silently samples a different widget.
+    The sanctioned headless runs (``QT_QPA_PLATFORM=offscreen``) report
+    DPR 1.0, where this mapping is the identity.
+    """
+    dpr = widget.devicePixelRatioF()
+    return QRect(
+        round(rect.x() * dpr),
+        round(rect.y() * dpr),
+        round(rect.width() * dpr),
+        round(rect.height() * dpr),
+    )
+
+
+def _drain_layout(widget=None, rounds: int = 5) -> None:
+    """Drain queued/cascaded events so widget geometry is final.
+
+    Grabbing before the last layout pass activates rasterizes stale child
+    positions; force ``QLayout.activate()`` and spin the real event loop.
+    """
+    if widget is not None:
+        widget.ensurePolished()
+        lay = widget.layout()
+        if lay is not None:
+            lay.activate()
+    for _ in range(rounds):
+        QApplication.processEvents()
+        QApplication.sendPostedEvents(None, 0)
+    QTest.qWait(1)
+    QApplication.processEvents()
+
+
 def _grab(widget):
-    return widget.grab().toImage()
+    _drain_layout(widget)
+    img = widget.grab().toImage()
+    if os.environ.get("A1_DEBUG_GRABS"):
+        out = Path("reports/verify3/grabs")
+        out.mkdir(parents=True, exist_ok=True)
+        name = f"{_grab._seq:03d}_{widget.__class__.__name__}.png"
+        _grab._seq += 1
+        img.save(str(out / name))
+    return img
+
+
+_grab._seq = 0
 
 
 def _region_of(child, ancestor):
-    """Rect of ``child`` in ``ancestor`` grab coordinates.
+    """Rect of ``child`` in ``ancestor`` grab coordinates (DPR-aware).
 
     Transparent child widgets (labels) composite onto a flat gray when grabbed
     directly, so their pixels must be sampled from an opaque ancestor's grab.
     """
     top_left = child.mapTo(ancestor, child.rect().topLeft())
-    return QRect(top_left, child.size())
+    return _img_rect(QRect(top_left, child.size()), ancestor)
 
 
 def _region_contrast(image, rect=None, min_count: int = 8):
@@ -295,7 +379,7 @@ class TestGroupTitles:
         for box in boxes:
             img = _grab(box)
             # Title band: the top margin strip, right of the collapse button.
-            band = QRect(32, 0, min(220, img.width() - 36), 14)
+            band = _img_rect(QRect(32, 0, min(220, box.width() - 36), 14), box)
             bg, fg, ratio = _region_contrast(img, band)
             assert ratio >= 4.5, (
                 f"group title {box.title()!r} in {theme}: {fg} on {bg} = {ratio:.2f}:1"
@@ -352,7 +436,7 @@ class TestAlternatingRows:
         img = _grab(tree.viewport())
         row_bgs = []
         for item in items:
-            rect = tree.visualRect(tree.indexFromItem(item))
+            rect = _img_rect(tree.visualRect(tree.indexFromItem(item)), tree.viewport())
             assert rect.isValid() and rect.height() > 0
             # Background probe at the row's right edge (no text there).
             p = img.pixelColor(img.width() - 6, rect.center().y())
@@ -368,3 +452,207 @@ class TestAlternatingRows:
         assert row_bgs[0] != row_bgs[1], f"{theme}: rows do not alternate: {row_bgs}"
         assert row_bgs[0] == row_bgs[2], f"{theme}: alternating pattern broken: {row_bgs}"
         assert row_bgs[1] == row_bgs[3], f"{theme}: alternating pattern broken: {row_bgs}"
+
+
+# ---------------------------------------------------------------------------
+# (c) Batch A1 (N1/N2/N2b/X-3): QSS-text assertions + pixel probes
+# ---------------------------------------------------------------------------
+
+
+class TestBatchA1QssRules:
+    """QSS-text assertions for the A1 residual rules (both theme files)."""
+
+    @pytest.mark.parametrize("theme", ["light", "dark"])
+    def test_date_time_edit_rules_present(self, theme):
+        qss = (STYLES / f"{theme}.qss").read_text(encoding="utf-8")
+        for cls in ("QDateEdit", "QTimeEdit", "QDateTimeEdit"):
+            # N1: the classes join the Form Fields selector lists (base+focus)
+            # and get the spin-button / drop-down chrome analogs.
+            assert re.search(rf"^QLineEdit, [^{{]*\b{cls}\b[^{{]*\{{", qss, re.M), (
+                f"{theme}: {cls} missing from the Form Fields selector list"
+            )
+            assert re.search(rf"^QLineEdit:focus, [^{{]*\b{cls}\b[^{{]*\{{", qss, re.M), (
+                f"{theme}: {cls}:focus missing from the Form Fields focus list"
+            )
+            for sub in ("up-button", "down-button", "drop-down", "down-arrow"):
+                assert f"{cls}::{sub}" in qss, f"{theme}: missing {cls}::{sub} rule"
+
+    @pytest.mark.parametrize("theme", ["light", "dark"])
+    def test_drop_down_chips_have_background(self, theme):
+        qss = (STYLES / f"{theme}.qss").read_text(encoding="utf-8")
+        # N2: the combo chip needs an explicit background or it paints the
+        # default palette's light gray; the N1 date/time chip mirrors it.
+        for cls in ("QComboBox", "QDateEdit", "QTimeEdit", "QDateTimeEdit"):
+            match = re.search(rf"{cls}::drop-down[^{{]*\{{([^}}]*)\}}", qss)
+            assert match, f"{theme}: missing {cls}::drop-down rule"
+            assert "background-color" in match.group(1), (
+                f"{theme}: {cls}::drop-down has no background-color (light-gray chip defect)"
+            )
+
+    @pytest.mark.parametrize("theme", ["light", "dark"])
+    def test_tooltip_and_menu_rules_present(self, theme):
+        qss = (STYLES / f"{theme}.qss").read_text(encoding="utf-8")
+        for selector in ("QToolTip", "QMenu"):
+            match = re.search(rf"^{selector}\s*\{{([^}}]*)\}}", qss, re.M)
+            assert match, f"{theme}: missing {selector} rule"
+            body = match.group(1)
+            assert "background-color" in body, f"{theme}: {selector} has no background-color"
+            assert re.search(r"\bcolor\s*:", body), f"{theme}: {selector} has no text color"
+        match = re.search(r"^QMenu::item:selected\s*\{([^}]*)\}", qss, re.M)
+        assert match, f"{theme}: missing QMenu::item:selected rule"
+        assert "background-color" in match.group(1)
+        assert re.search(r"\bcolor\s*:", match.group(1))
+
+
+class TestDateEdits:
+    """N1: date/time edits render themed with >= 4.5:1 text in both themes."""
+
+    @pytest.mark.parametrize("theme", ["dark", "light"])
+    @pytest.mark.parametrize("cls", [QDateEdit, QTimeEdit, QDateTimeEdit])
+    def test_date_time_edit_field_text_and_chrome(self, qapp, qtbot, apply_theme, theme, cls):
+        apply_theme(theme)
+        edit = cls()
+        qtbot.addWidget(edit)
+        edit.setFixedSize(180, 32)
+        edit.show()
+        QApplication.processEvents()
+
+        img = _grab(edit)
+        # Field surface must be a sanctioned theme surface (the N1 defect:
+        # white field in dark theme) with legible text over it.
+        bg, fg, ratio = _region_contrast(img)
+        assert _on_field_surface(bg, theme), (
+            f"{cls.__name__} {theme}: field background {bg} is not a sanctioned "
+            f"field surface {sorted(FIELD_SURFACES[theme])}"
+        )
+        assert ratio >= 4.5, f"{cls.__name__} {theme}: text {fg} on {bg} = {ratio:.2f}:1"
+
+        # Right-edge chrome (drop-down chip / spin buttons) must not fall back
+        # to the default palette's light gray (the N2 defect class).
+        strip = QRect(img.width() - 21, 2, 18, img.height() - 4)
+        chrome_bg, _, _ = _region_contrast(img, strip)
+        assert _on_field_surface(chrome_bg, theme), (
+            f"{cls.__name__} {theme}: right-edge chrome {chrome_bg} is not a "
+            f"sanctioned field surface (palette remnant?)"
+        )
+
+    @pytest.mark.parametrize("theme", ["dark", "light"])
+    def test_date_edit_calendar_drop_down_chip(self, qapp, qtbot, apply_theme, theme):
+        """The ``dialog.assay.dateField`` shape: QDateEdit with calendarPopup."""
+        apply_theme(theme)
+        edit = QDateEdit()
+        edit.setCalendarPopup(True)
+        qtbot.addWidget(edit)
+        edit.setFixedSize(180, 32)
+        edit.show()
+        QApplication.processEvents()
+
+        img = _grab(edit)
+        strip = QRect(img.width() - 21, 2, 18, img.height() - 4)
+        chip_bg, _, _ = _region_contrast(img, strip)
+        assert _on_field_surface(chip_bg, theme), (
+            f"calendar drop-down chip {chip_bg} is not a sanctioned field "
+            f"surface in {theme} (palette remnant?)"
+        )
+
+    @pytest.mark.parametrize("theme", ["dark", "light"])
+    @pytest.mark.parametrize("cls", [QSpinBox, QDoubleSpinBox])
+    def test_spin_button_chrome_has_no_palette_remnant(self, qapp, qtbot, apply_theme, theme, cls):
+        """Guards the shared spin-button rule the N1 mirror extends."""
+        apply_theme(theme)
+        spin = cls()
+        spin.setRange(0, 99)
+        spin.setValue(3)
+        qtbot.addWidget(spin)
+        spin.setFixedSize(120, 32)
+        spin.show()
+        QApplication.processEvents()
+
+        img = _grab(spin)
+        strip = QRect(img.width() - 21, 2, 18, img.height() - 4)
+        chrome_bg, _, _ = _region_contrast(img, strip)
+        assert _on_field_surface(chrome_bg, theme), (
+            f"{cls.__name__} {theme}: spin-button chrome {chrome_bg} is not a "
+            f"sanctioned field surface (palette remnant?)"
+        )
+
+
+class TestComboDropChip:
+    """N2: the combo drop-down chip keeps the field background in both themes."""
+
+    @pytest.mark.parametrize("theme", ["dark", "light"])
+    def test_combo_chip_matches_field_and_text_legible(self, qapp, qtbot, apply_theme, theme):
+        apply_theme(theme)
+        combo = QComboBox()
+        combo.addItems(["SDS-PAGE", "FACS"])
+        qtbot.addWidget(combo)
+        combo.setFixedSize(180, 32)
+        combo.show()
+        QApplication.processEvents()
+
+        img = _grab(combo)
+        strip = QRect(img.width() - 21, 2, 18, img.height() - 4)
+        chip_bg, _, _ = _region_contrast(img, strip)
+        assert _on_field_surface(chip_bg, theme), (
+            f"QComboBox {theme}: drop-down chip {chip_bg} is not a sanctioned "
+            f"field surface (palette remnant?)"
+        )
+        bg, fg, ratio = _region_contrast(img)
+        assert _on_field_surface(bg, theme), (
+            f"QComboBox {theme}: field background {bg} is not a sanctioned surface"
+        )
+        assert ratio >= 4.5, f"QComboBox {theme}: item text {fg} on {bg} = {ratio:.2f}:1"
+
+
+class TestWizardWarning:
+    """N2b: the study-wizard warning uses the ``warning`` uiRole (no literal)."""
+
+    @pytest.mark.parametrize("theme", ["dark", "light"])
+    def test_warning_label_role_and_contrast(self, qapp, qtbot, apply_theme, theme):
+        from gui.dialogs.study_wizard import StudyWizard
+
+        apply_theme(theme)
+        wizard = StudyWizard(parent=None, dm=None)  # no investigations -> warning visible
+        qtbot.addWidget(wizard)
+        # Plain text for the probe: the ⚠ glyph can carry its own emoji colors,
+        # which would pollute the farthest-frequent-color foreground pick.
+        wizard.no_inv_warning.setText("No investigations found.")
+        wizard.show()
+        QApplication.processEvents()
+
+        assert wizard.no_inv_warning.property("uiRole") == "warning"
+        sheet = wizard.no_inv_warning.styleSheet()
+        assert "font-weight" in sheet, "the bold emphasis stays inline (layout-only)"
+        assert "color" not in sheet, "no inline color literal on the warning label"
+
+        img = _grab(wizard)
+        bg, fg, ratio = _region_contrast(img, _region_of(wizard.no_inv_warning, wizard))
+        assert ratio >= 4.5, f"wizard warning {fg} on {bg} = {ratio:.2f}:1 in {theme}"
+
+    def test_no_inline_warning_color_literal(self):
+        source = (REPO_ROOT / "gui" / "dialogs" / "study_wizard.py").read_text(encoding="utf-8")
+        assert "#d35400" not in source
+        assert 'set_ui_role(self.no_inv_warning, "warning")' in source
+
+
+class TestMenuSurface:
+    """X-3: context menus render themed with >= 4.5:1 item text."""
+
+    @pytest.mark.parametrize("theme", ["dark", "light"])
+    def test_menu_surface_and_item_text(self, qapp, qtbot, apply_theme, theme):
+        apply_theme(theme)
+        menu = QMenu()
+        menu.addAction("First action")
+        menu.addAction("Second action")
+        menu.addAction("Third action")
+        qtbot.addWidget(menu)
+        menu.show()
+        QApplication.processEvents()
+
+        img = _grab(menu)
+        bg, fg, ratio = _region_contrast(img)
+        assert _close(bg, MENU_BG[theme], tol=12), (
+            f"QMenu {theme}: surface {bg} != {MENU_BG[theme]}"
+        )
+        assert ratio >= 4.5, f"QMenu {theme}: item text {fg} on {bg} = {ratio:.2f}:1"
+        menu.close()
