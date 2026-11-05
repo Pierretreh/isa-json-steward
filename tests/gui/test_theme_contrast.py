@@ -130,6 +130,17 @@ def _img_rect(rect: QRect, widget) -> QRect:
     )
 
 
+def _chrome_strip(widget) -> QRect:
+    """Right-edge chrome strip (drop-down chip / spin buttons) in image px.
+
+    Built in logical widget coordinates and mapped through :func:`_img_rect`
+    so the probe lands on the same sub-widget at any device pixel ratio
+    (font-metric/DPR robust -- the previous inline ``img.width() - 21`` form
+    silently sampled the wrong region when DPR != 1).
+    """
+    return _img_rect(QRect(widget.width() - 21, 2, 18, widget.height() - 4), widget)
+
+
 def _drain_layout(widget=None, rounds: int = 5) -> None:
     """Drain queued/cascaded events so widget geometry is final.
 
@@ -478,6 +489,28 @@ class TestBatchA1QssRules:
                 assert f"{cls}::{sub}" in qss, f"{theme}: missing {cls}::{sub} rule"
 
     @pytest.mark.parametrize("theme", ["light", "dark"])
+    def test_date_time_editor_colors_pinned_including_inner_editors(self, theme):
+        """N1 hardening: text/background/selection colors are pinned on the
+        date/time editors AND their inner editors, so no platform palette can
+        leak into the field text or the current-section selection (the CI
+        failure class: an orange platform selection reached the text probe)."""
+        qss = (STYLES / f"{theme}.qss").read_text(encoding="utf-8")
+        match = re.search(
+            r"QDateEdit, QTimeEdit, QDateTimeEdit,\s*"
+            r"QDateEdit QLineEdit, QTimeEdit QLineEdit, QDateTimeEdit QLineEdit\s*"
+            r"\{([^}]*)\}",
+            qss,
+        )
+        assert match, f"{theme}: missing pinned date/time editor + inner-editor rule"
+        body = match.group(1)
+        for prop in ("color", "background-color", "selection-background-color", "selection-color"):
+            # lookbehind: the declaration must be standalone (a bare "color"
+            # pin must not be satisfied by "background-color: ...").
+            assert re.search(
+                rf"(?<![-\w]){re.escape(prop)}\s*:", body
+            ), f"{theme}: date/time editor rule has no {prop} pin"
+
+    @pytest.mark.parametrize("theme", ["light", "dark"])
     def test_drop_down_chips_have_background(self, theme):
         qss = (STYLES / f"{theme}.qss").read_text(encoding="utf-8")
         # N2: the combo chip needs an explicit background or it paints the
@@ -517,10 +550,22 @@ class TestDateEdits:
         edit.show()
         QApplication.processEvents()
 
+        # Focus determinism: offscreen platforms grant focus on show, and a
+        # focused date/time edit renders its current section as a text
+        # SELECTION (selection colors are their own QSS-pinned surface).  On CI
+        # the platform selection palette leaked into the text probe (orange
+        # text measurement); clearing the focus pins the probe to the plain
+        # field text on every platform/font stack.
+        edit.clearFocus()
+        QApplication.processEvents()
+
         img = _grab(edit)
         # Field surface must be a sanctioned theme surface (the N1 defect:
-        # white field in dark theme) with legible text over it.
-        bg, fg, ratio = _region_contrast(img)
+        # white field in dark theme) with legible text over it.  The text
+        # probe covers the field area only (right-edge chrome excluded) and is
+        # mapped to image pixels through _img_rect (DPR/font-metric robust).
+        field = _img_rect(QRect(2, 2, edit.width() - 25, edit.height() - 4), edit)
+        bg, fg, ratio = _region_contrast(img, field)
         assert _on_field_surface(bg, theme), (
             f"{cls.__name__} {theme}: field background {bg} is not a sanctioned "
             f"field surface {sorted(FIELD_SURFACES[theme])}"
@@ -529,8 +574,7 @@ class TestDateEdits:
 
         # Right-edge chrome (drop-down chip / spin buttons) must not fall back
         # to the default palette's light gray (the N2 defect class).
-        strip = QRect(img.width() - 21, 2, 18, img.height() - 4)
-        chrome_bg, _, _ = _region_contrast(img, strip)
+        chrome_bg, _, _ = _region_contrast(img, _chrome_strip(edit))
         assert _on_field_surface(chrome_bg, theme), (
             f"{cls.__name__} {theme}: right-edge chrome {chrome_bg} is not a "
             f"sanctioned field surface (palette remnant?)"
@@ -548,8 +592,7 @@ class TestDateEdits:
         QApplication.processEvents()
 
         img = _grab(edit)
-        strip = QRect(img.width() - 21, 2, 18, img.height() - 4)
-        chip_bg, _, _ = _region_contrast(img, strip)
+        chip_bg, _, _ = _region_contrast(img, _chrome_strip(edit))
         assert _on_field_surface(chip_bg, theme), (
             f"calendar drop-down chip {chip_bg} is not a sanctioned field "
             f"surface in {theme} (palette remnant?)"
@@ -569,8 +612,7 @@ class TestDateEdits:
         QApplication.processEvents()
 
         img = _grab(spin)
-        strip = QRect(img.width() - 21, 2, 18, img.height() - 4)
-        chrome_bg, _, _ = _region_contrast(img, strip)
+        chrome_bg, _, _ = _region_contrast(img, _chrome_strip(spin))
         assert _on_field_surface(chrome_bg, theme), (
             f"{cls.__name__} {theme}: spin-button chrome {chrome_bg} is not a "
             f"sanctioned field surface (palette remnant?)"
@@ -591,8 +633,7 @@ class TestComboDropChip:
         QApplication.processEvents()
 
         img = _grab(combo)
-        strip = QRect(img.width() - 21, 2, 18, img.height() - 4)
-        chip_bg, _, _ = _region_contrast(img, strip)
+        chip_bg, _, _ = _region_contrast(img, _chrome_strip(combo))
         assert _on_field_surface(chip_bg, theme), (
             f"QComboBox {theme}: drop-down chip {chip_bg} is not a sanctioned "
             f"field surface (palette remnant?)"

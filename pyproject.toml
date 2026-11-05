@@ -45,7 +45,22 @@ dev = [
     "pytest-xdist>=3.5.0",
     "black>=26.5.1",
     "isort>=5.12.0",
-    "mypy>=1.0.0",
+    # Pinned explicitly (was mypy>=1.0.0) so the mypy gate is reproducible:
+    # CI resolved floating versions and the gate broke on third-party stub
+    # churn (see the PyQt6 pin below).  2.4.1 is the version the gate is
+    # verified against on both Python 3.11 and 3.12.
+    "mypy==2.4.1",
+    # Cap for the mypy gate only (this extra is what CI/dev install): PyQt6
+    # 6.12.0 ships syntactically INVALID stubs (PyQt6/QtGui.pyi declares
+    # `*args: X, /` -- "'/' parameter must appear before '*' parameter"), which
+    # mypy cannot parse on ANY interpreter or version ("errors prevented
+    # further checking" -> exit 2).  Verified: neither ignore_errors nor
+    # follow_imports=skip suppresses stub parse errors, so the only fix is to
+    # keep the gate on a PyQt6 whose stubs parse.  Runtime installs without
+    # this extra are unaffected; drop the cap once upstream ships parseable
+    # stubs (>= 6.12.1), then refresh the visual baselines (env fingerprint
+    # records the PyQt6 version).
+    "PyQt6>=6.6.0,<6.12",
     "flake8>=6.0.0",
     "bandit>=1.7.0",
     "safety>=2.0.0",
@@ -65,6 +80,11 @@ conversion = [
     "fcsparser>=0.2.4",
     "tifffile>=2023.4.12",
     "openslide-python>=1.3.1",
+    # openslide-python is only a thin wrapper: without the OpenSlide C
+    # library/DLLs `import openslide` fails ("Couldn't locate OpenSlide
+    # DLL"), which broke the CI extras import check on Windows.
+    # openslide-bin ships those binaries via pip on every platform.
+    "openslide-bin>=4.0.0",
     "readlif>=0.6.5",
 ]
 agent = [

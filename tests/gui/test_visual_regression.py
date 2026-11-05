@@ -12,6 +12,13 @@ Run/refresh (bare after E-1)::
 
 On failure the expected/actual/diff PNGs are written to
 ``reports/visual_diff/`` for agent/vision review.
+
+Comparisons only run in the environment the baselines were captured in
+(``fingerprint_<platform>.json``, see ``tests/gui/visual.py``): a mismatch
+skips locally and fails in CI (``ISA_STEWARD_VISUAL_STRICT=1`` forces a
+cross-env comparison).  Canonical baselines are captured ON the CI runners
+via the ``visual-baselines`` workflow_dispatch job -- see
+``tests/gui/baselines/README.md`` for the refresh flow.
 """
 
 import os
@@ -40,9 +47,12 @@ try:
         capture_page,
         committed_platform_keys,
         compare_images,
+        fingerprint_action,
         is_update_mode,
+        load_fingerprint,
         missing_baseline_action,
         platform_key,
+        record_fingerprint,
         write_diff_artifacts,
     )
 except ImportError:  # pragma: no cover - PyQt6/Pillow absent
@@ -58,9 +68,11 @@ def test_page_matches_baseline(page_id, theme, main_window, tmp_path):
     if is_update_mode():
         written = capture_page(main_window, page_id, theme, BASELINE_DIR, name=name)
         assert written.is_file(), f"update mode failed to write {written}"
+        # Record the capturing environment beside the PNGs so comparisons
+        # only run where they can be meaningful (runner-canonical policy).
+        record_fingerprint()
         return
 
-    actual = capture_page(main_window, page_id, theme, tmp_path, name=name)
     expected = baseline_path(page_id, theme)
     if not expected.is_file():
         if missing_baseline_action() == "fail":
@@ -74,6 +86,13 @@ def test_page_matches_baseline(page_id, theme, main_window, tmp_path):
             f" {UPDATE_ENV}=1 QT_QPA_PLATFORM=offscreen pytest -m gui_visual"
         )
 
+    action, reason = fingerprint_action(load_fingerprint())
+    if action == "skip":
+        pytest.skip(reason)
+    if action == "fail":
+        pytest.fail(reason)
+
+    actual = capture_page(main_window, page_id, theme, tmp_path, name=name)
     result = compare_images(expected, actual)
     if not result.ok:
         artifacts = write_diff_artifacts(name, expected, actual)

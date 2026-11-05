@@ -410,9 +410,17 @@ returning exactly the 7 tools of section 8.1.
   message is normalized to the generic `View: …` line before each grab
   (page-specific messages can embed absolute machine paths). Missing
   baselines skip locally with a clear message and fail only in CI on a
-  platform that owns a committed set (windows). Diff artifacts
-  (expected/actual/diff PNGs) land in `reports/visual_diff/` (uploaded by CI
-  on failure).
+  platform that owns a committed set (windows). Comparisons additionally
+  gate on an environment-fingerprint sidecar (`fingerprint_<platform>.json`:
+  platform + OS build + Qt/PyQt6 + font environment, schema
+  `isa-gui/baseline-fingerprint/1`): a mismatch skips locally and fails in
+  CI (`ISA_STEWARD_VISUAL_STRICT=1` forces a cross-env comparison), so
+  dev-box runs never false-alarm against runner-canonical baselines while CI
+  stays the meaningful gate. Platforms without a committed set skip the
+  comparisons entirely — that is the by-design source of the per-job
+  skip-count delta (the linux leg skips the 20 `test_page_matches_baseline`
+  params; the windows leg runs them). Diff artifacts (expected/actual/diff
+  PNGs) land in `reports/visual_diff/` (uploaded by CI on failure).
 
 ## 10. Agent workflow
 
@@ -442,15 +450,26 @@ returning exactly the 7 tools of section 8.1.
   layout fixes, new/renamed pages — the inventory meta-test fails loudly on
   a stale page list). Never re-baseline to silence an unexplained diff —
   read `reports/visual_diff/<name>.diff.png` first.
-- **How (agents):** `ISA_STEWARD_UPDATE_BASELINES=1 QT_QPA_PLATFORM=offscreen
-  pytest -m gui_visual`, then review the regenerated PNGs and commit them
-  together with the change that caused the drift. Baselines are
+- **Canonical set = CI-runner captures.** Runner font rasterization differs
+  from dev boxes (the plan's stated risk), so the committed set is refreshed
+  via the manual-dispatch `visual-baselines` workflow job: run it from the
+  Actions tab, download the `visual-baselines-<os>` artifact, review the
+  PNGs, and commit the platform-keyed files (`*_windows.png` +
+  `fingerprint_windows.json`, likewise per platform) — exact steps in
+  [`tests/gui/baselines/README.md`](tests/gui/baselines/README.md).
+- **How (agents):** for *intentional* visual changes the dispatch job above
+  is the refresh path. Locally, `ISA_STEWARD_UPDATE_BASELINES=1
+  QT_QPA_PLATFORM=offscreen pytest -m gui_visual` regenerates for local
+  iteration (and records the local `fingerprint_<platform>.json`) — never
+  commit locally regenerated PNGs as the canonical runner set. Baselines are
   platform-keyed; capture on the platform whose set you refresh.
 - **CI:** the `test` matrix runs the visual tests and uploads
-  `reports/visual_diff/` on failure; a diff on a runner with different font
-  rasterization is possible (the plan's stated risk) — resolve it by
-  regenerating on that runner via the manual-dispatch `visual-baselines`
-  workflow job (uploads `tests/gui/baselines/` as an artifact to commit).
+  `reports/visual_diff/` on failure. A comparison runs only where the
+  recorded fingerprint matches the current environment (skip locally / fail
+  in CI on mismatch, section 9); `ISA_STEWARD_VISUAL_STRICT=1` forces a
+  cross-env comparison. Runner-side diffs with an unchanged fingerprint are
+  real drift; runner-image/Qt bumps flip the fingerprint and fail with one
+  actionable message pointing back at the dispatch job.
 - **Determinism rules:** captures pin the window size (1280×800), disable
   caret flashing, stop `auto_save_timer`, normalize the status-bar message,
   flush destroyed widgets (`DeferredDelete` — leaked windows otherwise make
@@ -497,4 +516,6 @@ verification (screenshot both themes); break the
 `isa-gui/widget-tree/1` dump schema without versioning it; click
 modal-opening buttons via MCP expecting a quick return; rely on
 `screenshot(theme=...)` to persist a theme (it is session-only); re-baseline
-visual goldens to silence an unexplained diff.
+visual goldens to silence an unexplained diff; commit locally regenerated
+baseline PNGs as the canonical runner set (use the `visual-baselines`
+dispatch job).

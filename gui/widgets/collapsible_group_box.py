@@ -80,8 +80,12 @@ class CollapsibleGroupBox(QGroupBox):
         """Add a layout to the content area."""
         self._content_layout.addLayout(layout)
 
-    def setTitle(self, title: str) -> None:
-        """Keep the accessible name in sync with the visible title (P2-3)."""
+    def setTitle(self, title: str | None) -> None:
+        """Keep the accessible name in sync with the visible title (P2-3).
+
+        Signature mirrors ``QGroupBox.setTitle`` (which accepts ``str | None``)
+        so the override is Liskov-compatible (mypy [override]).
+        """
         super().setTitle(title)
         if title:
             self.setAccessibleName(title)

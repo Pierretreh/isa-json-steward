@@ -95,11 +95,12 @@ def _build_node(
         "properties": {},
         "children": [],
     }
-    if hasattr(widget, "isCheckable") and widget.isCheckable():
+    # Duck-typed checkbox support; hasattr() also narrows QWidget for mypy.
+    if hasattr(widget, "isCheckable") and widget.isCheckable() and hasattr(widget, "isChecked"):
         node["checked"] = widget.isChecked()
 
     for name in widget.dynamicPropertyNames():
-        key = bytes(name).decode("utf-8", errors="replace")
+        key = name.data().decode("utf-8", errors="replace")
         if key == TEST_ID_PROPERTY:
             continue
         node["properties"][key] = _json_safe(widget.property(key))

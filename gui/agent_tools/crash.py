@@ -418,11 +418,14 @@ class StewardNotifyMixin:
     """
 
     def notify(self, receiver, event) -> bool:  # noqa: N802 (Qt API)
+        # The mixin is always composed with QApplication at runtime (gui.app.
+        # StewardApp, agent harnesses); super().notify() resolves through that
+        # concrete MRO, which this class's static base cannot express to mypy.
         if not hooks_active():
-            return super().notify(receiver, event)
+            return super().notify(receiver, event)  # type: ignore[misc, no-any-return]
         _enter_dispatch()
         try:
-            return super().notify(receiver, event)
+            return super().notify(receiver, event)  # type: ignore[misc, no-any-return]
         except Exception as exc:
             try:
                 write_crash_bundle(

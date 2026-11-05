@@ -18,7 +18,14 @@ pinned design lives in ``plans/gui-usability-improvements.md`` (P2-2):
   the mean channel delta exceeds :data:`MEAN_DELTA_MAX`.  On failure the
   expected/actual/diff PNGs are written to ``reports/visual_diff/`` (file
   paths only, never base64).
-* **Lifecycle:** ``ISA_STEWARD_UPDATE_BASELINES=1`` (re)generates baselines.
+* **Lifecycle:** ``ISA_STEWARD_UPDATE_BASELINES=1`` (re)generates baselines
+  and records ``fingerprint_<platform>.json`` (render-scoped environment
+  identity: platform + OS build + Qt/PyQt6 + font environment).  A
+  comparison runs only where the current environment matches that
+  fingerprint -- skip-with-message locally, fail in CI on mismatch;
+  ``ISA_STEWARD_VISUAL_STRICT=1`` forces a cross-env comparison
+  (:func:`fingerprint_action`).  Baselines are CI-runner-canonical; the
+  sanctioned refresh path is the ``visual-baselines`` workflow_dispatch job.
 
 Determinism contract for :func:`capture_page` (why each step exists):
 
@@ -57,6 +64,8 @@ the plan) rather than per-test.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import platform as _platform
 import time
@@ -72,6 +81,7 @@ from gui.agent_tools.runtime import ensure_offscreen_fontdir
 # QApplication setup, so this module-level call runs early enough.
 ensure_offscreen_fontdir()
 
+from PyQt6.QtCore import PYQT_VERSION_STR, QT_VERSION_STR  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from gui.agent_tools.screenshot import _apply_theme, gui_screenshot  # noqa: E402
@@ -82,6 +92,14 @@ DIFF_DIR = REPO_ROOT / "reports" / "visual_diff"
 
 #: Env gate that (re)generates baselines instead of comparing (plan P2-2).
 UPDATE_ENV = "ISA_STEWARD_UPDATE_BASELINES"
+
+#: Env gate that forces a comparison even when the recorded baseline
+#: fingerprint does not match this environment (deliberate cross-env check).
+STRICT_ENV = "ISA_STEWARD_VISUAL_STRICT"
+
+#: Schema id of the ``fingerprint_<platform>.json`` sidecar written next to
+#: the baseline PNGs (see :func:`env_fingerprint`).
+FINGERPRINT_SCHEMA = "isa-gui/baseline-fingerprint/1"
 
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 800
@@ -185,6 +203,121 @@ def missing_baseline_action() -> str:
     if platform_key() in committed_platform_keys() and in_ci():
         return "fail"
     return "skip"
+
+
+# ---------------------------------------------------------------------------
+# Environment fingerprint (runner-canonical baseline policy)
+# ---------------------------------------------------------------------------
+
+
+def fingerprint_path() -> Path:
+    """Sidecar recording where this platform's baseline set was captured."""
+    return BASELINE_DIR / f"fingerprint_{platform_key()}.json"
+
+
+def _fonts_fingerprint() -> Optional[str]:
+    """Cheap fingerprint of the pinned offscreen font dir (X-2).
+
+    Names + *sizes* only (no file reads): a font update changes sizes even
+    when the file names stay identical -- exactly the runner-image drift that
+    changes rasterization.  ``None`` when no font dir is pinned (fontconfig
+    environments, where the OS string already separates the worlds).
+    """
+    fontdir = os.environ.get("QT_QPA_FONTDIR", "").strip()
+    if not fontdir or not Path(fontdir).is_dir():
+        return None
+    entries = []
+    with os.scandir(fontdir) as it:
+        for entry in it:
+            if entry.is_file():
+                try:
+                    entries.append(f"{entry.name}:{entry.stat().st_size}")
+                except OSError:
+                    continue
+    return hashlib.sha256("\n".join(sorted(entries)).encode("utf-8")).hexdigest()
+
+
+def env_fingerprint() -> dict:
+    """Render-relevant environment identity of the current machine.
+
+    Deliberately render-scoped (platform + OS build + Qt/PyQt6 + font
+    environment, NO Python version): the CI matrix runs 3.11 and 3.12 legs
+    that share one canonical baseline set, and interpreter versions do not
+    affect Qt rasterization.  Recorded next to the baselines in update mode
+    so a comparison only runs where it can be meaningful.
+    """
+    return {
+        "schema": FINGERPRINT_SCHEMA,
+        "platform": platform_key(),
+        "os": _platform.platform(),
+        "qt": QT_VERSION_STR,
+        "pyqt6": PYQT_VERSION_STR,
+        "font_env": {
+            "QT_QPA_FONTDIR": os.environ.get("QT_QPA_FONTDIR", ""),
+            "QT_QPA_PLATFORM": os.environ.get("QT_QPA_PLATFORM", ""),
+        },
+        "fonts_sha256": _fonts_fingerprint(),
+    }
+
+
+def record_fingerprint() -> Path:
+    """Write this environment's fingerprint beside the baseline PNGs."""
+    path = fingerprint_path()
+    path.write_text(
+        json.dumps(env_fingerprint(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return path
+
+
+def load_fingerprint() -> Optional[dict]:
+    """Fingerprint recorded for this platform, or ``None`` when absent."""
+    path = fingerprint_path()
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def strict_visual() -> bool:
+    """True when ``ISA_STEWARD_VISUAL_STRICT=1`` forces cross-env comparison."""
+    return os.environ.get(STRICT_ENV, "").strip() == "1"
+
+
+def fingerprint_action(recorded: Optional[dict]) -> tuple:
+    """Policy for comparing baselines captured in a different environment.
+
+    Returns ``(action, reason)``; ``action`` is one of:
+
+    * ``"compare"`` -- the recorded fingerprint matches this environment, or
+      ``ISA_STEWARD_VISUAL_STRICT=1`` deliberately forces the comparison.
+    * ``"skip"`` -- local run without a matching fingerprint: skip with the
+      reason (P2-2 philosophy -- a dev box must not false-alarm red against
+      runner-canonical baselines).
+    * ``"fail"`` -- CI without a matching fingerprint: fail loudly (CI is the
+      meaningful gate; a stale fingerprint means the runner image drifted --
+      re-run the ``visual-baselines`` dispatch job and commit the artifact).
+    """
+    if strict_visual() or recorded == env_fingerprint():
+        return "compare", ""
+    if recorded is None:
+        recorded_txt = "none recorded (set predates fingerprints)"
+    else:
+        recorded_txt = json.dumps(recorded, sort_keys=True)
+    reason = (
+        f"baseline fingerprint mismatch for platform {platform_key()!r}:\n"
+        f"  recorded: {recorded_txt}\n"
+        f"  current:  {json.dumps(env_fingerprint(), sort_keys=True)}\n"
+        "baselines are CI-runner-canonical (AGENTS.md sections 9-10): refresh them"
+        " with the 'visual-baselines' workflow_dispatch job, download the"
+        " visual-baselines-<os> artifact and commit it, or set"
+        f" {STRICT_ENV}=1 to force a cross-env comparison."
+    )
+    if in_ci():
+        return "fail", reason
+    return "skip", reason
 
 
 # ---------------------------------------------------------------------------

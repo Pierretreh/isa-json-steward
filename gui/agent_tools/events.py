@@ -48,7 +48,7 @@ import uuid
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TextIO
 
 from PyQt6.QtCore import QEvent, QObject
 from PyQt6.QtWidgets import QWidget
@@ -128,7 +128,7 @@ class GuiEventLogger:
         self._seq = 0
         self._ring: deque[dict] = deque(maxlen=max_buffer)
         self._lock = threading.Lock()
-        self._file = None
+        self._file: Optional[TextIO] = None
         self._file_failed = False
 
     # -- writing -------------------------------------------------------

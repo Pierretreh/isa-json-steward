@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, MutableMapping, Optional, cast
 
 from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QApplication, QWidget
@@ -40,7 +40,7 @@ def _windows_fontdir() -> Optional[str]:
     return str(fontdir) if fontdir.is_dir() else None
 
 
-def ensure_offscreen_fontdir(env: Optional[dict] = None) -> None:
+def ensure_offscreen_fontdir(env: Optional[MutableMapping[str, str]] = None) -> None:
     """X-2: give offscreen renders a usable font dir on Windows.
 
     When the effective platform is ``offscreen``, running on Windows, and
@@ -61,7 +61,7 @@ def ensure_offscreen_fontdir(env: Optional[dict] = None) -> None:
         target["QT_QPA_FONTDIR"] = fontdir
 
 
-def ensure_offscreen_platform(env: Optional[dict] = None) -> str:
+def ensure_offscreen_platform(env: Optional[MutableMapping[str, str]] = None) -> str:
     """Normalize ``QT_QPA_PLATFORM`` in ``env`` (default: ``os.environ``).
 
     Returns the normalized value.  A whitespace-polluted value (the cmd.exe
@@ -169,6 +169,7 @@ class HeadlessGui:
         )
 
         repo_root = Path(__file__).resolve().parents[2]
+        profile_dir: Optional[Path]
         if self._profile:
             profile_dir = Path(self._profile)
             if not profile_dir.is_dir():
@@ -203,8 +204,9 @@ class HeadlessGui:
 
         qapp = QApplication.instance()
         setup_gui_event_log()
-        install_event_filter(qapp)
-        install_crash_hooks(qapp)
+        if isinstance(qapp, QApplication):
+            install_event_filter(qapp)
+            install_crash_hooks(qapp)
 
     def start(self) -> None:
         """Create the application + main window, show them, pump events."""
@@ -229,7 +231,10 @@ class HeadlessGui:
             self.app = existing  # a real StewardApp already exists
             self._owns_app = False
         else:
-            self.app = _AgentAppShim(existing)
+            # QApplication.instance() is typed QCoreApplication | None in the
+            # PyQt6 stubs; the singleton is always a QApplication here (the
+            # shim needs QApplication.setStyleSheet()).
+            self.app = _AgentAppShim(cast(QApplication, existing))
             self._owns_app = False
 
         if self._theme:
@@ -325,7 +330,10 @@ class HeadlessGui:
             from PyQt6.QtTest import QTest
 
             # Real mouse events -- the application event filter logs the click.
-            QTest.mouseClick(widget, Qt.MouseButton.LeftButton)
+            # PyQt6's QtTest stubs declare mouseClick with a ``self: QTest``
+            # parameter although it is used as a static entry point; this call
+            # form is the standard PyQt idiom (runtime-verified in tests/gui).
+            QTest.mouseClick(widget, Qt.MouseButton.LeftButton)  # type: ignore[call-overload]
         self.process_events(50)
 
     def set_text(self, test_id: str, value: str) -> None:
@@ -348,7 +356,7 @@ class HeadlessGui:
         """Return ``{"text","checked","enabled","visible","value"}`` for ``test_id``."""
         widget = self.find(test_id)
         checked: Optional[bool] = None
-        if hasattr(widget, "isCheckable") and widget.isCheckable():
+        if hasattr(widget, "isCheckable") and widget.isCheckable() and hasattr(widget, "isChecked"):
             checked = widget.isChecked()
         return {
             "text": _widget_text(widget),

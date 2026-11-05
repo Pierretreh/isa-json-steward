@@ -878,7 +878,7 @@ class ProfileLoader:
         against the profile root directory, so profile-shipped ontology
         files are found regardless of the process working directory.
         """
-        return self._profile_root / self.profile.get("ontologies_dir", "ontologies")
+        return self._profile_root / str(self.profile.get("ontologies_dir", "ontologies"))
 
     def get_investigations_root(self) -> Path:
         """Return the resolved investigations directory path.

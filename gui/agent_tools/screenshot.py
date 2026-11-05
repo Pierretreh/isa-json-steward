@@ -76,7 +76,7 @@ def _resize_to_max_edge(pixmap: QPixmap, max_edge: int) -> QPixmap:
     buffer.open(QIODevice.OpenModeFlag.WriteOnly)
     pixmap.save(buffer, "PNG")
     buffer.close()
-    image = Image.open(io.BytesIO(bytes(payload)))
+    image: Image.Image = Image.open(io.BytesIO(payload.data()))
     scale = max_edge / float(longest)
     new_size = (max(1, round(width * scale)), max(1, round(height * scale)))
     image = image.resize(new_size, Image.Resampling.LANCZOS)
@@ -98,7 +98,7 @@ def _apply_theme(theme: str) -> None:
     previous stylesheet afterwards (see :func:`gui_screenshot`).
     """
     app = QApplication.instance()
-    if app is None:
+    if not isinstance(app, QApplication):
         return
     apply_theme = getattr(app, "apply_theme", None)
     if callable(apply_theme):
@@ -141,7 +141,7 @@ def gui_screenshot(
 
     app = QApplication.instance()
     previous_style: Optional[str] = None
-    if theme is not None and app is not None:
+    if theme is not None and isinstance(app, QApplication):
         previous_style = app.styleSheet()
         _apply_theme(theme)
 
@@ -191,6 +191,6 @@ def gui_screenshot(
     finally:
         # U-06: theme= is session-only -- never leave the app in the other
         # theme, even when the capture fails mid-way.
-        if previous_style is not None:
+        if previous_style is not None and isinstance(app, QApplication):
             app.setStyleSheet(previous_style)
             QApplication.processEvents()

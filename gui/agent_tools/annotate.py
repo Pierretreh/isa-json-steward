@@ -123,10 +123,11 @@ def collect_marks(root: QWidget) -> list[Mark]:
         while parent is not None:
             if isinstance(parent, QAbstractScrollArea):
                 viewport = parent.viewport()
-                vp_top_left = viewport.mapToGlobal(QPoint(0, 0)) - origin
-                rect = rect.intersected(
-                    QRect(vp_top_left.x(), vp_top_left.y(), viewport.width(), viewport.height())
-                )
+                if viewport is not None:
+                    vp_top_left = viewport.mapToGlobal(QPoint(0, 0)) - origin
+                    rect = rect.intersected(
+                        QRect(vp_top_left.x(), vp_top_left.y(), viewport.width(), viewport.height())
+                    )
             if parent is root:
                 break
             parent = parent.parentWidget()
@@ -163,7 +164,9 @@ def _contrast_colors() -> tuple[QColor, QColor]:
     bg = QColor("#ffffff")
     try:
         app = QApplication.instance()
-        if app is not None:
+        # isinstance narrows past the stubs' QCoreApplication | None (only a
+        # QApplication has activeWindow()/palette()).
+        if isinstance(app, QApplication):
             window = app.activeWindow()
             palette_source = window if window is not None else app
             bg = palette_source.palette().window().color()

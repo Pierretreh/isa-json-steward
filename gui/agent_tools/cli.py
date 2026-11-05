@@ -157,7 +157,7 @@ def _run(args: argparse.Namespace) -> dict:
                 annotate=bool(getattr(args, "annotate", False)),
                 theme=getattr(args, "theme", None),
             )
-            payload: dict[str, Any] = {
+            payload = {
                 "ok": True,
                 "path": str(result.path),
                 "width": result.width,

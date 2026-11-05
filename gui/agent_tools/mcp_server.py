@@ -73,7 +73,8 @@ try:  # pragma: no cover - trivial import shim
     from mcp.server.fastmcp import FastMCP
 except ImportError:  # pragma: no cover
     try:
-        from mcp.server.mcpserver import MCPServer as FastMCP  # mcp 2.x fallback
+        # mcp 2.x fallback; rebinding the imported name is intentional.
+        from mcp.server.mcpserver import MCPServer as FastMCP  # type: ignore[no-redef]
     except ImportError:
         FastMCP = None  # type: ignore[assignment,misc]
 
@@ -356,7 +357,19 @@ async def run_gui_test(pattern: str) -> str:
             }
         )
     except subprocess.TimeoutExpired as exc:
-        tail = _output_tail((exc.stdout or "") + ("\n" + exc.stderr if exc.stderr else ""))
+        # typeshed types TimeoutExpired.stdout/.stderr as bytes | str | None
+        # (text= narrows only at runtime) -- normalize before string ops.
+        stdout = (
+            exc.stdout.decode("utf-8", errors="replace")
+            if isinstance(exc.stdout, bytes)
+            else (exc.stdout or "")
+        )
+        stderr = (
+            exc.stderr.decode("utf-8", errors="replace")
+            if isinstance(exc.stderr, bytes)
+            else (exc.stderr or "")
+        )
+        tail = _output_tail(stdout + ("\n" + stderr if stderr else ""))
         return _dumps(
             {
                 "ok": False,

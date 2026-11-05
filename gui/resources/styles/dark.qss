@@ -161,6 +161,19 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdi
     background-color: #252526;
 }
 
+/* Date/time editors + their inner editors (N1 hardening): pin text, background
+   AND selection colors explicitly (dark twin of light.qss).  The focused
+   current section renders as a text selection painted with
+   QPalette::Highlight/HighlightedText; those roles must come from the theme,
+   never from the platform palette. */
+QDateEdit, QTimeEdit, QDateTimeEdit,
+QDateEdit QLineEdit, QTimeEdit QLineEdit, QDateTimeEdit QLineEdit {
+    color: #cccccc;
+    background-color: #3c3c3c;
+    selection-background-color: #0e639c;
+    selection-color: #ffffff;
+}
+
 /* Text Browser (U-03: details/preview panels must not fall back to the
    light default palette) */
 QTextBrowser {
