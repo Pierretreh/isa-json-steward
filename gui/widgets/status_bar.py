@@ -40,14 +40,15 @@ class StatusBar(QStatusBar):
 
         # Status message (stretches into the free space)
         self.status_label = QLabel("Ready")
-        set_test_id(self.status_label, "statusBar.messageLabel")
+        set_test_id(self.status_label, "statusBar.messageLabel", accessible_name="Status message")
         self.status_label.setStyleSheet("color: #ecf0f1;")
         self.status_label.setMinimumWidth(120)
         layout.addWidget(self.status_label, 1)
 
         # Progress bar (hidden by default; footprint capped at 200x16)
         self.progress_bar = QProgressBar()
-        set_test_id(self.progress_bar, "statusBar.progressBar")
+        set_test_id(self.progress_bar, "statusBar.progressBar", accessible_name="Progress")
+        self.progress_bar.setAccessibleDescription("Progress of the current long-running action")
         self.progress_bar.setFixedWidth(200)
         self.progress_bar.setMaximumHeight(16)
         self.progress_bar.setTextVisible(False)
@@ -60,12 +61,16 @@ class StatusBar(QStatusBar):
 
         # Investigation / study labels (right end of the same row)
         self.investigation_label = QLabel()
-        set_test_id(self.investigation_label, "statusBar.investigationLabel")
+        set_test_id(
+            self.investigation_label,
+            "statusBar.investigationLabel",
+            accessible_name="Current investigation",
+        )
         self.investigation_label.setStyleSheet("color: #bdc3c7; margin-left: 10px;")
         layout.addWidget(self.investigation_label)
 
         self.study_label = QLabel()
-        set_test_id(self.study_label, "statusBar.studyLabel")
+        set_test_id(self.study_label, "statusBar.studyLabel", accessible_name="Current study")
         self.study_label.setStyleSheet("color: #bdc3c7; margin-left: 10px;")
         layout.addWidget(self.study_label)
 

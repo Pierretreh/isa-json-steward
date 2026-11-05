@@ -24,10 +24,14 @@ class PathPicker(QWidget):
         # Create widgets
         self._line_edit = QLineEdit()
         self._line_edit.setPlaceholderText("Select a directory...")
+        self._line_edit.setAccessibleName("Directory path")
+        self._line_edit.setAccessibleDescription("Path to the selected directory")
         self._line_edit.textChanged.connect(self._on_text_changed)
 
         self._browse_button = QPushButton("Browse...")
         self._browse_button.setFixedWidth(80)
+        self._browse_button.setAccessibleName("Browse for a directory")
+        self._browse_button.setAccessibleDescription("Open a directory chooser dialog")
         self._browse_button.clicked.connect(self._on_browse_clicked)
 
         # Set up layout

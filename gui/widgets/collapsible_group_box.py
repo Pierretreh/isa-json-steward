@@ -14,6 +14,10 @@ class CollapsibleGroupBox(QGroupBox):
     def __init__(self, title: str = "", parent=None):
         super().__init__(title, parent)
 
+        # P2-3: expose the group-box title as the accessible name.
+        if title:
+            self.setAccessibleName(title)
+
         self._is_collapsed = False
         self._content_widget = QWidget()
         self._content_layout = QVBoxLayout()
@@ -25,6 +29,8 @@ class CollapsibleGroupBox(QGroupBox):
         self._collapse_button.setCheckable(True)
         self._collapse_button.setChecked(False)
         self._collapse_button.setText("▼")
+        self._collapse_button.setAccessibleName("Collapse section")
+        self._collapse_button.setAccessibleDescription("Show or hide this section's content")
         self._collapse_button.setFixedWidth(24)
         self._collapse_button.setFixedHeight(24)
         self._collapse_button.setStyleSheet("""
@@ -74,10 +80,17 @@ class CollapsibleGroupBox(QGroupBox):
         """Add a layout to the content area."""
         self._content_layout.addLayout(layout)
 
+    def setTitle(self, title: str) -> None:
+        """Keep the accessible name in sync with the visible title (P2-3)."""
+        super().setTitle(title)
+        if title:
+            self.setAccessibleName(title)
+
     def _on_collapse_toggled(self, checked: bool):
         """Handle collapse/expand button toggle."""
         self._is_collapsed = checked
         self._collapse_button.setText("▲" if checked else "▼")
+        self._collapse_button.setAccessibleName("Expand section" if checked else "Collapse section")
 
         # Animate the content widget
         if checked:

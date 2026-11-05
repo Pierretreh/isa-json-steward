@@ -44,48 +44,76 @@ class FormLabel(QLabel):
 class FormField(QLineEdit):
     """A styled text input field for forms."""
 
-    def __init__(self, placeholder: str = "", parent=None, *, test_id: str | None = None):
+    def __init__(
+        self,
+        placeholder: str = "",
+        parent=None,
+        *,
+        test_id: str | None = None,
+        accessible_name: str | None = None,
+    ):
         super().__init__(parent)
         if placeholder:
             self.setPlaceholderText(placeholder)
         self.setMinimumHeight(30)
         if test_id is not None:
-            set_test_id(self, test_id)
+            set_test_id(self, test_id, accessible_name=accessible_name)
 
 
 class ActionButton(QPushButton):
     """A standard action button."""
 
-    def __init__(self, text: str, parent=None, *, test_id: str | None = None):
+    def __init__(
+        self,
+        text: str,
+        parent=None,
+        *,
+        test_id: str | None = None,
+        accessible_name: str | None = None,
+    ):
         super().__init__(text, parent)
         self.setMinimumHeight(32)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         if test_id is not None:
-            set_test_id(self, test_id)
+            set_test_id(self, test_id, accessible_name=accessible_name)
 
 
 class PrimaryButton(QPushButton):
     """A primary action button with distinct styling."""
 
-    def __init__(self, text: str, parent=None, *, test_id: str | None = None):
+    def __init__(
+        self,
+        text: str,
+        parent=None,
+        *,
+        test_id: str | None = None,
+        accessible_name: str | None = None,
+    ):
         super().__init__(text, parent)
         self.setObjectName("primaryButton")
         self.setMinimumHeight(32)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         if test_id is not None:
-            set_test_id(self, test_id)
+            set_test_id(self, test_id, accessible_name=accessible_name)
 
 
 class DangerButton(QPushButton):
     """A danger button for destructive actions."""
 
-    def __init__(self, text: str, parent=None, *, test_id: str | None = None):
+    def __init__(
+        self,
+        text: str,
+        parent=None,
+        *,
+        test_id: str | None = None,
+        accessible_name: str | None = None,
+    ):
         super().__init__(text, parent)
         self.setObjectName("dangerButton")
         self.setMinimumHeight(32)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         if test_id is not None:
-            set_test_id(self, test_id)
+            set_test_id(self, test_id, accessible_name=accessible_name)
 
 
 class CardWidget(QFrame):

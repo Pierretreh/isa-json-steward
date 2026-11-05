@@ -192,6 +192,8 @@ class FileAttachmentWidget(QWidget):
             button_text = f"Import {name}"
 
         button = QPushButton(button_text)
+        button.setAccessibleName(button_text)
+        button.setAccessibleDescription(f"Import a file for the {name} attachment")
         button.setStyleSheet("""
             QPushButton {
                 background-color: #4a90e2;
@@ -325,6 +327,8 @@ class FileAttachmentWidget(QWidget):
         # Remove button
         remove_btn = QPushButton("×")
         remove_btn.setFixedSize(24, 24)
+        remove_btn.setAccessibleName("Remove attached file")
+        remove_btn.setAccessibleDescription("Remove this file from the attachments")
         remove_btn.setStyleSheet("""
             QPushButton {
                 background-color: #dc3545;

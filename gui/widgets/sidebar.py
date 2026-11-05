@@ -48,7 +48,7 @@ class Sidebar(QWidget):
         title_label = QLabel(sidebar_title)
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setObjectName("sidebarTitle")
-        set_test_id(title_label, "sidebar.title")
+        set_test_id(title_label, "sidebar.title", accessible_name="Application title")
         layout.addWidget(title_label)
 
         # Divider
@@ -62,7 +62,8 @@ class Sidebar(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        set_test_id(scroll, "sidebar.scrollArea")
+        set_test_id(scroll, "sidebar.scrollArea", accessible_name="Page navigation")
+        scroll.setAccessibleDescription("Scrollable list of navigation buttons")
 
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
