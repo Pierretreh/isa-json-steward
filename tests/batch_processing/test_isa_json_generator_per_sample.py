@@ -91,20 +91,12 @@ class TestPathAMapFileToSample:
             _sample("#s_A", {"donor": "A", "treatment": "Control"}),
             _sample("#s_B", {"donor": "B", "treatment": "Control"}),
         ]
-        assert (
-            isa_json_generator._map_file_to_sample("L D_161225_A_Control.fcs", samples)
-            == "#s_A"
-        )
-        assert (
-            isa_json_generator._map_file_to_sample("L D_161225_B_Control.fcs", samples)
-            == "#s_B"
-        )
+        assert isa_json_generator._map_file_to_sample("L D_161225_A_Control.fcs", samples) == "#s_A"
+        assert isa_json_generator._map_file_to_sample("L D_161225_B_Control.fcs", samples) == "#s_B"
 
     def test_single_sample_fast_path(self, isa_json_generator):
         samples = [_sample("#s_only", {"donor": "A"})]
-        assert (
-            isa_json_generator._map_file_to_sample("any_file.fcs", samples) == "#s_only"
-        )
+        assert isa_json_generator._map_file_to_sample("any_file.fcs", samples) == "#s_only"
 
     def test_no_samples_returns_none(self, isa_json_generator):
         assert isa_json_generator._map_file_to_sample("file.fcs", []) is None
@@ -118,9 +110,7 @@ class TestPathAEnsureSampleComment:
     def test_attaches_comment(self, isa_json_generator):
         data_file = {"@id": "df1", "name": "a.fcs", "comments": []}
         ISAJsonGenerator._ensure_sample_comment(data_file, "#sample/1")
-        assert data_file["comments"] == [
-            {"name": "derivedFromSample", "value": "#sample/1"}
-        ]
+        assert data_file["comments"] == [{"name": "derivedFromSample", "value": "#sample/1"}]
 
     def test_replaces_existing_comment(self, isa_json_generator):
         data_file = {
@@ -163,9 +153,7 @@ class TestPathAAssignFilesToAssays:
         assert result["calcein"] == []
 
     def test_default_assay_fallback_for_unknown_extension(self, isa_json_generator):
-        result = isa_json_generator._assign_files_to_assays(
-            ["readme.txt"], ["facs", "calcein"]
-        )
+        result = isa_json_generator._assign_files_to_assays(["readme.txt"], ["facs", "calcein"])
         # Core default_assay is "calcein".
         assert result["calcein"] == ["readme.txt"]
         assert result["facs"] == []
@@ -197,9 +185,7 @@ class TestPathABuildPerSampleProcesses:
                 {"@id": "df2", "name": "L D_161225_B_Control.fcs", "comments": []},
             ],
         )
-        processes = isa_json_generator._build_per_sample_processes(
-            assay, samples, _fcs_summary()
-        )
+        processes = isa_json_generator._build_per_sample_processes(assay, samples, _fcs_summary())
         assert len(processes) == 2
         assert [p.inputs for p in processes] == [
             [{"@id": "#sample/1"}],
@@ -240,12 +226,14 @@ class TestPathABuildPerSampleProcesses:
         # The unassigned file is flagged, the mapped files are attributed.
         comments = {f["name"]: f for f in assay.data_files}
         derived = [
-            c for c in comments["zzz_totally_unrelated.wsp"]["comments"]
+            c
+            for c in comments["zzz_totally_unrelated.wsp"]["comments"]
             if c.get("name") == "derivedFromSample"
         ]
         assert derived and derived[0]["value"] == "unassigned"
         derived1 = [
-            c for c in comments["Control_stain.fcs"]["comments"]
+            c
+            for c in comments["Control_stain.fcs"]["comments"]
             if c.get("name") == "derivedFromSample"
         ]
         assert derived1 and derived1[0]["value"] == "#sample/1"
@@ -260,7 +248,9 @@ class TestPathABuildPerSampleProcesses:
         assert processes[0].process_id.endswith("_unassigned")
         assert processes[0].inputs == []
 
-    def test_template_parameter_values_preserved_on_each_process(self, isa_json_generator, synthetic_profile):
+    def test_template_parameter_values_preserved_on_each_process(
+        self, isa_json_generator, synthetic_profile
+    ):
         exp_meta = _e10_exp_meta(isa_json_generator)
         assay = isa_json_generator._create_assay_from_experiment(
             _e10_folder_metadata(), exp_meta, "facs"
@@ -309,13 +299,13 @@ class TestPathAE10PerSampleProcesses:
 
         # Every data file carries a derivedFromSample comment.
         for f in assay.data_files:
-            derived = [
-                c for c in f.get("comments", []) if c.get("name") == "derivedFromSample"
-            ]
+            derived = [c for c in f.get("comments", []) if c.get("name") == "derivedFromSample"]
             assert derived, f"missing derivedFromSample comment on {f['name']}"
             assert derived[0]["value"].startswith("#sample/")
 
-    def test_e10_generate_study_keeps_study_level_process(self, isa_json_generator, synthetic_profile):
+    def test_e10_generate_study_keeps_study_level_process(
+        self, isa_json_generator, synthetic_profile
+    ):
         study = isa_json_generator.generate_study(
             experiment_path=E10_FOLDER,
             investigation_id="test_inv",

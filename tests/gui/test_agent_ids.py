@@ -20,8 +20,6 @@ line edits, item-view headers, tab-bar buttons, ...) — those are created by
 Qt, not by the pages/dialogs covered by the rollout set.
 """
 
-import re
-
 import pytest
 
 try:
@@ -102,9 +100,7 @@ def _is_out_of_rollout(widget, root) -> bool:
 def _interactive_widgets(root):
     """All rollout-set interactive widgets under (and including) ``root``."""
     widgets = [root] + root.findChildren(QWidget)
-    return [
-        w for w in widgets if isinstance(w, _INTERACTIVE) and not _is_out_of_rollout(w, root)
-    ]
+    return [w for w in widgets if isinstance(w, _INTERACTIVE) and not _is_out_of_rollout(w, root)]
 
 
 def _collect_test_ids(root):
@@ -119,9 +115,8 @@ def _collect_test_ids(root):
 @pytest.fixture(scope="module")
 def main_window(qapp):
     """Build a real MainWindow with the shared lightweight app stub."""
-    from tests.gui.conftest import StubApp
-
     from gui.main_window import MainWindow
+    from tests.gui.conftest import StubApp
 
     window = MainWindow(StubApp())
     window.show()
@@ -140,17 +135,13 @@ class TestP02ObjectNameFix:
 
     def test_exactly_one_content_area(self, main_window):
         """The stack is the only widget with objectName "contentArea"."""
-        matches = [
-            w for w in main_window.findChildren(QWidget) if w.objectName() == "contentArea"
-        ]
+        matches = [w for w in main_window.findChildren(QWidget) if w.objectName() == "contentArea"]
         assert len(matches) == 1
         assert matches[0] is main_window.content_stack
 
     def test_every_page_is_content_page(self, main_window):
         """Each page root carries objectName "contentPage" (>=10 of them)."""
-        matches = [
-            w for w in main_window.findChildren(QWidget) if w.objectName() == "contentPage"
-        ]
+        matches = [w for w in main_window.findChildren(QWidget) if w.objectName() == "contentPage"]
         assert len(matches) >= 10
         assert set(matches) == set(main_window.pages.values())
 
@@ -161,9 +152,9 @@ class TestP02ObjectNameFix:
         styles = Path(__file__).resolve().parents[2] / "gui" / "resources" / "styles"
         for theme in ("dark", "light"):
             qss = (styles / f"{theme}.qss").read_text(encoding="utf-8")
-            assert "QWidget#contentArea, QWidget#contentPage" in qss, (
-                f"{theme}.qss must widen the content selector to both objectNames"
-            )
+            assert (
+                "QWidget#contentArea, QWidget#contentPage" in qss
+            ), f"{theme}.qss must widen the content selector to both objectNames"
 
 
 class TestTestIdCoverage:
@@ -589,9 +580,7 @@ class TestNoBarePrint:
         offenders = []
         for sub in ("pages", "dialogs"):
             for py_file in sorted((gui_root / sub).rglob("*.py")):
-                for lineno, line in enumerate(
-                    py_file.read_text(encoding="utf-8").splitlines(), 1
-                ):
+                for lineno, line in enumerate(py_file.read_text(encoding="utf-8").splitlines(), 1):
                     if re.match(r"\s*print\(", line):
                         rel = py_file.relative_to(gui_root).as_posix()
                         offenders.append(f"{rel}:{lineno}")

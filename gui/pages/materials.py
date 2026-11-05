@@ -149,9 +149,7 @@ class MaterialsPage(ScrollablePage):
                 font-size: 12px;
             }
         """)
-        self.details_browser.setHtml(
-            '<span>Select a material to view details</span>'
-        )
+        self.details_browser.setHtml("<span>Select a material to view details</span>")
         details_layout.addWidget(self.details_browser)
 
         right_layout.addWidget(details_group)
@@ -252,9 +250,7 @@ class MaterialsPage(ScrollablePage):
         self._update_action_states()
 
         # Reset details panel
-        self.details_browser.setHtml(
-            '<span>Select a material to view details</span>'
-        )
+        self.details_browser.setHtml("<span>Select a material to view details</span>")
         self._update_empty_state(0)
 
         # Check if study is selected
@@ -421,9 +417,7 @@ class MaterialsPage(ScrollablePage):
         self._update_action_states()
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
-            self.details_browser.setHtml(
-                '<span>Select a material to view details</span>'
-            )
+            self.details_browser.setHtml("<span>Select a material to view details</span>")
             return
 
         row = selected_rows[0].row()
@@ -433,9 +427,7 @@ class MaterialsPage(ScrollablePage):
             material = filtered_materials[row]
             self._update_material_preview(material)
         else:
-            self.details_browser.setHtml(
-                '<span>Select a material to view details</span>'
-            )
+            self.details_browser.setHtml("<span>Select a material to view details</span>")
 
     def _update_material_preview(self, material: dict):
         """
@@ -457,11 +449,11 @@ class MaterialsPage(ScrollablePage):
                 f'<b style="font-size: 14px;">{ISAJsonPreviewHelper._escape(name)}</b><br>'
             )
             html_parts.append(
-                f'<span>Type:</span> {ISAJsonPreviewHelper._escape(mat_type)}<br>'  # noqa: E501
+                f"<span>Type:</span> {ISAJsonPreviewHelper._escape(mat_type)}<br>"  # noqa: E501
             )
             if mat_id:
                 html_parts.append(
-                    f'<span>ID:</span> <code>{ISAJsonPreviewHelper._escape(mat_id)}</code>'  # noqa: E501
+                    f"<span>ID:</span> <code>{ISAJsonPreviewHelper._escape(mat_id)}</code>"  # noqa: E501
                 )
             self.details_browser.setHtml("\n".join(html_parts))
 

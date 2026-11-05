@@ -145,7 +145,6 @@ class TestBatchWorker:
     def test_worker_failure_path(self, qtbot, monkeypatch):
         """A pipeline exception surfaces via the ``failed`` signal."""
         import utils.batch.batch_processor as batch_processor
-
         from gui.batch_runner import BatchConfig, BatchWorker
 
         def _boom(self, *args, **kwargs):

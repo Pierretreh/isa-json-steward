@@ -56,7 +56,9 @@ class TestGeneratorSmoke:
         inv = json.loads((out_dir / "inv_dummy.json").read_text(encoding="utf-8"))
         assert inv["identifier"] == "inv_dummy"
         assert len(inv["studies"]) == 8
-        assert [s["identifier"] for s in inv["studies"]] == [s["identifier"] for s in summary["studies"]]
+        assert [s["identifier"] for s in inv["studies"]] == [
+            s["identifier"] for s in summary["studies"]
+        ]
 
     def test_study_files_exist(self, generated):
         out_dir, _ = generated
@@ -91,7 +93,9 @@ class TestGeneratorSmoke:
                 assert material.get("materialType"), f"{section} entry missing materialType"
                 assert "derivesFrom" in material, f"{section} entry missing derivesFrom"
                 for char in material.get("characteristics", []):
-                    assert char.get("category", {}).get("@id"), "characteristic missing category @id"
+                    assert char.get("category", {}).get(
+                        "@id"
+                    ), "characteristic missing category @id"
                     assert "value" in char, "characteristic missing value"
 
     def test_samples_carry_factor_values(self, generated):
@@ -166,9 +170,9 @@ class TestGeneratorSmoke:
                     (c for c in data_file.get("comments", []) if c.get("name") == "TraceDB"), None
                 )
                 assert path_comment, "dataFile must carry a TraceDB path comment"
-                assert (study_dir / path_comment["value"]).is_file(), (
-                    f"referenced file missing: {path_comment['value']}"
-                )
+                assert (
+                    study_dir / path_comment["value"]
+                ).is_file(), f"referenced file missing: {path_comment['value']}"
         # Both content directories are populated
         assert any((study_dir / "files" / "original").iterdir())
         assert any((study_dir / "files" / "converted").iterdir())
@@ -209,14 +213,12 @@ class TestGeneratorSmoke:
         out_b = tmp_path / "b"
         generator.generate_dummy_studies(out_dir=str(out_a), count=8, seed=42)
         generator.generate_dummy_studies(out_dir=str(out_b), count=8, seed=7)
-        assert (out_a / "studies" / "study_D001" / "study.json").read_text(
-            encoding="utf-8"
-        ) != (out_b / "studies" / "study_D001" / "study.json").read_text(encoding="utf-8")
+        assert (out_a / "studies" / "study_D001" / "study.json").read_text(encoding="utf-8") != (
+            out_b / "studies" / "study_D001" / "study.json"
+        ).read_text(encoding="utf-8")
 
     def test_cli_main_runs(self, generator, tmp_path, capsys):
-        rc = generator.main(
-            ["--out", str(tmp_path / "cli_inv"), "--count", "4", "--seed", "1"]
-        )
+        rc = generator.main(["--out", str(tmp_path / "cli_inv"), "--count", "4", "--seed", "1"])
         assert rc == 0
         out = capsys.readouterr().out
         summary = json.loads(out)

@@ -160,9 +160,7 @@ class CharacteristicDialog(QDialog):
             "dialog.characteristic.accessionField",
             accessible_name="Ontology accession",
         )
-        self.accession_edit.setPlaceholderText(
-            "e.g., http://purl.obolibrary.org/obo/NCBITaxon_562"
-        )
+        self.accession_edit.setPlaceholderText("e.g., http://purl.obolibrary.org/obo/NCBITaxon_562")
         self.accession_edit.setText(
             self.characteristic.get("category", {}).get("termAccession", "")
         )

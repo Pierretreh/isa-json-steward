@@ -40,10 +40,13 @@ from pathlib import Path
 import pytest
 
 # Batch 1b helpers: isolated-config window factory and the modal watchdog.
-from tests.gui.test_settings_page import (  # noqa: F401
-    _forbid_modals,
-    make_settings_window,
-)
+from tests.gui.test_settings_page import _forbid_modals, make_settings_window
+
+# ``make_settings_window`` is a deliberate re-export: pytest must find it as a
+# module fixture for the tests below (they request it by name in their
+# signatures).  ``__all__`` marks the re-export used so pyflakes does not read
+# those fixture requests as F811 redefinitions of the import.
+__all__ = ["make_settings_window"]
 
 pytestmark = pytest.mark.gui
 
@@ -142,7 +145,10 @@ def _process_sequence_select(page):
     item.setData(
         0,
         Qt.ItemDataRole.UserRole,
-        {"type": "process", "data": {"name": "Probe", "inputs": [], "outputs": [], "parameters": []}},
+        {
+            "type": "process",
+            "data": {"name": "Probe", "inputs": [], "outputs": [], "parameters": []},
+        },
     )
     item.setSelected(True)
 
@@ -240,7 +246,6 @@ class TestSelectionGating:
     def test_study_gated_add_buttons(self, main_window, page_id, test_id):
         """Add buttons are disabled without a study and enable with one."""
         main_window._navigate_to_page(page_id)
-        page = main_window.pages[page_id]
         btn = _find(main_window, test_id)
         assert not btn.isEnabled(), f"{test_id} must require a loaded study"
 
@@ -262,9 +267,7 @@ class TestSelectionGating:
 class TestSettingsFooterAndSaveFlow:
     """U-07: fixed footer, non-modal save, non-modal restart UX."""
 
-    def test_save_reset_live_outside_scroll_area_and_visible_at_minimum(
-        self, make_settings_window
-    ):
+    def test_save_reset_live_outside_scroll_area_and_visible_at_minimum(self, make_settings_window):
         """Footer geometry (U-07 acceptance 1): no scrolling to reach Save."""
         window, _config_path = make_settings_window()
         window._navigate_to_page("settings")
@@ -280,9 +283,9 @@ class TestSettingsFooterAndSaveFlow:
             assert btn.isVisible()
             top_left = btn.mapTo(window, btn.rect().topLeft())
             bottom_right = btn.mapTo(window, btn.rect().bottomRight())
-            assert window_rect.contains(top_left) and window_rect.contains(bottom_right), (
-                f"{test_id} must be inside the visible window at its minimum size"
-            )
+            assert window_rect.contains(top_left) and window_rect.contains(
+                bottom_right
+            ), f"{test_id} must be inside the visible window at its minimum size"
 
     def test_save_click_is_prompt_and_modal_free(self, make_settings_window, monkeypatch):
         """click on Save returns promptly and opens no modal (U-07 acc. 4)."""
@@ -296,9 +299,10 @@ class TestSettingsFooterAndSaveFlow:
         _find(window, "page.settings.saveButton").click()
 
         assert "saved" in window.status_bar.status_label.text().lower()
-        assert json.loads(config_path.read_text(encoding="utf-8"))["validation"][
-            "validate_on_save"
-        ] is new_value
+        assert (
+            json.loads(config_path.read_text(encoding="utf-8"))["validation"]["validate_on_save"]
+            is new_value
+        )
         assert page._restart_required is False
         assert _find(window, "page.settings.restartButton").isVisible() is False
 
@@ -377,9 +381,10 @@ class TestSettingsFooterAndSaveFlow:
 
         source = SETTINGS_PAGE_PY.read_text(encoding="utf-8")
         assert "sys.exit(" not in source, "settings.py must not call sys.exit()"
-        assert "QMessageBox.question" not in source.split("def _on_save_settings")[1].split(
-            "def _validate_settings"
-        )[0], "the save path must not open a question dialog"
+        assert (
+            "QMessageBox.question"
+            not in source.split("def _on_save_settings")[1].split("def _validate_settings")[0]
+        ), "the save path must not open a question dialog"
 
     def test_auto_save_message_is_honest(self, make_settings_window):
         """U-07 freebie: the tick never claims 'Auto-saved' for a no-op save."""
@@ -422,9 +427,9 @@ class TestNoHorizontalScroll:
         main_window._navigate_to_page(page_id)
         _process_events()
         page = main_window.pages[page_id]
-        assert page.scroll_area.horizontalScrollBar().maximum() == 0, (
-            f"{page_id} forces a horizontal scrollbar at the default window size"
-        )
+        assert (
+            page.scroll_area.horizontalScrollBar().maximum() == 0
+        ), f"{page_id} forces a horizontal scrollbar at the default window size"
 
     @pytest.mark.parametrize("page_id", PAGE_IDS)
     def test_no_horizontal_scrollbar_at_938_content_width(self, main_window, page_id):
@@ -438,9 +443,9 @@ class TestNoHorizontalScroll:
         main_window._navigate_to_page(page_id)
         _process_events()
         page = main_window.pages[page_id]
-        assert page.scroll_area.horizontalScrollBar().maximum() == 0, (
-            f"{page_id} forces a horizontal scrollbar at 938px content width"
-        )
+        assert (
+            page.scroll_area.horizontalScrollBar().maximum() == 0
+        ), f"{page_id} forces a horizontal scrollbar at 938px content width"
 
     def test_materials_headers_fit_their_text(self, main_window):
         """U-08 acceptance 2: full header text (or clean ellipsis), no cuts."""
@@ -456,9 +461,9 @@ class TestNoHorizontalScroll:
         fm = header.fontMetrics()
         # Content columns size to their content: the full header text fits.
         for col in range(4):
-            assert header.sectionSize(col) >= fm.horizontalAdvance(labels[col]), (
-                f"column {col} header {labels[col]!r} is cut mid-word"
-            )
+            assert header.sectionSize(col) >= fm.horizontalAdvance(
+                labels[col]
+            ), f"column {col} header {labels[col]!r} is cut mid-word"
 
 
 class TestStatusBarLayout:
@@ -485,9 +490,9 @@ class TestStatusBarLayout:
         ids = list(rects)
         for i, first in enumerate(ids):
             for second in ids[i + 1 :]:
-                assert not rects[first].intersects(rects[second]), (
-                    f"{first} {rects[first]} overlaps {second} {rects[second]}"
-                )
+                assert not rects[first].intersects(
+                    rects[second]
+                ), f"{first} {rects[first]} overlaps {second} {rects[second]}"
 
     def test_no_overlap_with_progress_hidden(self, main_window):
         """Hidden progress bar must not overlap any sibling (U-10 acc.)."""
@@ -677,10 +682,7 @@ class TestSettingsFormPolish:
         for form in page._form_layouts:
             assert form.labelAlignment() == Qt.AlignmentFlag.AlignLeft
             assert form.formAlignment() == Qt.AlignmentFlag.AlignLeft
-            assert (
-                form.fieldGrowthPolicy()
-                == QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
-            )
+            assert form.fieldGrowthPolicy() == QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
 
 
 class TestDashboardCurrentContext:
@@ -845,9 +847,9 @@ class TestTreeTextElision:
             assert second_elided.endswith("…"), "column value must clip cleanly"
             assert len(second_elided) < len(second_text)
 
-        assert tree.horizontalScrollBar().maximum() == 0, (
-            "tree content must fit via elide (no internal horizontal scrollbar)"
-        )
+        assert (
+            tree.horizontalScrollBar().maximum() == 0
+        ), "tree content must fit via elide (no internal horizontal scrollbar)"
 
     @pytest.mark.parametrize("page_id,tree_id,second_text", TREE_CASES, ids=TREE_IDS)
     def test_no_internal_horizontal_scrollbar_at_938_content_width(
@@ -865,9 +867,9 @@ class TestTreeTextElision:
         tree = _find(main_window, tree_id)
         self._insert_long_row(tree, second_text)
 
-        assert tree.horizontalScrollBar().maximum() == 0, (
-            f"{tree_id} forces an internal horizontal scrollbar at 938px content width"
-        )
+        assert (
+            tree.horizontalScrollBar().maximum() == 0
+        ), f"{tree_id} forces an internal horizontal scrollbar at 938px content width"
 
     def test_remaining_trees_use_view_level_elide(self, main_window, qtbot):
         """N3 step 4 consistency: same view-level elide on the other trees."""
@@ -875,9 +877,9 @@ class TestTreeTextElision:
 
         for page_id, attr in (("files", "file_tree"), ("ontology", "tree")):
             tree = getattr(main_window.pages[page_id], attr)
-            assert tree.textElideMode() == Qt.TextElideMode.ElideRight, (
-                f"{page_id}.{attr} must elide item text"
-            )
+            assert (
+                tree.textElideMode() == Qt.TextElideMode.ElideRight
+            ), f"{page_id}.{attr} must elide item text"
 
         from gui.dialogs.batch_processing import BatchProcessingDialog
         from gui.dialogs.material_selection_dialog import MaterialSelectionDialog

@@ -478,7 +478,18 @@ def _build_full_study(
     for intermediate in intermediates:
         donor = intermediate["name"].split()[1]
         for treatment in treatments:
-            concentration = {"category": {"@id": "#characteristic_category/compound_concentration"}, "value": {"value": 5, "unit": {"@id": "#Unit/micromolar", "annotationValue": "micromolar", "termSource": "UO", "termAccession": "http://purl.obolibrary.org/obo/UO_0000062"}}}  # noqa: E501
+            concentration = {
+                "category": {"@id": "#characteristic_category/compound_concentration"},
+                "value": {
+                    "value": 5,
+                    "unit": {
+                        "@id": "#Unit/micromolar",
+                        "annotationValue": "micromolar",
+                        "termSource": "UO",
+                        "termAccession": "http://purl.obolibrary.org/obo/UO_0000062",
+                    },
+                },
+            }  # noqa: E501
             mm.add_material(
                 "sample",
                 _material_record(
@@ -682,8 +693,7 @@ def _build_empty_study(
         "identifier": study_id,
         "study_name": f"Dummy study {study_id} — empty",
         "study_description": (
-            f"Deliberately empty dummy study {study_id} to exercise the GUI "
-            "empty states."
+            f"Deliberately empty dummy study {study_id} to exercise the GUI " "empty states."
         ),
         "submission_date": day_str,
         "investigation_name": INVESTIGATION_TITLE,
@@ -943,7 +953,9 @@ def _enrich_study(doc: Dict[str, Any], meta: Dict[str, Any]) -> None:
     study["characteristicCategories"] = [
         dict(c) for c in (CHARACTERISTIC_CATEGORIES if meta["kind"] != "empty" else [])
     ]
-    study["unitCategories"] = [dict(u) for u in (UNIT_CATEGORIES if meta["kind"] != "empty" else [])]
+    study["unitCategories"] = [
+        dict(u) for u in (UNIT_CATEGORIES if meta["kind"] != "empty" else [])
+    ]
 
     # 4. Assays: enrich sample refs with names so the fallback renderer
     #    (materials.py _collect_assay_materials) has meaningful rows.

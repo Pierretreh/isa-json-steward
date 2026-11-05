@@ -2,8 +2,6 @@
 Unit tests for ProcessSequenceManager.
 """
 
-from typing import Any, Dict
-
 import pytest
 
 from utils.process_sequence_manager import ProcessSequenceManager

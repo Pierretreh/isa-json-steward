@@ -146,9 +146,7 @@ class FilesPage(ScrollablePage):
                 font-size: 12px;
             }
         """)
-        self.details_browser.setHtml(
-            '<span>Select a file to view details</span>'
-        )
+        self.details_browser.setHtml("<span>Select a file to view details</span>")
         details_layout.addWidget(self.details_browser)
 
         right_layout.addWidget(details_group)
@@ -180,7 +178,7 @@ class FilesPage(ScrollablePage):
                 font-size: 12px;
             }
         """)
-        self.metadata_browser.setHtml('<span>No metadata available</span>')
+        self.metadata_browser.setHtml("<span>No metadata available</span>")
         preview_layout.addWidget(self.metadata_browser)
 
         right_layout.addWidget(preview_group)
@@ -236,10 +234,10 @@ class FilesPage(ScrollablePage):
         """Refresh the file list."""
         if not self.main_window.current_study:
             self.file_tree.clear()
-            self.details_browser.setHtml('<span>No study selected</span>')
+            self.details_browser.setHtml("<span>No study selected</span>")
             self.preview_label.setText("No preview available")
             self.preview_label.clear()
-            self.metadata_browser.setHtml('<span>No metadata available</span>')
+            self.metadata_browser.setHtml("<span>No metadata available</span>")
             self._update_action_states()
             return
 
@@ -568,7 +566,7 @@ class FilesPage(ScrollablePage):
             self.metadata_browser.setHtml(metadata_html)
         else:
             self.metadata_browser.setHtml(
-                '<span>No ISA-JSON metadata available for this file</span>'
+                "<span>No ISA-JSON metadata available for this file</span>"
             )
 
     def _show_context_menu(self, position):

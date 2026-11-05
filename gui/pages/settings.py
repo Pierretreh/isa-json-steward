@@ -645,9 +645,7 @@ class SettingsPage(ScrollablePage):
         )
         self.validate_units_check.setAccessibleDescription("Check that units are recognized")
         self.validate_units_check.setChecked(validation_config.get("validate_units", True))
-        validation_layout.addRow(
-            "Validate Units:", _wrap_checkbox_field(self.validate_units_check)
-        )
+        validation_layout.addRow("Validate Units:", _wrap_checkbox_field(self.validate_units_check))
 
         # Validate Date Formats
         self.validate_date_formats_check = QCheckBox()

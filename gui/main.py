@@ -13,13 +13,13 @@ from .main_window import MainWindow
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Import utilities for logging setup
-from utils.logging_config import get_logger, setup_gui_event_log, setup_logging  # noqa: E402
-
 # Profile discovery lives in utils.config_loader (U-05 relocation, pure move);
 # re-exported here so ``gui.main.discover_profile_dir`` keeps working and the
 # GUI/agent boot paths share one implementation.
 from utils.config_loader import discover_profile_dir  # noqa: E402,F401
+
+# Import utilities for logging setup
+from utils.logging_config import get_logger, setup_gui_event_log, setup_logging  # noqa: E402
 
 logger = get_logger(__name__)
 

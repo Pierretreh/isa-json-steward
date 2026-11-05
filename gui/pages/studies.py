@@ -125,7 +125,7 @@ class StudiesPage(ScrollablePage):
             }
         """)
         self.details_browser.setHtml(
-            '<span>Select an investigation or study to view details</span>'
+            "<span>Select an investigation or study to view details</span>"
         )
         details_layout.addWidget(self.details_browser)
 
@@ -460,7 +460,7 @@ class StudiesPage(ScrollablePage):
         html_parts.append(
             f'<b style="font-size: 14px;">{ISAJsonPreviewHelper._escape(inv_id)}</b><br>'
         )
-        html_parts.append('<span>Type:</span> Investigation<br>')
+        html_parts.append("<span>Type:</span> Investigation<br>")
 
         # Load investigation metadata if available
         try:
@@ -473,12 +473,11 @@ class StudiesPage(ScrollablePage):
                 description = inv_meta.get("description", "")
                 if title:
                     html_parts.append(
-                        f'<span>Title:</span> '
-                        f"{ISAJsonPreviewHelper._escape(title)}<br>"
+                        f"<span>Title:</span> " f"{ISAJsonPreviewHelper._escape(title)}<br>"
                     )
                 if description:
                     html_parts.append(
-                        f'<span>Description:</span> '
+                        f"<span>Description:</span> "
                         f"{ISAJsonPreviewHelper._escape(description)}<br>"
                     )
         except Exception:
@@ -517,7 +516,7 @@ class StudiesPage(ScrollablePage):
                     html_parts.append(f"<li>{display}</li>")
                 html_parts.append("</ul>")
             else:
-                html_parts.append('<span>No studies found</span>')
+                html_parts.append("<span>No studies found</span>")
         except Exception as e:
             html_parts.append(
                 f'<span style="color: #dc3545;">Error: {ISAJsonPreviewHelper._escape(str(e))}</span>'  # noqa: E501
@@ -533,7 +532,7 @@ class StudiesPage(ScrollablePage):
             study_json_path = dm.get_study_json_path(inv_id, study_id)
             if not study_json_path.exists():
                 self.details_browser.setHtml(
-                    f'<span>Study file not found: {ISAJsonPreviewHelper._escape(study_id)}</span>'  # noqa: E501
+                    f"<span>Study file not found: {ISAJsonPreviewHelper._escape(study_id)}</span>"  # noqa: E501
                 )
                 return
 

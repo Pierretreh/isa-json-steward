@@ -333,6 +333,4 @@ class TestJsonlEventHandler:
         finally:
             root.removeHandler(handler)
 
-        assert any(
-            row["detail"]["message"] == "Error loading config: boom" for row in stub.rows
-        )
+        assert any(row["detail"]["message"] == "Error loading config: boom" for row in stub.rows)

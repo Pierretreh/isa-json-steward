@@ -295,9 +295,7 @@ class AssaysPage(ScrollablePage):
                 font-size: 12px;
             }
         """)
-        self.details_browser.setHtml(
-            '<span>Select an assay to view details</span>'
-        )
+        self.details_browser.setHtml("<span>Select an assay to view details</span>")
         details_layout.addWidget(self.details_browser)
 
         right_layout.addWidget(details_group)
@@ -363,9 +361,7 @@ class AssaysPage(ScrollablePage):
 
         # Reset details panel
         if hasattr(self, "details_browser"):
-            self.details_browser.setHtml(
-                '<span>Select an assay to view details</span>'
-            )
+            self.details_browser.setHtml("<span>Select an assay to view details</span>")
 
         # Load assays from study data
         study_data = self.main_window.get_study_data()
@@ -443,9 +439,7 @@ class AssaysPage(ScrollablePage):
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
             if hasattr(self, "details_browser"):
-                self.details_browser.setHtml(
-                    '<span>Select an assay to view details</span>'
-                )
+                self.details_browser.setHtml("<span>Select an assay to view details</span>")
             return
 
         row = selected_rows[0].row()

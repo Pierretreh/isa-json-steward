@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.file_manager import FileManager  # noqa: E402
 
-from .common import set_ui_role
+from .common import set_ui_role  # noqa: E402 -- deliberate late import (bootstrap order)
 
 
 class FileAttachmentWidget(QWidget):

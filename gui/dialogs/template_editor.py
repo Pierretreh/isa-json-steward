@@ -36,8 +36,8 @@ from PyQt6.QtWidgets import (
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from utils.constants import TemplateConstants  # noqa: E402
 
-from ..agent_tools.ids import set_test_id
-from ..widgets.common import set_ui_role
+from ..agent_tools.ids import set_test_id  # noqa: E402 -- deliberate late import (bootstrap order)
+from ..widgets.common import set_ui_role  # noqa: E402 -- deliberate late import (bootstrap order)
 
 
 class TemplateEditorDialog(QDialog):

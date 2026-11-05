@@ -132,9 +132,7 @@ class TestOntologyManagerDynamicFilenames:
 
         manager = OntologyManager()
         filenames = get_profile().get_ontology_filenames()
-        assert (
-            manager.main_ontology_ttl == get_profile().get_profile_root() / filenames["main_ttl"]
-        )
+        assert manager.main_ontology_ttl == get_profile().get_profile_root() / filenames["main_ttl"]
         assert manager.main_ontology_ttl.name == Path(filenames["main_ttl"]).name
 
     def test_shapes_file_from_profile(self):
@@ -234,9 +232,7 @@ class TestOntologyManagerProfileRegression:
             ont_dir = profile_dir / "ontologies"
             ont_dir.mkdir(exist_ok=True)
             ns = json.loads((profile_dir / "profile.json").read_text(encoding="utf-8"))["namespace"]
-            (ont_dir / "synthetic_onto.ttl").write_text(
-                _MINI_TTL.format(ns=ns), encoding="utf-8"
-            )
+            (ont_dir / "synthetic_onto.ttl").write_text(_MINI_TTL.format(ns=ns), encoding="utf-8")
 
         from utils.config_loader import set_profile
 
@@ -309,7 +305,7 @@ class TestLazyProjectNamespace:
 
     def test_ontology_manager_project_ns_follows_profile_switch(self, tmp_path):
         """``from ... import PROJECT_NS`` reflects the current profile."""
-        from utils import config_loader, ontology_manager
+        from utils import ontology_manager
 
         self._switch_profile(tmp_path, "https://example.org/switched#")
         assert str(ontology_manager.PROJECT_NS) == "https://example.org/switched#"

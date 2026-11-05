@@ -268,9 +268,7 @@ class TestTemplateLoadLogging:
             for line in (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
         ]
         warnings = [
-            row
-            for row in rows
-            if row["kind"] == "log" and row["detail"].get("level") == "WARNING"
+            row for row in rows if row["kind"] == "log" and row["detail"].get("level") == "WARNING"
         ]
         assert warnings, "expected a WARNING log row for the failed template load"
         assert "Error loading template" in warnings[0]["detail"]["message"]

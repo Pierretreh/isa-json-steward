@@ -71,8 +71,13 @@ pip install -e ".[dev]"
 ### Run All Tests
 
 ```bash
-# Run all tests
+# Run all tests (serial)
 pytest tests/ -v
+
+# Run all tests in parallel — recommended (pytest-xdist dev extra; measured
+# 2:31 vs 15:13 serial on a Windows dev box). --dist loadfile keeps each test
+# module on one worker (GUI isolation + visual determinism) — keep it.
+QT_QPA_PLATFORM=offscreen pytest tests/ -n auto --dist loadfile
 
 # Run with coverage
 pytest tests/ --cov=utils --cov-report=html --cov-report=term-missing

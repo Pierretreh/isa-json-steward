@@ -579,7 +579,7 @@ class TestGuiEventLog:
         from gui.agent_tools.events import get_event_logger
         from utils.logging_config import JsonlEventHandler, setup_gui_event_log
 
-        logger = setup_gui_event_log(tmp_path / "stream.jsonl")
+        setup_gui_event_log(tmp_path / "stream.jsonl")  # side effect: attaches the handler
         try:
             logging.getLogger("probe.logger").error("probe failure %d", 7)
             rows = [
@@ -787,14 +787,12 @@ class TestAnnotate:
         from gui.agent_tools.screenshot import gui_screenshot
 
         try:
-            light = gui_screenshot(
-                main_window, out_dir=tmp_path, name="light", theme="light"
-            )
+            light = gui_screenshot(main_window, out_dir=tmp_path, name="light", theme="light")
             dark = gui_screenshot(main_window, out_dir=tmp_path, name="dark", theme="dark")
             assert light.path.exists() and dark.path.exists()
-            assert light.path.read_bytes() != dark.path.read_bytes(), (
-                "light and dark captures should render differently"
-            )
+            assert (
+                light.path.read_bytes() != dark.path.read_bytes()
+            ), "light and dark captures should render differently"
         finally:
             if PYQT6_AVAILABLE:
                 QApplication.instance().setStyleSheet("")

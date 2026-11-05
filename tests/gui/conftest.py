@@ -96,6 +96,42 @@ def qapp():
     yield app
 
 
+def _flush_deferred_deletes() -> None:
+    """Destroy widgets queued via ``deleteLater()`` (zombie-tree guard).
+
+    pytest-qt's teardown only calls ``close()`` + ``deleteLater()``; the
+    resulting DeferredDelete events are NOT delivered by a plain
+    ``processEvents()``, so every test's window would otherwise survive as a
+    zombie and each later ``setStyleSheet``/boot would re-polish a growing
+    widget tree (setup costs grew to 20s+ in-suite before this flush).
+    """
+    from PyQt6.QtCore import QEvent
+    from PyQt6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    if app is not None:
+        app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        app.processEvents()
+
+
+@pytest.fixture(autouse=True)
+def _zombie_widget_guard():
+    """Flush deleteLater'd widgets around every GUI test.
+
+    Runs before (to clear the previous test's zombies) and after (to clear
+    anything the test itself destroyed) each test, keeping the QApplication
+    widget set flat so per-test ``MainWindow`` boots stay ~0.3s regardless of
+    suite position.  Safe for every test: only widgets already doomed via
+    ``deleteLater()`` are destroyed.
+    """
+    if not PYQT6_AVAILABLE:
+        yield
+        return
+    _flush_deferred_deletes()
+    yield
+    _flush_deferred_deletes()
+
+
 @pytest.fixture
 def stub_app():
     """Shared settings/window-state stub (design plan section 3.3)."""

@@ -157,7 +157,9 @@ class TestEmptyStates:
         assert not tree.isVisible()
         assert placeholder.text() == "No processes in this study"
 
-    def test_hint_hides_again_after_populated_study(self, main_window, dummy_dataset, synthetic_profile):
+    def test_hint_hides_again_after_populated_study(
+        self, main_window, dummy_dataset, synthetic_profile
+    ):
         window = main_window
         _select_study(window, "study_D007")
         window._navigate_to_page("materials")
@@ -179,9 +181,9 @@ class TestOntologyStatusMessages:
         _process_events()
 
         text = window.status_bar.status_label.text()
-        assert text.startswith("No ontology found (searched:"), (
-            f"expected honest empty-graph message, got: {text!r}"
-        )
+        assert text.startswith(
+            "No ontology found (searched:"
+        ), f"expected honest empty-graph message, got: {text!r}"
         assert ".ttl" in text, "message must list the searched paths"
 
     def test_loaded_message_reports_term_count(self, main_window, tmp_path):

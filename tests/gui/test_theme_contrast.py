@@ -320,9 +320,9 @@ class TestPanelsAndLists:
         img = _grab(raw_list)
         # Empty-area background probe (right margin, no text there).
         p = img.pixelColor(img.width() - 6, img.height() // 2)
-        assert _close((p.red(), p.green(), p.blue()), expected, tol=12), (
-            f"QListWidget {theme}: background {(p.red(), p.green(), p.blue())} != {expected}"
-        )
+        assert _close(
+            (p.red(), p.green(), p.blue()), expected, tol=12
+        ), f"QListWidget {theme}: background {(p.red(), p.green(), p.blue())} != {expected}"
         bg, fg, ratio = _region_contrast(img)
         assert ratio >= 4.5, f"QListWidget {theme}: item text {fg} on {bg} = {ratio:.2f}:1"
 
@@ -381,9 +381,9 @@ class TestGroupTitles:
             # Title band: the top margin strip, right of the collapse button.
             band = _img_rect(QRect(32, 0, min(220, box.width() - 36), 14), box)
             bg, fg, ratio = _region_contrast(img, band)
-            assert ratio >= 4.5, (
-                f"group title {box.title()!r} in {theme}: {fg} on {bg} = {ratio:.2f}:1"
-            )
+            assert (
+                ratio >= 4.5
+            ), f"group title {box.title()!r} in {theme}: {fg} on {bg} = {ratio:.2f}:1"
 
 
 class TestSidebarTitle:
@@ -442,9 +442,9 @@ class TestAlternatingRows:
             p = img.pixelColor(img.width() - 6, rect.center().y())
             row_bgs.append((p.red(), p.green(), p.blue()))
             bg, fg, ratio = _region_contrast(img, rect)
-            assert ratio >= 4.5, (
-                f"{test_id} {theme} row {item.text(0)!r}: {fg} on {bg} = {ratio:.2f}:1"
-            )
+            assert (
+                ratio >= 4.5
+            ), f"{test_id} {theme} row {item.text(0)!r}: {fg} on {bg} = {ratio:.2f}:1"
 
         # Consecutive rows genuinely alternate; the pattern repeats.  Solid
         # QSS colors render exactly, so compare exact tuples (the light pair
@@ -468,12 +468,12 @@ class TestBatchA1QssRules:
         for cls in ("QDateEdit", "QTimeEdit", "QDateTimeEdit"):
             # N1: the classes join the Form Fields selector lists (base+focus)
             # and get the spin-button / drop-down chrome analogs.
-            assert re.search(rf"^QLineEdit, [^{{]*\b{cls}\b[^{{]*\{{", qss, re.M), (
-                f"{theme}: {cls} missing from the Form Fields selector list"
-            )
-            assert re.search(rf"^QLineEdit:focus, [^{{]*\b{cls}\b[^{{]*\{{", qss, re.M), (
-                f"{theme}: {cls}:focus missing from the Form Fields focus list"
-            )
+            assert re.search(
+                rf"^QLineEdit, [^{{]*\b{cls}\b[^{{]*\{{", qss, re.M
+            ), f"{theme}: {cls} missing from the Form Fields selector list"
+            assert re.search(
+                rf"^QLineEdit:focus, [^{{]*\b{cls}\b[^{{]*\{{", qss, re.M
+            ), f"{theme}: {cls}:focus missing from the Form Fields focus list"
             for sub in ("up-button", "down-button", "drop-down", "down-arrow"):
                 assert f"{cls}::{sub}" in qss, f"{theme}: missing {cls}::{sub} rule"
 
@@ -485,9 +485,9 @@ class TestBatchA1QssRules:
         for cls in ("QComboBox", "QDateEdit", "QTimeEdit", "QDateTimeEdit"):
             match = re.search(rf"{cls}::drop-down[^{{]*\{{([^}}]*)\}}", qss)
             assert match, f"{theme}: missing {cls}::drop-down rule"
-            assert "background-color" in match.group(1), (
-                f"{theme}: {cls}::drop-down has no background-color (light-gray chip defect)"
-            )
+            assert "background-color" in match.group(
+                1
+            ), f"{theme}: {cls}::drop-down has no background-color (light-gray chip defect)"
 
     @pytest.mark.parametrize("theme", ["light", "dark"])
     def test_tooltip_and_menu_rules_present(self, theme):
@@ -598,9 +598,9 @@ class TestComboDropChip:
             f"field surface (palette remnant?)"
         )
         bg, fg, ratio = _region_contrast(img)
-        assert _on_field_surface(bg, theme), (
-            f"QComboBox {theme}: field background {bg} is not a sanctioned surface"
-        )
+        assert _on_field_surface(
+            bg, theme
+        ), f"QComboBox {theme}: field background {bg} is not a sanctioned surface"
         assert ratio >= 4.5, f"QComboBox {theme}: item text {fg} on {bg} = {ratio:.2f}:1"
 
 
@@ -651,8 +651,8 @@ class TestMenuSurface:
 
         img = _grab(menu)
         bg, fg, ratio = _region_contrast(img)
-        assert _close(bg, MENU_BG[theme], tol=12), (
-            f"QMenu {theme}: surface {bg} != {MENU_BG[theme]}"
-        )
+        assert _close(
+            bg, MENU_BG[theme], tol=12
+        ), f"QMenu {theme}: surface {bg} != {MENU_BG[theme]}"
         assert ratio >= 4.5, f"QMenu {theme}: item text {fg} on {bg} = {ratio:.2f}:1"
         menu.close()

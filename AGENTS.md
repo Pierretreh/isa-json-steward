@@ -40,8 +40,13 @@ QT_QPA_PLATFORM=offscreen pytest -m gui
 QT_QPA_PLATFORM=offscreen pytest -m gui_visual
 ISA_STEWARD_UPDATE_BASELINES=1 QT_QPA_PLATFORM=offscreen pytest -m gui_visual
 
-# Full suite
+# Full suite (serial — bare works everywhere)
 pytest tests/
+
+# Full suite, parallel — recommended (pytest-xdist dev extra; ~2.5 min vs
+# ~5 min serial). --dist loadfile keeps each test module on ONE worker
+# (GUI/QSettings isolation + visual-module determinism); never drop it.
+QT_QPA_PLATFORM=offscreen pytest tests/ -n auto --dist loadfile
 
 # Agent observability CLI (JSON on stdout; artifacts under reports/)
 python -m gui.agent_tools pages
@@ -353,6 +358,27 @@ returning exactly the 7 tools of section 8.1.
   `requires_data`.
 - GUI tests must pass headless: `QT_QPA_PLATFORM=offscreen pytest -m gui`.
 - `pytest-qt` is a declared dev extra; `qtbot` comes from the plugin.
+  `pytest-xdist` is also a dev extra: the recommended full-suite form is
+  `QT_QPA_PLATFORM=offscreen pytest tests/ -n auto --dist loadfile`
+  (`--dist loadfile` keeps every test module in a single worker — required
+  for GUI/QApplication isolation and the visual module's determinism;
+  serial runs stay supported and are what the MCP `run_gui_test` tool uses).
+- Zombie-widget guard: the autouse `_zombie_widget_guard` fixture in
+  [`tests/gui/conftest.py`](tests/gui/conftest.py) flushes `DeferredDelete`
+  events before/after every GUI test. pytest-qt's teardown only calls
+  `close()` + `deleteLater()` and a plain `processEvents()` does not deliver
+  deferred deletes — without the flush each test's window survives as a
+  zombie and later `setStyleSheet`/`MainWindow` boots re-polish a growing
+  widget tree (per-test setup grew to 20s+ in-suite; the guard keeps boots at
+  ~0.15-0.3s). Custom teardown that calls `deleteLater()` is covered too;
+  explicit flushes (as in [`tests/gui/test_agent_ids.py`](tests/gui/test_agent_ids.py))
+  remain harmless.
+- Measured timings (Windows dev box, 2026-11): full suite 15:13 serial →
+  7:43 serial with the zombie guard → 2:31 with `-n auto --dist loadfile`
+  (run twice, stable); GUI suite (`-m gui`) 14:21 → 4:48 with the guard
+  alone. Remaining critical path: `test_consecutive_captures_within_threshold`
+  (~2 min, 40 convergent captures — coverage, do not shrink) and the 22
+  `gui_visual` baseline comparisons (~2.5 min serial).
 - Fixtures: shared `qapp` plus the P1-3 harness fixtures `stub_app`,
   `main_window` and `agent` in
   [`tests/gui/conftest.py`](tests/gui/conftest.py); the `StubApp` pattern
@@ -404,7 +430,8 @@ returning exactly the 7 tools of section 8.1.
 7. Re-dump / re-screenshot to confirm the fix; check `reports/gui_events.jsonl`
    for unexpected events; if a crash occurred, read the newest
    `crash_reports/<ts>/` bundle.
-8. Finish with the full headless suite (`QT_QPA_PLATFORM=offscreen pytest tests/`).
+8. Finish with the full headless suite
+   (`QT_QPA_PLATFORM=offscreen pytest tests/ -n auto --dist loadfile`).
 
 ### Visual-regression baselines (P2-2)
 
